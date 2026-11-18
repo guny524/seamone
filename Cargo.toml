@@ -1,0 +1,36 @@
+[workspace]
+resolver = "3"
+members = ["crates/seamone-core", "app/src-tauri", "app/ui"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/guny524/seamone"
+publish = false
+
+[workspace.dependencies]
+seamone-core = { path = "crates/seamone-core" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+
+# 개발 빌드가 target 폴더를 키우지 않게 디버그 정보를 줄인다, 오류의 줄 번호는 남는다.
+[profile.dev]
+debug = "line-tables-only"
+
+# 설치 파일 크기를 줄인다. profile 은 workspace 맨 위에서만 읽힌다.
+[profile.release]
+lto = "thin"
+strip = true
+panic = "abort"
+
+# 화면(WASM)은 크기를 가장 작게 줄인다.
+[profile.release.package.seamone-ui]
+opt-level = "z"
