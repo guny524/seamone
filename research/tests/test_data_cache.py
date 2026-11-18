@@ -1,6 +1,8 @@
 import dataclasses
+import fcntl
 import io
 import json
+import threading
 
 import numpy as np
 import pytest
@@ -26,7 +28,7 @@ def make_cache(set_name: str, ids: list[str]) -> None:
         (out_dir / data._wav_name(utterance_id)).write_bytes(b"wav")
         references[utterance_id] = {"reference": "글", "seconds": 1.0}
     (out_dir / "references.json").write_text(json.dumps(references), encoding="utf-8")
-    manifest = data.manifest_for(EVAL_SETS[set_name], ids)
+    manifest = data.manifest_for(EVAL_SETS[set_name], ids, data.wav_sizes_of(set_name, ids))
     (out_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
@@ -115,3 +117,88 @@ def test_save_wav_leaves_only_the_finished_file(tmp_path):
     assert seconds == pytest.approx(1.0)
     assert sorted(p.name for p in tmp_path.iterdir()) == ["a.wav"]
     assert soundfile.info(tmp_path / "a.wav").frames == 16_000
+
+
+def test_a_wav_whose_size_differs_from_the_manifest_is_rejected(hf_home):
+    make_cache("zeroth_ko", IDS)
+    wav = data.eval_audio_dir("zeroth_ko") / data._wav_name("a.flac")
+    wav.write_bytes(b"another wav from another revision")
+    assert not valid()
+
+
+def test_a_manifest_without_wav_sizes_is_rejected(hf_home):
+    make_cache("zeroth_ko", IDS)
+    path = data.eval_audio_dir("zeroth_ko") / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    del manifest["wav_sizes"]
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert not valid()
+
+
+def test_a_second_preparation_of_the_same_set_waits_for_the_first(hf_home):
+    holding, release, entered = threading.Event(), threading.Event(), threading.Event()
+
+    def first():
+        with data.set_lock("zeroth_ko"):
+            holding.set()
+            release.wait(5)
+
+    def second():
+        holding.wait(5)
+        with data.set_lock("zeroth_ko"):
+            entered.set()
+
+    threads = [threading.Thread(target=first), threading.Thread(target=second)]
+    for thread in threads:
+        thread.start()
+    holding.wait(5)
+    assert not entered.wait(0.5)
+    release.set()
+    assert entered.wait(5)
+    for thread in threads:
+        thread.join(5)
+
+
+def test_different_sets_do_not_wait_for_each_other(hf_home):
+    with data.set_lock("zeroth_ko"):
+        done = threading.Event()
+
+        def other():
+            with data.set_lock("fleurs_en"):
+                done.set()
+
+        thread = threading.Thread(target=other)
+        thread.start()
+        assert done.wait(5)
+        thread.join(5)
+
+
+def test_prepare_audio_holds_the_lock_while_it_builds(hf_home, monkeypatch):
+    monkeypatch.setattr(data, "load_eval_ids", lambda: {"sets": {"zeroth_ko": {"ids": IDS}}})
+    seen = []
+
+    def build(set_name, spec, ids):
+        lock_path = hf_home / "eval-raw" / f"{set_name}.lock"
+        with lock_path.open("w") as other:
+            try:
+                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                seen.append("locked")
+            else:
+                seen.append("free")
+
+    monkeypatch.setattr(data, "_build_audio", build)
+    data.prepare_audio("zeroth_ko")
+    assert seen == ["locked"]
+
+
+def test_a_preparation_that_waited_does_not_build_again_when_the_other_one_finished(
+    hf_home, monkeypatch
+):
+    monkeypatch.setattr(data, "load_eval_ids", lambda: {"sets": {"zeroth_ko": {"ids": IDS}}})
+    answers = iter([False, True])
+    monkeypatch.setattr(data, "cache_is_valid", lambda *args: next(answers))
+    built = []
+    monkeypatch.setattr(data, "_build_audio", lambda *args: built.append(args))
+    data.prepare_audio("zeroth_ko")
+    assert built == []
