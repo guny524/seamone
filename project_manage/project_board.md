@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 main 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-19 04:17
+- 마지막 갱신: 2026-11-19 06:20
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -35,12 +35,12 @@
 
 ## 4. 이슈
 ### #1 앱 뼈대(Tauri 2 + Leptos)를 세우고 다섯 플랫폼 설치 파일을 CI 로 만든다 (빈 앱으로 다섯 플랫폼 묶기를 먼저 확인한다)
-- 상태: 진행
+- 상태: 진행(첫 커밋 a3ad95f 를 push 하고 draft PR https://github.com/guny524/seamone/pull/6 을 열어 CI 확인 중)
 - 폴더: `project_manage/0001-2026_11_19-app_skeleton_ci` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0001-2026_11_19-app_skeleton_ci`)
-- 작업: 브랜치 `guny524/1-app-skeleton-ci`, worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`, worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 세션 `2e24423d-9a31-4d8f-8f08-04d4faaad311`, 이어하기 `claude --resume 2e24423d-9a31-4d8f-8f08-04d4faaad311 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 04:12, 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-1.md`
+- 작업: 브랜치 `guny524/1-app-skeleton-ci`, worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`, worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 세션 `2e24423d-9a31-4d8f-8f08-04d4faaad311`, 이어하기 `claude --resume 2e24423d-9a31-4d8f-8f08-04d4faaad311 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 06:12(CI 로그를 읽고 고치기), 받은 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-1.md`, 다음 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-2.md`
 - 선행: 없음, 후속: #3 받아쓰기 엔진 interface 와 속도 측정, #5 녹음과 받아쓰기와 수정 화면
 - 막힌 이유: 없음
-- 다음 행동: app worker 가 7-1 부터 7-9 까지 하고 첫 보고를 쓴다, 메인이 확인하고 커밋, push 해 CI 를 돌린다
+- 다음 행동: app worker 가 CI 로그를 읽고 고쳐 report-2.md 를 쓰면 메인이 확인하고 push 한다(커밋은 메인만), CI 가 모두 통과하면 Codex Sol high 검토
 
 ### #2 시작 모델 후보의 한국어 오류율을 같은 잣대로 잰다 (출발점 모델을 고를 근거의 절반)
 - 상태: 진행
@@ -84,6 +84,7 @@
 2. #4 라벨 없는 FL 모의실험, #2 merge 뒤 research worker 자리
 3. #5 녹음과 받아쓰기와 수정 화면, #3 merge 뒤 app worker 자리
 ### 5-4. 새 이슈 후보
+- 화면의 CSP(내용 보안 정책)를 `null` 에서 좁힌다: 앱 뼈대는 `null` 로 두었다, 녹음, 받아쓰기, 수정 화면을 만드는 이슈가 화면에 기능을 붙이기 전에 한다, 나온 곳 앱 뼈대 이슈 board 의 D9
 - 기기 안 학습 엔진: 얼린 몸통 위의 작은 부분만 학습하는 `Trainer`, Rust 자동 미분 엔진(Burn, Candle) 고르기, 나온 곳 PD8
 - FL 서버와 통신 규약: 업데이트 모으기, 공개 라벨 데이터 검증 관문, 나온 곳 PD8
 - 폰 가속기로 받아쓰기: Android 와 iOS 의 GPU, NPU 엔진, 나온 곳 PD7
@@ -94,11 +95,13 @@
 
 ## 6. 사용자에게 올릴 것
 ### 6-1. 확인이 필요한 것 (잠정으로 정하고 진행한 것)
+- 앱 identifier `io.github.guny524.seamone`(앱 뼈대 이슈 board 의 D4), 임시 아이콘(말미잘 모양, `app/src-tauri/app-icon.png`): 앱 장터에 올리기 전까지 바꿀 수 있다, 추천은 그대로
 - PD2: 라이선스를 Apache-2.0 으로 정했다
 - PD3: 기록을 git 에 두고 공개한다
 - PD7: 속도 기준 숫자(데스크톱은 가속기로 실시간의 3배와 CPU 만으로 실시간, 폰은 가속기로 실시간)
 - PD8: 라벨 없이 키우는 방향 여섯 가지와 안전장치
 ### 6-2. 아직 정하지 않은 것 (기다리는 것)
+- main 이력의 작성자 메일: 첫 두 커밋(98ccde9, f17c964)의 작성자 메일이 회사 메일이라 공개 레포에 드러나 있다, 06:09 부터 이 레포의 새 커밋은 GitHub noreply 주소를 쓴다, 이미 push 한 이력을 고치려면 main 에 force push 가 필요해 사용자 승인이 필요하다, 추천: 레포가 새것이라 지금 고치는 것이 가장 싸다(그래도 GitHub 에 이미 남은 사본은 지워지지 않을 수 있다), 답이 없으면 그대로 둔다
 - 큰 학습에 쓸 GPU: 집 서버를 써도 되는지와 클라우드 예산, 2026-11-19 에 물었고 답을 받지 못했다, 오늘 밤은 노트북만 쓴다, 직접 설계한 모델의 증류는 이 답 뒤에 한다
 - PD9: 시작 모델, #2 와 #3 의 측정을 기다린다
 - 서명: iOS 실기기 설치와 앱 장터 배포에는 사용자의 Apple 개발자 계정이 필요하다

@@ -49,3 +49,12 @@
 3. 이 log 에 아침 보고를 쓴다(skill `overnight-autopilot` 4절): 밤새 한 일, 커밋과 push 와 merge 와 close 의 hash 와 제목, [밤사이 결정] 과 근거, 보류 목록과 추천, 멈춘 곳과 까닭, 남은 일, 쓴 모델과 바꾼 때, 끝낸 것과 확인한 것과 확인하지 못한 것을 나눠서
 4. 기록을 커밋해 push 하고, `CronList` 로 본 점검 cron 을 `CronDelete` 로 지운다
 5. 모델 설정을 되돌린다: `.tmp/overnight/settings-before-switch.tsv` 의 값(모델 `claude-fable-5-2`, Fable effort `xhigh`, Sonnet effort `medium`)대로, 자기 터미널에 `orca terminal send --terminal "$ORCA_TERMINAL_HANDLE" --text "/effort medium" --enter` 를 보내 Sonnet 의 effort 를 되돌린 뒤 `--text "/model claude-fable-5-2" --enter` 를 보내고, 화면에 "Switch model?" 이 뜨면 `--text $'\r'` 로 확인하고, `--text "/effort xhigh" --enter` 를 보낸다, `jq '{model, modelSettings}' ~/.claude/settings.json` 으로 세 값이 돌아왔는지 확인한다
+
+## 2026-11-19 06:20 메인(Sonnet max) 점검
+- 상태: app worker 가 첫 보고(`project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-1.md`)를 썼다, research worker 는 LoRA 시험을 쉬는 중이고 보고 없음
+- 메인이 직접 확인한 것: 06:07 worktree 에서 `CARGO_BUILD_JOBS=1 nice -n 10 make lint` EXIT=0, `make test` EXIT=0(시험 4개 통과: core 3개와 command 1개), 커밋 대상 77개 파일에 `.tmp`, `target`, `gen`, `dist` 와 비밀값이 섞이지 않음
+- 한 일: 커밋 a3ad95f(`feat: Tauri 2 앱 뼈대와 다섯 플랫폼 설치 파일 CI 를 추가`, 77개 파일)를 브랜치 `guny524/1-app-skeleton-ci` 에 push, draft PR https://github.com/guny524/seamone/pull/6 을 열었다(`build.yml` 이 pull_request 에서만 돌아서), CI 세 개(ci push, ci pull_request, build pull_request)가 06:10 에 시작했다
+- 정한 것: 노트북 메모리가 한계라 로컬 `make build` 와 `cargo tauri dev` 는 하지 않고 설치 파일은 CI 로만 확인한다(프로젝트 PD4 에서 나온 결정, 메인), 이 이슈 완료 기준의 로컬 `make build` 와 창 확인은 CI artifact 와 사람 시험으로 대신한다
+- 고친 것: 이 레포의 커밋 작성자 메일을 회사 메일에서 GitHub noreply 주소로 바꿨다(레포 로컬 설정), 이미 push 한 두 커밋은 그대로이고 사용자에게 올린다(project_board 6-2)
+- 실수: 06:15 의 커밋 91398a2 는 메시지(`docs: 앱 뼈대 보고 확인과 CI 시작을 기록에 적음`)와 달리 두 worker 가 쓰던 이슈 기록(두 이슈의 issue_board, issue_decision, issue_log)만 담았다, 기록 편집 스크립트가 중간에 멈췄는데 뒤 명령(커밋과 push)이 그대로 실행돼서다, 내용은 worker 의 정상 기록이라 되돌리지 않고 이 항목으로 바로잡는다
+- 다음: app worker 가 CI 로그를 읽고 고쳐 report-2.md 를 쓰면 메인이 확인해 push 한다, 06:22 에 CI 결과를 한 번 본다(일회성 cron), Claude Code 가 메모리 부족으로 메인의 background 대기 둘을 멈춘 뒤 새 대기는 걸지 않았다
