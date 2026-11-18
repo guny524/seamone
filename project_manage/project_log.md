@@ -65,3 +65,14 @@
 - 한 일: 검토를 시작했다, 검토자는 Codex Sol(`gpt-6.1-sol`) high 읽기 전용(`-s read-only`), 의도를 주지 않고 변경과 레포만 보게 했다, 시작 전 worktree 의 미커밋 변경은 0 줄(스냅샷 `.tmp/review/status-before-1.txt`), 대상은 커밋 a3ad95f 하나(77개 파일, Cargo.lock 5416줄 포함)
 - 정한 것: 검토자를 Claude 의 background 명령이 아니라 Orca 터미널에 띄웠다(Claude Code 가 메모리 부족일 때 background 명령을 멈추므로), 결과는 파일로 받고 다음 점검에서 읽는다
 - 다음: 검토 결과를 읽고 지적마다 원문을 열어 맞는 것만 이슈 board 7절에 칸으로 더한다, 검토 지적을 고친 뒤에는 lint 와 test 를 다시 돌리고 CI 를 다시 보고 재검토는 두 번까지
+
+## 2026-11-19 06:58 메인(Sonnet max) 검토
+- 검토: Codex Sol(`gpt-6.1-sol`) high 읽기 전용, 06:25 시작 06:30 끝, 앞뒤 미커밋 변경 같음(스냅샷 `.tmp/review/status-before-1.txt` 와 `status-after-1.txt`), 대상은 커밋 a3ad95f 하나, 원문은 `.tmp/review/codex-1.md`(세션 `01a1f08d-4843-7021-a551-da6656dd58f7`), 검토자는 clippy 와 시험을 sandbox 쓰기 거부로 돌리지 못했고 서식 검사는 통과했다고 보고했다
+- 지적 네 개를 메인이 원문을 열어 모두 맞다고 확인했다
+  - 낮음, 방향: CI 의 desktop job 은 `cargo tauri build` 를 직접 부르고(`.github/workflows/build.yml:77`) `Makefile` 의 `build` target 은 CI 가 쓰지 않으며 README 3-2 는 로컬 설치 파일 빌드를 안내해 프로젝트 결정 PD4 와 어긋난다 -> 받음, CI 가 `make build` 를 부르게 하고 README 를 고친다
+  - 중간, 결함: `scripts/install-tools.sh` 가 받은 압축 파일의 해시를 확인하지 않고, 두 workflow 의 `uses:` 12곳이 이동 가능한 태그다 -> 받음, 해시 확인과 commit SHA 고정
+  - 중간, 결함: Android CI 의 debug 서명 키가 실행마다 새로 생겨 덮어 설치가 거부될 수 있다 -> 받음(추론이라 재현은 못 한다), `actions/cache` 로 키를 고정하고 두 번 돌려 확인
+  - 낮음, 결함: command 시험이 `generate_handler!` 등록 누락과 화면의 command 이름 오타를 잡지 못한다 -> 받음, command 이름 상수 하나와 `tauri::test` 로 IPC 시험, 일부러 어긴 구현으로 시험이 실패하는지도 본다
+- 해당 없음으로 둔 지적: 없음
+- 처리: 네 칸을 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/review-cells-1.md` 에 쓰고 app worker 에 보냈다(이슈 board 7절 끝에 7-12 부터 7-15 로 옮겨 적어 차례로 고치고 report-2.md 를 쓴다), 검토자 터미널 탭은 닫았다
+- 다음: report-2.md 를 확인해 커밋과 push, CI 확인(Android 키 고정은 `gh run rerun` 으로 두 번째 실행까지), 재검토 한 번(두 번까지)
