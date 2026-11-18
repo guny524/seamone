@@ -42,7 +42,7 @@
 - `make dev`: 앱을 개발 모드로 띄운다, 화면은 trunk 가 `localhost:1420` 에서 서버로 띄운다
 - `make lint`: 서식(`cargo fmt --check`)과 clippy 를 데스크톱 타깃과 WASM 타깃에서 돌린다, 경고는 오류로 본다
 - `make test`: 모든 crate 의 시험을 돌린다
-- `make build`: 지금 OS 의 설치 파일을 만든다, macOS 에서는 `target/release/bundle/` 아래 `.app` 과 `.dmg` 가 나온다
+- `make build`: CI 가 설치 파일을 만드는 명령이다, CI 는 플랫폼마다 `TAURI_BUILD_ARGS` 로 `--target` 과 `--bundles` 를 넘겨 이 명령을 부른다, 이 프로젝트는 노트북에서 설치 파일을 만들지 않는다(설치 파일은 GitHub Actions 에서만 만든다는 `project_manage/project_decision.md` 의 결정)
 - `make fmt`: 서식을 맞춘다
 ### 3-3. GitHub Actions
 - `ci.yml`: push 와 pull request 마다 `make lint` 와 `make test` 를 Ubuntu 에서 돌린다
