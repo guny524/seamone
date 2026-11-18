@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 main 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-19 08:55
+- 마지막 갱신: 2026-11-19 08:58
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -56,15 +56,15 @@
 - 작업: 앞 뼈대 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`(새 파일은 메인이 경로로 골라 별도 브랜치 `guny524/3-asr-engine-speed` 로 커밋한다), worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 마지막 지시 2026-11-19 08:00, 보고 `project_manage/0003-2026_11_19-asr_engine_speed/.tmp/report-1.md`
 - 선행: #1 앱 뼈대(재검토 중, 코드는 같은 worktree 에 있다), 후속: #5 녹음과 받아쓰기와 수정 화면, PD9 시작 모델 결정
 - 막힌 이유: 속도 측정(뒤 절반)은 모델 내려받기와 C++ 빌드가 무거워 노트북이 한가할 때 한다
-- 다음 행동: 엔진 후보를 feature 뒤에 넣어 CI 와 노트북에서 빌드되는지부터 본다(whisper-rs 와 qwen-asr 가 잠정 선택, 이슈 board 5-9), 모델 내려받기와 측정은 노트북이 한가할 때
+- 다음 행동: 앞 절반(draft PR 8)은 코드 검토를 아직 받지 않았다, 검토 뒤 merge, 이어서 엔진 후보를 feature 뒤에 넣어 CI 와 노트북에서 빌드되는지부터 본다(whisper-rs 와 qwen-asr 가 잠정 선택, 이슈 board 5-9), 모델 내려받기와 측정은 노트북이 한가할 때
 
 ### #4 라벨 없는 FL 모의실험으로 오류율을 낮추는 방법을 고른다 (이 프로젝트의 핵심 물음)
-- 상태: 진행(작은 규모로 줄여 08:35 까지, 파이프라인을 끝까지 돌려 보고 다음에 큰 규모로 돌릴 코드와 명령을 남긴다)
+- 상태: 작은 규모 실행 끝(기기 8, 기기마다 발화 6, 라운드 2, 파이프라인은 끝까지 돌고 효과는 판정하지 못함), 커밋 1dd84f0 을 브랜치 `guny524/4-unlabeled-fl-sim` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/9 을 열었다, 코드 검토는 아직 받지 않았다
 - 폴더: `project_manage/0004-2026_11_19-unlabeled_fl_sim`
 - 작업: 시작 모델 오류율 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`(새 파일은 메인이 경로로 골라 커밋하고 별도 브랜치 `guny524/4-unlabeled-fl-sim` 으로 push 한다), worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56, 보고 `project_manage/0004-2026_11_19-unlabeled_fl_sim/.tmp/report-1.md`
 - 선행: 시작 모델 오류율 이슈(검토 중, 평가 코드와 데이터를 쓴다), 후속: 뒤의 학습 엔진 이슈
 - 막힌 이유: 없음(앞 이슈의 코드는 같은 worktree 에 있다)
-- 다음 행동: research worker 가 작은 규모로 돌려 08:35 에 보고한다, 메인이 확인하고 별도 브랜치로 push 한다
+- 다음 행동: 큰 규모 실행(`make -C research fl-sim FL_DEVICES=12 FL_UTTS=60 FL_ROUNDS=4 FL_PER_ROUND=6 FL_METHODS="a2 a3 a1" FL_EVAL="zeroth_ko=200 fleurs_ko=200 fleurs_en=100"`, 약 3시간은 어림)을 노트북이 한가할 때 돌리고, A3 의 믿음도 문턱을 분포에 맞추고, 코드 검토 뒤 merge, 가중치는 이 밤 끝에 지웠으니 `make -C research prefetch` 로 다시 받는다
 
 ### #5 녹음, 기기 안 받아쓰기, 수정 화면을 만든다 (앱의 첫 쓸모)
 - 상태: 대기

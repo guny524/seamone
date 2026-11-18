@@ -130,3 +130,37 @@
 - 커밋 3135ab8(`fix: 측정 코드의 준비 잠금, 설정 원자적 쓰기, 표본 목록 대조를 검토대로 고침`, 6개 파일)을 push 했다(README 는 이 이슈 몫의 한 줄만 `git apply --cached --unidiff-zero` 로 골랐다), 세 번째 검토는 하지 않았다(두 번에서 멈추는 규칙)
 - PR https://github.com/guny524/seamone/pull/7 을 ready 로 바꿔 merge 했다(merge 커밋 ecdc12c, 08:52), 이슈 마무리 코멘트를 올리고 이슈를 닫았고 폴더를 `_done_0002-2026_11_19-start_model_cer` 로 옮겼다(git 이 추적하지 않는 `.tmp/` 가 같이 가도록 `mv` 로 옮기고 `git add -A` 로 rename 을 잡았다)
 - 앱 뼈대의 app worker 터미널은 Claude 프로세스가 끝나 있었다(할 일이 없는 상태라 다시 띄우지 않았다)
+
+## 2026-11-19 08:58 메인(Sonnet max) 사용자 보고(아침 보고)
+- 요점: 밤새(04:10 부터 08:58) 앱 뼈대와 시작 모델 오류율 측정 이슈를 merge 하고 끝냈다, 받아쓰기 엔진과 라벨 없는 FL 모의실험은 작은 규모의 앞 절반을 draft PR 로 올렸고, 노트북 메모리가 한계라 큰 일은 하지 않았다
+- 이슈와 PR
+  - 앱 뼈대(이슈 1): PR https://github.com/guny524/seamone/pull/6 merge(f9b044d), GitHub Actions 가 macOS dmg 둘, Windows exe 와 msi, Linux deb 와 AppImage, Android debug apk, iOS 시뮬레이터 zip 을 서명 없이 만든다(모두 CI 로 확인, 형식도 받아 확인), 사람 시험(설치 파일 실행)이 남아 이슈는 열려 있다
+  - 시작 모델 오류율(이슈 2): PR https://github.com/guny524/seamone/pull/7 merge(ecdc12c), 이슈 닫음, 결과는 `research/results/2026_11_19_start_model_cer.md`
+  - 받아쓰기 엔진(이슈 3): 앞 절반(interface, 전사 조각 타입, 가짜 엔진, 순수 함수, 엔진 후보 조사)을 draft PR https://github.com/guny524/seamone/pull/8(커밋 dc22e89), 코드 검토 아직
+  - 라벨 없는 FL 모의실험(이슈 4): 작은 규모 실행을 draft PR https://github.com/guny524/seamone/pull/9(커밋 1dd84f0), 코드 검토 아직
+  - 녹음, 기기 안 받아쓰기, 수정 화면(이슈 5): 시작하지 못했다(받아쓰기 엔진 interface 가 먼저)
+- 얻은 것(근거는 결과 문서, 표본이 작아 확정은 아니다)
+  - 한국어 오류율(같은 발화 64개): Qwen3-ASR 1.7B 4.19%, whisper-large-v3-turbo 5.44%, whisper-small 7.47%, whisper-base 13.89%, 영어 40개는 1.78%, 2.42%, 3.68%, 5.30%, 앞 둘의 차이는 표준오차의 약 2.7배
+  - 글 디코더만 붙이는 LoRA 는 Apple GPU 에서 whisper-small, turbo, Qwen3-ASR 1.7B(묶음 1)가 돈다, 업데이트 크기는 글 디코더 LoRA 한 벌 2.4MB
+  - 라벨 없는 FL 모의실험은 파이프라인이 끝까지 돈다, 이 규모(기기 8, 발화 6, 라운드 2)로는 효과를 판정하지 못했다(차이가 모두 표준오차의 1.3배 이하), 큰 규모를 돌려야 한다
+  - 시작 모델은 아직 정하지 않았다(프로젝트 PD9): 오류율은 Qwen3-ASR 1.7B 가 앞서고 속도는 받아쓰기 엔진 이슈의 뒤 절반에서 잰다
+- [밤사이 결정](메인이 정하고 근거를 적은 것, 사용자 확인 대기는 project_board 6-1)
+  - 프로젝트 결정 PD2(라이선스 Apache-2.0), PD3(기록을 git 에 두고 공개), PD5(Rust, Tauri 2, Leptos), PD7(속도 기준 숫자), PD8(라벨 없이 키우는 방향 여섯 가지), PD10(첫 판은 녹음과 받아쓰기와 수정까지), PD11(실험은 PyTorch), 근거는 각 결정 항목
+  - 앱 뼈대의 로컬 `make build` 와 창 확인은 하지 않고 설치 파일은 CI 로만 확인(PD4 와 메모리 한계), Android debug 서명 키를 레포에 둠(시험용으로 공개된 키), 검토는 두 번에서 멈추고 메인이 시험과 diff 로 확인, background 대기 명령은 시스템이 메모리 부족으로 멈춘 뒤 다시 걸지 않고 점검 cron 으로 보고 파일을 직접 확인, 라벨 없는 FL 모의실험과 받아쓰기 엔진은 작은 규모와 앞 절반으로 줄임
+- 사용자에게 묻고 답을 못 받은 것(project_board 6-2): 집 서버 RTX 3060 Ti 를 큰 학습에 써도 되는지(추천: 써도 된다, 답이 없어 노트북만 씀), 이미 push 한 두 커밋(98ccde9, f17c964)의 작성자 메일이 회사 메일이라 공개 레포에 드러난 것을 main 에 force push 로 바꿀지(추천: 새 레포인 지금 바꾼다, 답이 없어 그대로 둠, 06:09 부터 새 커밋은 noreply 주소)
+- 검토: Codex Sol(`gpt-6.1-sol`) high 읽기 전용 네 번(앱 뼈대 둘, 시작 모델 둘), 지적 열다섯 개(낮음 넷, 중간 열하나)를 모두 원문으로 확인해 받아 고쳤다, 해당 없음으로 둔 것은 없다, 받아쓰기 엔진과 라벨 없는 FL 모의실험의 코드는 아직 검토받지 않았다
+- 쓴 모델: 계획 Fable 5.2 xhigh(04:10 쯤까지), 이후 메인 Sonnet 5.5 max(04:18 에 바꿈), worker 둘 Sonnet 5.5 max, 검토 Codex Sol high, Gemini 로 넘기는 일은 없었다(worker 한도 소진 없음)
+- 실수와 정정(숨기지 않는다)
+  - 06:15 의 기록 커밋 91398a2 는 메시지와 달리 두 worker 의 이슈 기록만 담았다(편집 스크립트가 멈췄는데 뒤 명령이 커밋과 push 를 했다), 내용은 정상이라 되돌리지 않고 log 에 바로잡았다
+  - 05:07 에 다시 받을 수 있는 Go, gradle, npm 캐시를 지울 때 도는 프로세스를 확인하는 명령과 지우는 명령을 한 번에 묶어, 다른 세션의 `go test` 와 gradle, kotlin 데몬이 쓰던 캐시까지 지웠다(go test 는 지운 뒤 끝났고 결과는 못 봤다, 데몬은 살아 있다)
+  - 공개 레포의 첫 두 커밋 작성자 메일이 회사 메일이다(위 질문)
+  - 마무리에서 이 셸의 `rm` 이 휴지통으로 보내는 별칭이라 지운 가중치와 빌드 폴더 12GB 가 휴지통에 들어갔고, 내가 넣은 네 항목만 정확한 이름으로 영구 삭제해 디스크 여유를 21GB 에서 33GB 로 되돌렸다
+  - zsh 가 파일 목록 변수를 낱말로 나누지 않아 커밋 명령이 한 번 실패했고, 시험용 키 artifact 받기가 폴더가 없어 한 번 실패했다(둘 다 뒤 명령이 `&&` 로 멈춰 피해는 없었다)
+  - worker 들이 스스로 보고한 것: app worker 가 정리하다 메인이 쓴 `.tmp/start-1.md` 를 지우고 같은 글로 다시 썼다, research worker 가 05:58 지시와 달리 LoRA 시험을 06:20 까지 돌렸고 모델 실행을 겹치고 시간 한도를 넘겼으며 표본을 지시보다 적게 쟀다(부하와 디스크 때문)
+- 끝낸 것, 확인한 것, 확인하지 못한 것
+  - 끝낸 것: 앱 뼈대 merge, 시작 모델 오류율 merge 와 이슈 닫음
+  - 메인이 직접 확인한 것: 로컬 `make lint`, `make test` 와 `make -C research lint`, `test` 통과, CI 결과(여덟 번의 run 이 모두 success), 설치 파일 여덟 개의 형식, Android 키가 레포 키와 같은 sha256, 독립 코드로 센 오류율이 보고와 같음, crates.io 에서 엔진 crate 의 판과 라이선스
+  - 확인하지 못한 것: 설치 파일을 실제 기기에서 실행해 첫 화면이 뜨는지(macOS 는 worker 가 CI 앱으로 확인했다고 보고했고 메인은 못 봄, 나머지 대기), 엔진 후보의 모바일과 Windows 빌드, 일부러 어긴 구현에서 시험이 실패하는 확인(worker 가 보고했고 메인은 다시 하지 않음), 라벨 없는 FL 모의실험의 효과, 받아쓰기 엔진과 FL 코드의 검토
+- 남은 일(우선순위 순): 1) 앱 뼈대 사람 시험, 2) 받아쓰기 엔진 앞 절반 검토와 merge, 뒤 절반(엔진을 feature 뒤에 넣어 CI 빌드, 속도 측정, 시작 모델 결정), 3) 라벨 없는 FL 큰 규모 실행(약 3시간)과 코드 검토, 4) 녹음과 받아쓰기와 수정 화면, 5) research 의 시험을 CI 에서 돌리기, 서명과 배포, 개인정보 안내(project_board 5-4)
+- 자원(마무리에서 지움): `.tmp/hf` 의 가중치 6.8GB, 앞 이슈 worktree 의 `target/` 4.6GB, 시작 모델 worktree 의 `research/.venv` 1.3GB 를 지웠다(다시 받거나 다시 만들 수 있다, 디스크 여유 33.5GB), 남긴 것: worktree 둘(`/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci` 는 브랜치 `guny524/3-asr-engine-speed`, `2-start-model-cer` 는 `guny524/4-unlabeled-fl-sim` 를 쓴다, 그 PR 이 merge 되면 `dispatch-worker` skill 6절로 정리), 시험 음성 `.tmp/hf/seamone_eval` 169MB 와 가설 글(`.tmp/research/hyp/`, 다시 만들 수 없는 측정 증거), 이 레포의 `.tmp/review/` 의 검토 원문
+- 점검 cron 과 일회성 점검을 모두 지웠고 모델 설정은 되돌렸다(아래 마지막 줄)
