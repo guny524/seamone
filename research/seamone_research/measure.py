@@ -9,6 +9,7 @@
 """
 
 import argparse
+import hashlib
 import json
 import time
 from collections.abc import Iterator, Sequence
@@ -21,6 +22,8 @@ from seamone_research.cer import NORMALIZATION_VERSION
 from seamone_research.data import (
     EVAL_SETS,
     Utterance,
+    _write_json_atomically,
+    load_eval_ids,
     load_eval_set,
     parse_set_limits,
     prepare_audio,
@@ -74,13 +77,22 @@ def append_timing(model: str, record: dict) -> None:
     path.write_text(json.dumps(runs, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
-def measurement_config(model: str, spec: ModelSpec, set_name: str, device: str, dtype: str) -> dict:
+def ids_fingerprint(ids: Sequence[str]) -> str:
+    """세트의 전체 표본 id 목록(순서 포함)의 해시, 몇 개를 잴지(limit)와 상관없다."""
+    return hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()
+
+
+def measurement_config(
+    model: str, spec: ModelSpec, set_name: str, device: str, dtype: str, ids: Sequence[str]
+) -> dict:
     return {
         "model": model,
         "repo": spec.repo_id,
         "revision": spec.revision,
         "set": set_name,
         "data_revision": EVAL_SETS[set_name].revision,
+        "ids_count": len(ids),
+        "ids_sha256": ids_fingerprint(ids),
         "normalization": NORMALIZATION_VERSION,
         "device": device,
         "dtype": dtype,
@@ -88,21 +100,53 @@ def measurement_config(model: str, spec: ModelSpec, set_name: str, device: str, 
     }
 
 
-def ensure_same_config(path: Path, config: dict, has_rows: bool) -> None:
-    """저장된 측정 설정이 지금과 다르면, 또는 가설이 있는데 설정이 없으면 멈추고 없으면 쓴다."""
-    if path.exists():
-        saved = json.loads(path.read_text(encoding="utf-8"))
-        keys = set(saved) | set(config)
-        different = sorted(k for k in keys if saved.get(k) != config.get(k))
-        if different:
-            message = f"{path} 의 측정 설정이 지금과 다르다: {different}, 이어 쓰지 않는다"
-            raise ValueError(message)
-        return
-    if has_rows:
-        message = f"가설 글은 있는데 측정 설정 파일 {path} 이 없어 어느 판의 결과인지 알 수 없다"
+def _read_config(path: Path) -> dict | None:
+    """저장된 설정, 파일이 없으면 None, 해석되지 않으면 위치를 적은 ValueError 다."""
+    if not path.exists():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as error:  # JSONDecodeError 와 UnicodeDecodeError 모두 ValueError 다
+        message = f"{path} 의 측정 설정을 해석하지 못한다({type(error).__name__}: {error})"
+        raise ValueError(message) from error
+    if not isinstance(value, dict):
+        message = f"{path} 의 측정 설정이 객체가 아니다"
         raise ValueError(message)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(config, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return value
+
+
+def ensure_same_config(path: Path, config: dict, has_rows: bool) -> None:
+    """저장된 측정 설정이 지금과 다르면 멈추고, 설정이 없거나 깨졌는데 가설이 없으면 새로 쓴다.
+
+    가설이 있는데 설정이 없거나 깨졌으면 어느 판의 결과인지 알 수 없어 멈춘다.
+    """
+    try:
+        saved = _read_config(path)
+    except ValueError:
+        if has_rows:
+            raise
+        saved = None
+    if saved is None:
+        if has_rows:
+            message = (
+                f"가설 글은 있는데 측정 설정 파일 {path} 이 없어 어느 판의 결과인지 알 수 없다"
+            )
+            raise ValueError(message)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json_atomically(path, config)
+        return
+    keys = set(saved) | set(config)
+    different = sorted(k for k in keys if saved.get(k) != config.get(k))
+    if different:
+        message = f"{path} 의 측정 설정이 지금과 다르다: {different}, 이어 쓰지 않는다"
+        raise ValueError(message)
+
+
+def ensure_prefix_of_current_order(path: Path, existing: Sequence[str], ids: Sequence[str]) -> None:
+    """쌓인 가설의 id 가 지금 표본 순서의 앞부분과 같아야 이어 쓴다(N 을 늘리는 재개는 통과한다)."""
+    if list(existing) != list(ids[: len(existing)]):
+        message = f"{path} 에 쌓인 가설의 id 가 지금 표본 순서의 앞부분과 다르다, 이어 쓰지 않는다"
+        raise ValueError(message)
 
 
 def measure_set(
@@ -115,10 +159,12 @@ def measure_set(
     dtype: str,
 ) -> dict | None:
     todo_all = load_eval_set(set_name, limit)
+    ids = load_eval_ids()["sets"][set_name]["ids"]
     path = hypothesis_path(model, set_name)
     rows = repair_hypotheses(path)
-    config = measurement_config(model, spec, set_name, device, dtype)
+    config = measurement_config(model, spec, set_name, device, dtype, ids)
     ensure_same_config(path.with_suffix(".config.json"), config, bool(rows))
+    ensure_prefix_of_current_order(path, [row["id"] for row in rows], ids)
     done = {row["id"] for row in rows}
     todo = [u for u in todo_all if u.id not in done]
     if not todo:

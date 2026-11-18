@@ -8,16 +8,19 @@
 - 음성은 .tmp/hf 에만 둔다, test split 한 파일만 받아 뽑힌 녹음만 꺼내고 원본은 지운다
 - 원본은 세트마다 전용 cache(.tmp/hf/eval-raw/<세트>)에 받고 그 폴더만 지운다
   공유 hub/ 는 건드리지 않는다
-- 준비한 음성 폴더에는 manifest.json(데이터 revision 과 id 목록의 해시)을 마지막에 쓴다
+- 준비한 음성 폴더에는 manifest.json(데이터 revision, id 목록의 해시, wav 크기)을 마지막에 쓴다
   재사용 전에 대조한다
+- 같은 세트의 준비는 세트별 잠금 파일(.tmp/hf/eval-raw/<세트>.lock)을 쥐고 하나씩만 한다
 """
 
+import contextlib
+import fcntl
 import hashlib
 import io
 import json
 import shutil
 import tarfile
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -160,6 +163,19 @@ def remove_inside(root: Path, target: Path) -> None:
     shutil.rmtree(resolved_target, ignore_errors=True)
 
 
+@contextlib.contextmanager
+def set_lock(set_name: str) -> Iterator[None]:
+    """같은 세트를 준비하는 실행끼리 하나씩 하게 한다, 잠금은 프로세스가 끝나면 풀린다."""
+    lock_path = hf_home() / "eval-raw" / f"{set_name}.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def drop_raw_cache(set_name: str) -> None:
     target = raw_cache_dir(set_name)
     if target.exists():
@@ -289,13 +305,20 @@ def _extract_audio(spec: EvalSetSpec, ids: set[str]) -> dict[str, bytes]:
     return _fleurs_audio(_download(spec, spec.audio_file), ids)
 
 
-def manifest_for(spec: EvalSetSpec, ids: Sequence[str]) -> dict:
+def wav_sizes_of(set_name: str, ids: Sequence[str]) -> dict[str, int]:
+    """wav 파일 이름마다의 크기, 없는 파일이 있으면 FileNotFoundError 다."""
+    out_dir = eval_audio_dir(set_name)
+    return {_wav_name(i): (out_dir / _wav_name(i)).stat().st_size for i in ids}
+
+
+def manifest_for(spec: EvalSetSpec, ids: Sequence[str], wav_sizes: Mapping[str, int]) -> dict:
     digest = hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()
     return {
         "repo": spec.repo_id,
         "revision": spec.revision,
         "count": len(ids),
         "ids_sha256": digest,
+        "wav_sizes": dict(wav_sizes),
     }
 
 
@@ -308,18 +331,23 @@ def _has_reference(entry: object) -> bool:
 
 
 def cache_is_valid(set_name: str, spec: EvalSetSpec, ids: Sequence[str]) -> bool:
-    """manifest 가 같고 정답 파일이 해석되며 필요한 id 의 정답과 wav 가 모두 있을 때만 참이다."""
+    """manifest 가 같고 정답과 wav(크기도 같다)가 필요한 id 마다 있을 때만 참이다."""
     out_dir = eval_audio_dir(set_name)
     try:
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         references = json.loads(_references_path(set_name).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
-    if manifest != manifest_for(spec, ids) or not isinstance(references, dict):
+    saved_sizes = manifest.get("wav_sizes") if isinstance(manifest, dict) else None
+    if not isinstance(saved_sizes, dict) or not isinstance(references, dict):
         return False
-    return all(
-        _has_reference(references.get(i)) and (out_dir / _wav_name(i)).is_file() for i in ids
-    )
+    if manifest != manifest_for(spec, ids, saved_sizes):
+        return False
+    try:
+        actual = wav_sizes_of(set_name, ids)
+    except OSError:
+        return False
+    return actual == saved_sizes and all(_has_reference(references.get(i)) for i in ids)
 
 
 def prepare_audio(set_name: str) -> None:
@@ -328,6 +356,12 @@ def prepare_audio(set_name: str) -> None:
     ids = load_eval_ids()["sets"][set_name]["ids"]
     if cache_is_valid(set_name, spec, ids):
         return
+    with set_lock(set_name):
+        if not cache_is_valid(set_name, spec, ids):  # 기다리는 동안 다른 실행이 끝냈을 수 있다
+            _build_audio(set_name, spec, ids)
+
+
+def _build_audio(set_name: str, spec: EvalSetSpec, ids: Sequence[str]) -> None:
     out_dir = eval_audio_dir(set_name)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "manifest.json").unlink(missing_ok=True)
@@ -341,7 +375,8 @@ def prepare_audio(set_name: str) -> None:
             "seconds": round(seconds, 3),
         }
     _write_json_atomically(_references_path(set_name), references)
-    _write_json_atomically(out_dir / "manifest.json", manifest_for(spec, ids))
+    sizes = wav_sizes_of(set_name, ids)
+    _write_json_atomically(out_dir / "manifest.json", manifest_for(spec, ids, sizes))
     drop_raw_cache(set_name)
 
 

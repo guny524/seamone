@@ -12,7 +12,7 @@
   - `MODELS` 로 모델, `SETS` 로 세트를 고르고, `N` 은 세트마다 앞에서부터 잴 발화 수다(`N=5` 면 빠른 확인)
   - 모델마다 process 하나로 돌고 가설 글을 `.tmp/research/hyp/<모델>/<세트>.jsonl` 에 쌓는다, 멈췄다 다시 돌려도 이어 쓴다
   - 끝에 `score` 가 저장된 가설 글로 CER 을 다시 계산해 낸다
-  - 가설 글 옆의 `<세트>.config.json` 이 측정 설정(모델과 데이터의 revision, 정규화 판)을 기록하고, 이어 쓸 때 대조해 다르면 멈춘다
+  - 가설 글 옆의 `<세트>.config.json` 이 측정 설정(모델과 데이터의 revision, 정규화 판, 표본 목록 해시)을 기록하고, 이어 쓸 때 대조해 다르면 멈춘다
 - `make -C research score MODELS="..."`: 저장된 가설 글로 CER 을 다시 계산한다(모델을 돌리지 않는다)
 - `make -C research compare MODELS="a b" SETS="fleurs_ko zeroth_ko" PAIR="a b"`: 같은 발화에서 세트들을 합친 CER 과 두 모델의 CER 차이를 낸다
 - `make -C research lora LORA_MODELS=... LORA_DEVICES=mps`: LoRA 를 붙여 순전파와 역전파를 돌려 성공 여부와 시간과 메모리를 잰다
