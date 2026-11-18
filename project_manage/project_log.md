@@ -124,3 +124,9 @@
   - 두 번째 검토(08:31 시작 08:36 끝): 이전 지적 여섯 개는 고쳐짐 넷과 일부 둘, 새 지적 셋(중간 셋: 세트별 cache 의 실행 간 배제 없음, 측정 설정 파일의 비원자적 쓰기, 표본 목록이 바뀌어도 설정 대조 통과)을 원문으로 확인했다, 세트별 cache 의 동시 실행 경쟁은 지금 한 worker 가 쓰는 환경에서는 드물지만 맞는 지적이다
   - 처리: 세 개를 모두 받아 `.tmp/review-cells-3.md` 로 research worker 에게 보냈다(08:50 까지), 검토 반복이 두 번에서 멈추는 규칙(review skill 4절)이라 세 번째 검토는 하지 않고 시험과 diff 로 메인이 확인한다
 - 정리: 끝난 검토자 탭 셋을 닫았다, 끝난 일의 임시 사본은 지웠다(`.tmp/ci-artifacts`, 검토 도구가 만든 `.serena/`)
+
+## 2026-11-19 08:55 메인(Sonnet max) 점검
+- 시작 모델 오류율: research worker 의 보고 3(08:45)을 확인했다, 메인이 직접 확인한 것: `make -C research lint`, `make -C research test` EXIT=0(129개 통과), 세트별 잠금(`fcntl.flock`)과 `prepare_audio` 의 잠금 뒤 재확인 코드를 읽었다, worker 가 일부러 어긴 구현 아홉 가지에서 시험이 실패하는 것을 확인했다고 보고했고 메인은 이것을 다시 하지 않았다
+- 커밋 3135ab8(`fix: 측정 코드의 준비 잠금, 설정 원자적 쓰기, 표본 목록 대조를 검토대로 고침`, 6개 파일)을 push 했다(README 는 이 이슈 몫의 한 줄만 `git apply --cached --unidiff-zero` 로 골랐다), 세 번째 검토는 하지 않았다(두 번에서 멈추는 규칙)
+- PR https://github.com/guny524/seamone/pull/7 을 ready 로 바꿔 merge 했다(merge 커밋 ecdc12c, 08:52), 이슈 마무리 코멘트를 올리고 이슈를 닫았고 폴더를 `_done_0002-2026_11_19-start_model_cer` 로 옮겼다(git 이 추적하지 않는 `.tmp/` 가 같이 가도록 `mv` 로 옮기고 `git add -A` 로 rename 을 잡았다)
+- 앱 뼈대의 app worker 터미널은 Claude 프로세스가 끝나 있었다(할 일이 없는 상태라 다시 띄우지 않았다)

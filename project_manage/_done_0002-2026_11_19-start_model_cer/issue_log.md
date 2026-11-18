@@ -147,3 +147,45 @@
 ## 5. 줄이거나 못 한 것
 - whisper-small 의 CPU LoRA 시험 둘을 새 기준으로 다시 돌리지 않았다(CPU 시험이 느리고 GPU 를 쓰는 모의실험과 겹치지 않게 하려고 뺐다)
 - 라벨 없는 FL 모의실험은 이 칸들 때문에 07:57 계획보다 늦다: 08:10 에서 08:20 사이에 컴퓨터 실행 순서를 LoRA 재시험(08:14 에서 08:20)에 내줘 두 번째 실행(학습률 3e-3)이 08:21 에 시작했다, 첫 실행(학습률 1e-4, A2 와 A3 와 A1)은 08:13 에 끝났다
+
+## 2026-11-19 08:45 worker(Sonnet 5.5, effort 미확인) 보고 3
+- 결과 한 줄: 두 번째 검토의 새 지적 셋(7-15 에서 7-17)을 모두 고쳤고 `make -C research lint` 통과, `make -C research test` 129개 통과(08:42, 이번에 더한 시험 18개 포함)다
+- 지시한 순서대로 7-16, 7-17, 7-15 를 했고 칸마다 일부러 어긴 구현으로 시험이 결함을 잡는지 확인했다(아홉 가지 모두 잡혔다, 2절)
+- 이슈 board 7-15 에서 7-17 에 결과를 적었고 8절에 수정 요약을 더했다
+
+## 1. 칸마다 고친 것(무엇을 왜)
+- 7-16 측정 설정을 직접 써서 쓰기가 중단되면 재시작이 막힌다: `research/seamone_research/measure.py:103-142` 의 `_read_config` 와 `ensure_same_config`
+  - 이유: 설정을 `write_text` 로 직접 쓰다가 잘리면 다음 실행이 `json.loads` 에서 실패해 가설이 하나도 없어도 재시작하지 못했다
+  - 이제 설정을 `.part` 로 쓴 뒤 이름을 바꿔 쓰고, 설정이 해석되지 않으면 가설 행이 없을 때 새로 만들고 가설 행이 있으면 파일 경로와 JSON 오류 위치를 적은 오류로 멈춘다
+- 7-17 표본 목록이나 순서가 바뀌어도 설정 대조를 통과한다: `measure.py:80-100` 의 `ids_fingerprint`, `measurement_config`, `:145` 의 `ensure_prefix_of_current_order`, `measure_set`(`:152`)
+  - 이유: 설정에 표본 식별값이 없어 `eval_ids.json` 의 표본이나 순서를 바꿔도 재개가 허용됐고, 기존 가설이 [a] 이고 새 순서가 [b, a] 이면 [a, b] 로 쌓여 채점이 순서 불일치로 거부했다
+  - 이제 설정에 세트 전체 id 목록의 해시(`ids_sha256`, `limit` 와 무관)를 넣어 대조하고, 이어 쓰기 전에 쌓인 가설의 id 가 지금 표본 순서의 앞부분인지 검사한다(`N` 을 늘리는 재개는 통과한다)
+- 7-15 같은 세트를 둘 이상의 실행이 동시에 준비하면 서로의 원본을 지우거나 파일이 섞인다: `research/seamone_research/data.py:167` 의 `set_lock`, `:353` 의 `prepare_audio` 와 `:364` 의 `_build_audio`, `:308,314,333` 의 `wav_sizes_of`, `manifest_for`, `cache_is_valid`
+  - 이유: 세트별 폴더를 실행끼리 공유하는데 잠금이 없어, 한 실행이 끝나 원본을 지우면 다른 실행이 받은 원본이 사라지고 다른 판으로 같은 id 를 준비하면 manifest 와 wav 가 서로 다른 판으로 섞여도 wav 의 존재만 보고 통과했다
+  - 이제 `prepare_audio` 전체(받기, wav 와 정답 쓰기, manifest 쓰기, 원본 지우기)를 세트별 잠금 파일(`.tmp/hf/eval-raw/<세트>.lock`, `fcntl.flock`) 안에서 하고, 잠금을 쥔 뒤 `cache_is_valid` 를 다시 본다(기다리는 동안 다른 실행이 끝냈으면 만들지 않는다)
+  - manifest 에 wav 파일 이름별 크기를 담고 `cache_is_valid` 가 실제 크기와 대조한다
+
+## 2. 로컬로 확인한 것
+- `make -C research lint`: 통과(08:42, ruff 검사와 형식 검사 36개 파일)
+- `make -C research test`: 129개 통과(08:42, 이번에 더한 시험은 18개: `tests/test_data_cache.py` 6, `test_measure_config.py` 7, 새 파일 `test_measure_resume.py` 5)
+- 일부러 어긴 구현 아홉 가지(scratchpad 사본에서 하나씩 넣어 시험을 돌렸고 모두 시험 하나가 실패했다, 원래 구현으로 되돌리면 모두 통과했다, 사본은 지웠다)
+  - 7-16: 설정을 직접 `write_text` 로 쓰기(임시 이름 시험이 실패), 가설이 없어도 깨진 설정에서 멈추기(가설 없는 잘린 설정은 새로 만든다는 시험이 실패)
+  - 7-17: 설정에서 표본 목록 해시 빼기(해시 시험이 실패), 앞부분 검사를 부르지 않기(설정이 맞아도 앞부분이 아니면 거부한다는 시험이 실패), 앞부분 검사가 항상 통과하기(앞부분 검사 시험이 실패)
+  - 7-15: 잠금 없이 만들기(`prepare_audio` 가 만드는 동안 잠금을 쥔다는 시험이 실패), wav 크기 대조 빼기(크기가 다르면 거부한다는 시험이 실패), 잠금 뒤 재확인 빼기(기다린 준비는 다시 만들지 않는다는 시험이 실패), 잠금이 잠그지 않기(스레드 둘 시험이 실패)
+- 7-17 의 이행 확인: 이미 쌓은 가설 글 15개 파일 옆 설정 파일에 표본 목록 해시를 한 번 써 넣었고(쓰기 전에 가설 id 가 지금 표본 순서의 앞부분인지와 기존 설정의 다른 값이 그대로인지 확인했다, `.tmp/research/adopt_ids_hash.py`), 쓴 뒤 `ensure_same_config` 가 15개 모두 통과했고 `make -C research score` 가 그대로 돈다(whisper-small 과 Qwen3-ASR-1.7B 의 Zeroth-Korean 값이 전과 같다)
+- 7-15 의 이행 확인: 이미 준비된 세 음성 폴더의 manifest 를 wav 크기가 담긴 꼴로 다시 썼고(파일이 모두 있는지 확인한 뒤, `.tmp/research/adopt_manifest.py`) `cache_is_valid` 가 셋 모두 참이다
+
+## 3. 한계와 못 한 것
+- 잠금은 같은 컴퓨터의 같은 파일 시스템에서 도는 실행끼리만 막는다(`flock`), 다른 컴퓨터가 같은 `.tmp/hf` 를 네트워크 파일 시스템으로 쓰는 경우는 확인하지 못했다
+- wav 크기로 다른 판의 파일을 가리므로 크기가 우연히 같은 다른 판의 wav 는 잡지 못한다(해시는 쓰지 않았다, manifest 의 revision 과 id 목록 해시와 함께 본다)
+- 실제 모델로 이어 쓰기를 다시 돌려 보지는 않았다, `measure_set` 전체 경로는 가짜 받아쓰기기로 시험했다
+- `measure.py` 가 `data.py` 의 `_write_json_atomically`(이름이 밑줄로 시작한다)를 부른다, 시작 모델 이슈의 `data.py` 안 함수라 공개 이름으로 바꾸는 것은 하지 않았다
+- 라벨 없는 FL 모의실험은 이 칸들 때문에 08:38 에서 08:45 사이 멈췄다(컴퓨터 실행은 없었다)
+
+## 4. 변경 범위
+- 이 칸들의 수정(기준 커밋 5a4c397 뒤, `git status`)
+  - 고친 추적 파일: `research/seamone_research/data.py`, `research/seamone_research/measure.py`, `research/tests/test_data_cache.py`, `research/tests/test_measure_config.py`
+  - 새 파일: `research/tests/test_measure_resume.py`
+  - `research/README.md`: 측정 설정 줄에 "표본 목록 해시" 를 더한 한 줄만 이 칸들의 몫이고 나머지 줄은 라벨 없는 FL 모의실험의 것이다(한 파일에 섞여 있다)
+- stage 하지 않고 두었다, 라벨 없는 FL 모의실험의 새 파일과 `research/Makefile` 은 이 칸들과 상관없다
+- 기록(worktree 밖): 시작 모델 이슈의 `issue_board.md` 7-15 에서 7-17 과 8절, 이 보고 `issue_log.md`

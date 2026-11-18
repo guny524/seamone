@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 main 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-19 08:42
+- 마지막 갱신: 2026-11-19 08:55
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -43,12 +43,12 @@
 - 다음 행동: 사람 시험(Windows, Linux, Android 에서 설치 파일을 실행해 첫 화면 확인, macOS 는 worker 가 CI 앱으로 확인했다고 보고), 끝나면 이슈 마무리 코멘트와 끝내기 승인 뒤 폴더를 `_done_` 으로 옮긴다, worktree 는 받아쓰기 엔진 이슈가 이어 써서 남겼다(10-5)
 
 ### #2 시작 모델 후보의 한국어 오류율을 같은 잣대로 잰다 (출발점 모델을 고를 근거의 절반)
-- 상태: 두 번째 검토에서 새 지적 셋(08:36), research worker 가 08:50 까지 고치는 중(커밋 d8b92ee 와 5a4c397, draft PR https://github.com/guny524/seamone/pull/7, 첫 검토 지적 여섯 개는 고쳐짐 넷과 일부 둘로 판정)
-- 폴더: `project_manage/0002-2026_11_19-start_model_cer` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0002-2026_11_19-start_model_cer`)
+- 상태: 끝남(PR https://github.com/guny524/seamone/pull/7 merge 커밋 ecdc12c, 2026-11-19 08:52, GitHub 이슈 닫음, 이슈 board 10-6 게시와 10-7 기록)
+- 폴더: `project_manage/_done_0002-2026_11_19-start_model_cer` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/_done_0002-2026_11_19-start_model_cer`)
 - 작업: 브랜치 `guny524/2-start-model-cer`, worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`, worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56(다음 일로 라벨 없는 FL 모의실험), 받은 보고 `project_manage/0002-2026_11_19-start_model_cer/.tmp/report-1.md`, 검토자 Codex Sol high 읽기 전용(Orca 터미널 `term_6321555b-e1cf-4596-a9e7-2f1acd2961d1`, 07:55 시작, 결과 `.tmp/review/codex-2.md`)
 - 선행: 없음, 후속: #4 라벨 없는 FL 모의실험, PD9 시작 모델 결정
 - 막힌 이유: 없음
-- 다음 행동: research worker 가 review-cells-3.md 의 세 칸(7-15 ~ 7-17)을 고쳐 report-3.md 를 쓰면 메인이 시험과 diff 로 확인해 커밋하고 push, 세 번째 검토는 하지 않고(두 번에서 멈추는 규칙) 확인이 되면 merge, 이 이슈는 사람 시험이 없어 닫는다, 맨 위 `ci.yml` 에 research 의 lint 와 test 를 돌리는 job 을 더하는 일(torch 설치가 무거워 CPU 용으로 줄이는 방법을 본다)은 merge 뒤 새 이슈 후보다
+- 다음 행동: 없음(끝남), 남은 일은 whisper-large-v3 측정과 표본 늘리기(다음에 부하가 낮을 때), 맨 위 `ci.yml` 에 research 의 lint 와 test 를 돌리는 job 을 더하는 일은 프로젝트 board 5-4 새 이슈 후보
 
 ### #3 받아쓰기 엔진 interface 를 세우고 기기별 속도를 잰다 (출발점 모델을 고를 근거의 나머지 절반)
 - 상태: 앞 절반 끝(interface, 가짜 엔진, 순수 함수, 엔진 후보 조사), 커밋 dc22e89 를 브랜치 `guny524/3-asr-engine-speed` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/8 을 열었다, 뒤 절반(엔진 구현과 모델 내려받기와 속도 측정)은 남음
@@ -84,6 +84,7 @@
 2. #4 라벨 없는 FL 모의실험, #2 merge 뒤 research worker 자리
 3. #5 녹음과 받아쓰기와 수정 화면, #3 merge 뒤 app worker 자리
 ### 5-4. 새 이슈 후보
+- research 의 lint 와 test 를 CI 에서 돌린다: 새 시험 129개가 지금 CI 에서 돌지 않는다(rule change.md 6절), torch 설치가 무거워 CPU 용으로 줄이는 방법을 본다, 나온 곳 시작 모델 오류율 이슈의 merge
 - action 의 commit SHA 와 `scripts/install-tools.sh` 의 `expected_sha256` 을 갱신하는 절차(Dependabot 의 github-actions 갱신 등): 고정한 값은 시간이 지나면 낡는다, 나온 곳 앞 이슈 검토와 worker 보고
 - Windows runner 의 `choco install make` 는 판은 고정했지만 해시를 확인하지 않는 외부 설치다: `make` 를 쓰지 않고 한 줄 명령을 Makefile 과 workflow 가 같은 변수에서 읽게 하는 방법, 나온 곳 앞 이슈 worker 보고
 - 화면의 CSP(내용 보안 정책)를 `null` 에서 좁힌다: 앱 뼈대는 `null` 로 두었다, 녹음, 받아쓰기, 수정 화면을 만드는 이슈가 화면에 기능을 붙이기 전에 한다, 나온 곳 앱 뼈대 이슈 board 의 D9

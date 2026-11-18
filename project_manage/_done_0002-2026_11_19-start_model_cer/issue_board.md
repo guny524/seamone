@@ -93,7 +93,7 @@
 ## 7. 할 일과 검증
 (순서대로 한다, 시간 한도: 모델 하나의 측정이 25분을 넘을 것 같으면 표본을 줄이고 줄인 수를 적는다, 이 이슈 전체는 2시간 30분 안에 끝낸다)
 (다른 worker 가 같은 노트북에서 Rust 를 빌드한다, 메모리가 16GB 라 모델은 한 번에 하나만 올린다)
-- [x] 7-1. 환경: `research/` 에 uv 프로젝트(`pyproject.toml`, Python 3.12, torch, transformers, datasets, 오류율 계산 라이브러리, ruff, pytest)를 만든다, `research/Makefile` 에 `lint`(ruff), `test`(pytest), `cer`(측정) target 을 만들고 모든 target 이 `HF_HOME=/Users/min-jo/Documents/Developments/seamone/.tmp/hf` 를 쓰게 한다, 가상환경은 `research/.venv` / 검증: `make -C research lint`, `make -C research test` / 결과: `research/pyproject.toml:5-24`(Python 3.12, 의존성은 board 와 달리 datasets 를 뺐고 D1, `:31-38` 에서 qwen-asr 의 데모용 의존성을 뺐다 D2), `research/uv.lock`(패키지 version 은 이 파일이 원본), `research/Makefile:7-8`(HF_HOME 을 git 공통 폴더에서 찾은 메인 레포의 `.tmp/hf` 로 정한다 D7)와 target install, eval-ids, lint, test, prefetch, cer, score, compare, lora(`:28-69`), `research/.gitignore`, `research/README.md`, 가상환경 `research/.venv` 1.3GB, 검증: `make -C research lint` 통과(ruff 검사와 형식 검사), `make -C research test` 51개 통과(07:12, 검토 지적 반영 뒤 111개 통과 08:18, 라벨 없는 FL 모의실험의 시험 28개 포함)
+- [x] 7-1. 환경: `research/` 에 uv 프로젝트(`pyproject.toml`, Python 3.12, torch, transformers, datasets, 오류율 계산 라이브러리, ruff, pytest)를 만든다, `research/Makefile` 에 `lint`(ruff), `test`(pytest), `cer`(측정) target 을 만들고 모든 target 이 `HF_HOME=/Users/min-jo/Documents/Developments/seamone/.tmp/hf` 를 쓰게 한다, 가상환경은 `research/.venv` / 검증: `make -C research lint`, `make -C research test` / 결과: `research/pyproject.toml:5-24`(Python 3.12, 의존성은 board 와 달리 datasets 를 뺐고 D1, `:31-38` 에서 qwen-asr 의 데모용 의존성을 뺐다 D2), `research/uv.lock`(패키지 version 은 이 파일이 원본), `research/Makefile:7-8`(HF_HOME 을 git 공통 폴더에서 찾은 메인 레포의 `.tmp/hf` 로 정한다 D7)와 target install, eval-ids, lint, test, prefetch, cer, score, compare, lora(`:28-69`), `research/.gitignore`, `research/README.md`, 가상환경 `research/.venv` 1.3GB, 검증: `make -C research lint` 통과(ruff 검사와 형식 검사), `make -C research test` 51개 통과(07:12, 검토 지적 반영 뒤 111개 통과 08:18, 두 번째 검토 반영 뒤 129개 통과 08:43, 라벨 없는 FL 모의실험의 시험 28개 포함)
 - [x] 7-2. CER 계산: `research/seamone_research/cer.py`, 정규화는 유니코드 NFC, 소문자, 문장부호와 공백 제거, 숫자는 바꾸지 않는다(정답은 "오" 이고 모델은 "5" 로 쓴 경우 오류로 잡히는 한계를 결과 문서에 적는다), CER 은 세트 전체의 편집 거리 합을 정답 글자 수 합으로 나눈다 / 검증: 단위 시험(같은 글 0, 공백과 문장부호만 다른 글 0, 한 글자 바뀜, 빈 가설, 한글과 영어 섞임) / 결과: `research/seamone_research/cer.py:26` normalize(NFC, 소문자, 범주 P*, Z*, Cc, Cf 제거, 숫자와 S* 는 둔다 D5), `:65` count_errors(jiwer 로 대체, 삭제, 삽입 수), `:84` corpus_counts(세트 전체 합), `:91` ratio_estimate 와 `:104` corpus_standard_error(표준오차), 검증: `research/tests/test_cer.py`(같은 글 0, 공백과 문장부호만 다른 글 0, 한 글자 바뀜, 빈 가설, 한글과 영어 섞임, 숫자 안 바꿈, 세트 합산 등 18개 함수), 시험이 결함을 잡는지는 scratchpad 사본에서 일곱 가지 변이(정답 글자 수를 안 더함, 문장부호를 안 지움, 기호까지 지움, NFC 안 함, 30초 안 거름, 문장마다 하나로 안 줄임, 공통 앞부분을 가장 긴 쪽으로 잡음)로 확인했고 하나는 시험을 고쳐 잡게 했다
 - [x] 7-3. 시험 세트: `research/seamone_research/data.py`, FLEURS `ko_kr` test 200개, `en_us` test 100개, Zeroth-Korean test 200개를 seed 고정으로 뽑아 16kHz mono 로 맞춘다, 뽑은 id 목록을 `research/data/eval_ids.json` 으로 커밋하고 음성은 `.tmp/hf` 에만 둔다, 세트 전체를 받지 않고 test split 만 받는다 / 검증: id 목록의 수와 총 음성 길이를 출력해 적는다 / 결과: `research/seamone_research/data.py:93` select_ids(D4), `:164` build_eval_ids, `:260` prepare_audio(test split 파일만 받아 뽑힌 녹음을 16kHz mono wav 로 `.tmp/hf/seamone_eval/` 에 두고 원본은 지운다), `:283` load_eval_set, `research/data/eval_ids.json`(540줄), 검증: `make -C research eval-ids` 출력이 fleurs_ko 200개 2569.0초(후보 270문장), fleurs_en 100개 993.7초(후보 350문장), zeroth_ko 200개 1934.7초(후보 457개), 음성 파일 500개 합계 169MB
 - [x] 7-4. 추론: `research/seamone_research/transcribe.py`, Whisper 계열은 transformers, Qwen3-ASR 은 공식 패키지로 같은 interface(음성 목록을 받아 글 목록을 낸다) 뒤에 둔다, 언어는 세트의 언어로 지정하고 greedy 로 푼다, 가설 글은 `.tmp/research/hyp/<모델>/<세트>.jsonl` 에 둔다 / 검증: 모델마다 음성 5개로 먼저 돌려 글이 나오는지 본다 / 결과: `research/seamone_research/transcribe.py:24` Transcriber(음성 목록과 언어를 받아 글 목록을 낸다), `:30` WhisperTranscriber(transformers), `:60` QwenAsrTranscriber(qwen-asr, 언어 이름 Korean 과 English), `research/seamone_research/models.py:11` 모델마다 device 와 dtype 과 묶음 크기, `research/seamone_research/measure.py:73` measure_set(가설 글을 eval_ids 순서로 jsonl 에 쌓고 이어 쓴다 D6)와 `:32` LazyTranscriber(처음 쓸 때만 모델을 불러온다, 끝나면 `memory.py:11` release_memory 로 메모리를 돌려준다), 검증: whisper-base 는 `N=5` 로, Qwen3-ASR-0.6B 는 3개로 먼저 돌려 글이 나오는 것을 봤고, 나머지 모델은 첫 묶음의 가설 글을 정답과 눈으로 대조했다(글이 정상이고 환각이 없었다)
@@ -107,6 +107,9 @@
 - [x] 7-12. [중간, 결함] 모델 판을 고정하지 않아 재실행 결과가 섞인다 / 결과: `research/seamone_research/models.py:13` `ModelSpec` 에 `revision`(결과 문서 2-1절의 커밋)을 한 번만 두고 `:79` `resolve_model_path` 가 그 커밋으로 `snapshot_download` 한 폴더 경로를 돌려준다, Whisper 와 Qwen3-ASR 의 로더(`research/seamone_research/transcribe.py:30,60,85`), `prefetch.py`, `lora_probe.py`, `fl_train.py` 가 모두 이 경로로 불러온다(`qwen_asr` 의 `from_pretrained` 가 revision 을 받는지 확인하지 않고 폴더 경로로 불러오는 쪽으로 정했다), `research/seamone_research/measure.py:77` `measurement_config` 와 `:91` `ensure_same_config` 가 가설 글 옆 `<세트>.config.json` 에 측정 설정(모델 repo 와 revision, 데이터 revision, 정규화 판 `cer.py:26`, device, dtype)을 쓰고 이어 쓸 때 대조해 다르면, 또는 가설이 있는데 설정이 없으면 멈춘다 / 검증: `research/tests/test_models_revision.py`(커밋 40자, `snapshot_download` 에 revision 이 간다, 가짜 로더로 Whisper 와 Qwen 로더가 해석된 폴더에서 불러온다), `research/tests/test_measure_config.py`(설정이 다르면 재개를 거부한다, 설정 없이 가설만 있으면 거부한다), `ls` 확인: 남아 있는 가중치의 snapshot 폴더 이름이 결과 문서 2-1절의 커밋과 같다(whisper-small 973afd24965f72e36ca33b3055d56a652f456b4d, whisper-large-v3-turbo 41f01f3fe87f28c78e2fbf8b568835947dd65ed9, Qwen3-ASR-1.7B 7278e1e70fe206f11671096ffdd38061171dd6e5), 지운 가중치 셋(whisper-base, Qwen3-ASR-0.6B, whisper-large-v3)은 확인하지 못했다, 이미 쌓은 가설 글 15개 파일 옆에는 문서의 커밋과 device mps, dtype float16 으로 설정 파일을 한 번 써 넣었다(`.tmp/research/adopt_configs.py`, 버려도 되는 도구)
 - [x] 7-13. [중간, 결함] 음성 cache 재사용이 데이터 판과 표본을 검사하지 않는다 / 결과: `research/seamone_research/data.py:292` `manifest_for`(데이터 repo 와 revision, id 수, id 목록의 SHA-256), `:310` `cache_is_valid`(manifest 대조, 정답 파일이 해석되는지, 필요한 id 의 정답과 wav 가 모두 있는지), `:325` `prepare_audio` 가 같은 판의 완성본이 있을 때만 재사용하고 아니면 manifest 를 지운 뒤 다시 만들고 manifest 를 마지막에 쓴다, wav 와 정답 파일과 manifest 는 `.part` 임시 이름으로 쓴 뒤 이름을 바꾼다(`:251` `_save_wav`, `:261` `_write_json_atomically`), 이미 준비된 세 음성 폴더에는 파일이 완전한지 확인한 뒤 manifest 를 한 번 써 넣었다(`.tmp/research/adopt_manifest.py`, 버려도 되는 도구) / 검증: `research/tests/test_data_cache.py`(다른 데이터 revision 과 다른 id 목록과 잘린 정답 파일과 빠진 wav 와 정답과 manifest 없음은 거부하고 정상은 다시 받지 않는다, `_save_wav` 가 완성된 파일만 남긴다)
 - [x] 7-14. [낮음, 방향] 결과 문서의 "같은 말을 되풀이하는 환각은 없었다" 가 길이 검사만으로 단정한다 / 결과: `research/results/2026_11_19_start_model_cer.md` 3-4절을 "정답 길이의 두 배를 넘는 가설은 다섯 모델 모두 0개였다, 정규화한 글자 수만 견준 검사라 짧은 구절을 되풀이한 가설은 이 검사로 잡히지 않는다(반복이 없었다는 증거는 아니다)" 로 한정했고 `research/seamone_research/score.py:31` `runaway_count` 의 docstring 에서 "되풀이하는 환각" 을 뺐다 / 검증: `rg -n '되풀이' research/` 로 남은 단정이 없음을 확인했다(결과 문서의 한정 문장 한 곳만 걸린다)
+- [x] 7-15. [중간, 결함] 같은 세트를 둘 이상의 실행이 동시에 준비하면 서로의 원본을 지우거나 파일이 섞인다 / 결과: `research/seamone_research/data.py:167` `set_lock`(세트별 잠금 파일 `.tmp/hf/eval-raw/<세트>.lock` 에 `fcntl.flock`), `:353` `prepare_audio` 가 잠금 안에서 `:364` `_build_audio`(받기, wav 와 정답 쓰기, manifest 쓰기, 원본 지우기)를 하고 잠금을 쥔 뒤 `cache_is_valid` 를 다시 본다(기다리는 동안 다른 실행이 끝냈으면 만들지 않는다), `:308` `wav_sizes_of` 와 `:314` `manifest_for` 가 wav 파일 이름별 크기를 manifest 에 담고 `:333` `cache_is_valid` 가 실제 크기와 대조한다, 이행: 이미 준비된 세 음성 폴더의 manifest 를 크기가 담긴 꼴로 다시 썼다(`.tmp/research/adopt_manifest.py`, 파일이 모두 있는지 확인한 뒤) / 검증: `research/tests/test_data_cache.py` 에 여섯 개 더(wav 크기가 다르면 거부, 크기 없는 manifest 거부, 스레드 둘로 같은 세트의 두 번째 준비가 기다린다, 다른 세트는 기다리지 않는다, `prepare_audio` 가 만드는 동안 잠금을 쥔다, 기다린 준비는 다시 만들지 않는다), 일부러 어긴 구현 넷(scratchpad 사본)을 모두 시험이 잡았다: 잠금 없이 만들기, wav 크기 대조 빼기, 잠금 뒤 재확인 빼기, 잠금이 잠그지 않기
+- [x] 7-16. [중간, 결함] 측정 설정 파일을 직접 써서 쓰기가 중단되면 가설이 없어도 재시작이 막힌다 / 결과: `research/seamone_research/measure.py:103` `_read_config` 와 `:118` `ensure_same_config` 가 설정을 `_write_json_atomically`(`.part` 로 쓴 뒤 이름을 바꾼다)로 쓰고, 설정이 해석되지 않으면 가설 행이 없을 때 새로 쓰며 가설 행이 있으면 파일 경로와 JSON 오류 위치를 적은 오류로 멈춘다 / 검증: `research/tests/test_measure_config.py` 에 일곱 개 더(잘린 설정과 가설 없음은 새로 만든다, 잘린 설정과 가설 있음은 파일 이름을 적은 오류, 객체가 아닌 설정, 임시 이름으로 쓴다, 표본 목록 해시, 순서가 바뀐 표본 거부, 앞부분 검사)와 `research/tests/test_measure_resume.py` 다섯 개(`measure_set` 전체 경로: 잘린 설정과 가설 없음의 재시작 포함), 일부러 어긴 구현 둘을 시험이 잡았다: 설정을 직접 `write_text` 로 쓰면 임시 이름 시험이 실패했고, 가설이 없어도 깨진 설정에서 멈추게 하면 재시작 시험이 실패했다
+- [x] 7-17. [중간, 결함] 표본 목록이나 순서가 바뀌어도 측정 설정 대조를 통과한다 / 결과: `research/seamone_research/measure.py:80,85` `ids_fingerprint` 와 `measurement_config` 가 설정에 `ids_count` 와 세트 전체 id 목록의 해시 `ids_sha256` 를 넣고(`limit` 와 무관), `:145` `ensure_prefix_of_current_order` 와 `measure_set`(`:152`)이 이어 쓰기 전에 쌓인 가설의 id 가 지금 표본 순서의 앞부분인지 검사한다(`N` 을 늘리는 재개는 통과한다), 이행: 이미 쌓은 가설 글 15개 파일 옆 설정 파일에 같은 값을 한 번 써 넣었고(`.tmp/research/adopt_ids_hash.py`, 쓰기 전에 가설 id 가 지금 표본 순서의 앞부분인지와 기존 설정의 다른 값이 그대로인지 확인했다) `make -C research score` 가 그대로 돈다 / 검증: `research/tests/test_measure_resume.py`(N 을 늘린 재개 허용, 같은 표본은 더 할 일 없이 통과, 순서가 바뀐 표본은 거부하고 아무것도 쓰지 않는다, 설정이 맞아도 현재 순서의 앞부분이 아닌 가설이 있으면 거부), 일부러 어긴 구현 셋을 시험이 잡았다: 설정에서 해시를 빼기, 앞부분 검사를 부르지 않기, 앞부분 검사가 항상 통과하기
 
 ## 8. 수정 요약
 - `research/pyproject.toml`: 새 파일, uv 프로젝트(Python 3.12 만, torch, transformers 4.57.6, qwen-asr 0.0.6, peft, jiwer 등 의존성과 ruff, pytest 설정), qwen-asr 의 데모용 의존성을 설치하지 않게 뺌
@@ -132,31 +135,39 @@
 - `research/results/2026_11_19_start_model_cer.md`: 새 파일, 결과 문서
 - 이슈 기록: 이 board 의 4, 5, 7, 8절, `issue_decision.md` D1 에서 D16, `issue_log.md` 의 보고, `.tmp/report-1.md`
 - 검토 지적 반영(7-9 에서 7-14): `research/seamone_research/data.py`(전용 cache 와 안전한 삭제, manifest 와 임시 이름 쓰기), `hypotheses.py`(끝 줄 복구), `lora_probe.py`(성공 판정 함수), `models.py`(커밋 고정과 snapshot 경로), `transcribe.py`와 `prefetch.py`와 `fl_train.py`(그 경로로 불러오기), `measure.py`(측정 설정 대조), `cer.py`(정규화 판 이름), `score.py`(docstring), 결과 문서 3-4절과 4절, 새 시험 `research/tests/test_hypotheses.py`, `test_data_cache.py`, `test_models_revision.py`, `test_measure_config.py`, `test_lora_probe.py` 에 다섯 개 더
+- 두 번째 검토 반영(7-15 에서 7-17): `research/seamone_research/data.py`(세트별 잠금, wav 크기를 담은 manifest), `measure.py`(설정을 임시 이름으로 쓰기, 깨진 설정 처리, 표본 목록 해시와 앞부분 검사), 시험 `research/tests/test_measure_resume.py` 새 파일, `test_measure_config.py` 에 일곱 개와 `test_data_cache.py` 에 여섯 개 더
 - 지운 것: `.tmp/hf` 의 whisper-base, Qwen3-ASR-0.6B, whisper-large-v3 가중치(재측정하려면 다시 받는다)
 
 ## 9. 지금 상태
-- 메인이 직접 확인한 것: 없음
-- worker 주장(아직 확인 전): 없음
-- 남은 것: 7절 전부
-- 판단거리: 없음
+- 메인이 직접 확인한 것: 브랜치가 main 에 merge 됐다(merge 커밋 ecdc12c, 2026-11-19 08:52), `make -C research lint`, `make -C research test` EXIT=0 을 세 번(51개, 111개, 129개 통과), 저장된 가설 글에서 내 독립 코드로 센 오류율이 보고와 같다(Qwen3-ASR-1.7B 한국어 56개 4.53%, whisper-large-v3-turbo 5.83%, whisper-small 앞 56개 7.65%), 삭제 범위 검사, 잘린 가설 파일 복구, 세트별 잠금 코드를 읽었다
+- worker 주장(메인이 다시 하지 않은 것): Apple GPU 에서 LoRA 역전파 한 번의 시간과 GPU 메모리, 모델별 걸린 시간, 일부러 어긋난 구현에서 시험이 실패하는 확인(변이 일곱 가지와 아홉 가지)
+- 남은 것: whisper-large-v3 측정, 표본 늘리기(Zeroth-Korean 60개), 속도 측정(받아쓰기 엔진 이슈)
+- 판단거리: 시작 모델 결정은 속도를 잰 뒤(프로젝트 PD9)
 
 ## 10. Closing
 ### 10-1. 검토
-- TODO
+- Codex Sol(`gpt-6.1-sol`) high 읽기 전용 두 번: 첫 검토(07:55 시작 08:03 끝)는 지적 여섯 개(낮음 하나, 중간 다섯)를 모두 원문으로 확인해 받아 고쳤다(커밋 5a4c397), 두 번째 검토(08:31 시작 08:36 끝)는 이전 지적 여섯 개를 고쳐짐 넷과 일부 둘로 판정하고 새 지적 셋(중간)을 냈다, 모두 원문으로 확인해 받아 고쳤다(커밋 3135ab8), 검토 반복은 두 번에서 멈추는 규칙(review skill 4절)이라 세 번째 검토 대신 메인이 시험과 diff 로 확인했다, 해당 없음으로 둔 지적은 없다, 검토자는 `make -C research test` 를 sandbox 의 uv 잠금 파일 쓰기 거부로 돌리지 못했다, 원문은 `.tmp/review/codex-2.md`, `codex-4.md`
 ### 10-2. 커밋 직전 증거 대조
-- TODO
+- 검증한 판본: 이슈 브랜치 3135ab8, 그때의 기준 브랜치 a410745
+- 마지막 수정 뒤 시험: 08:51 메인이 `make -C research lint` EXIT=0, `make -C research test` 129개 통과
+- 요구마다(3-1): R1 일부(여섯 후보 가운데 whisper-large-v3 는 재지 못했고 까닭이 결과 문서와 보고에 있다, 나머지 다섯은 같은 표본과 같은 정규화로 쟀다, 표본 수는 지시한 200 보다 적다: 한국어 FLEURS 19에서 56개, 영어 40개, Zeroth 8에서 16개, 시간과 메모리 때문이라고 보고에 있고 결과 문서가 표준오차를 함께 적었다), R2 변경에 있음(`make -C research cer`, 빠른 모드 N=5 는 이번 코드로 새로 돌리지 않고 이미 돈 실행으로 갈음했다는 worker 의 결정 D16), R3 변경에 있음(오류율 계산 시험), R4 변경에 있음(LoRA 역전파 시험), R5 변경에 있음(가중치와 데이터를 `.tmp/hf` 한 곳에 두고 쓰지 않는 것을 지움), 요구하지 않은 동작은 `score`, `compare` 와 일부러 어긴 구현 확인, 이행 스크립트(`.tmp/research/adopt_*.py`)
+- 최종 방안대로 했는지: 같음(PD11 실험은 PyTorch, PD12 디스크)
+- 수정 요약(8절)이 실제 diff 의 파일과 같은지: 같음, 시험 파일 일곱 개는 8절이 묶어서 적은 차이다
+- 완료 기준마다(3-4): 통과(재지 못한 후보 하나는 까닭이 적혀 있어 기준을 만족한다), 산출물 `research/results/2026_11_19_start_model_cer.md` 와 `make -C research cer` 가 있다
+- 결과: 통과
 ### 10-3. merge 직전 재확인
-- TODO
+- 기준 브랜치는 10-2 의 판본 뒤로 앞 이슈의 merge(Rust 코드)와 기록 커밋이 늘었고 이 브랜치와 겹치는 파일이 없어 증거를 깨지 않는다, merge 충돌은 없었다
 ### 10-4. 사람 시험
 - 해당 없음: 측정 결과는 명령으로 확인한다
 ### 10-5. 자원
-- TODO(`.tmp/hf` 에 남긴 것과 지운 것, `research/.venv`)
+- 받은 가중치: `.tmp/hf` 의 whisper-small, whisper-large-v3-turbo, Qwen3-ASR-1.7B(6.8GB)는 마무리 점검에서 지운다(다시 받을 수 있다, `make -C research prefetch`), 이미 지운 것은 whisper-base, Qwen3-ASR-0.6B, whisper-large-v3, worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer` 와 `research/.venv`(1.3GB)는 라벨 없는 FL 모의실험이 같은 worktree 를 써서 남겼다(지울 조건: 그 일을 커밋하고 worktree 를 정리할 때), 가설 글(`.tmp/research/hyp/`, 496KB)은 다시 만들 수 없는 측정 증거라 남긴다
 ### 10-6. 이슈 마무리 코멘트
-- 상태: TODO
+- 상태: 게시함 2026-11-19 https://github.com/guny524/seamone/issues/2#issuecomment-6995145468
+- 관련 MR: https://github.com/guny524/seamone/pull/7 (merge 됨)
 ### 10-7. 끝내기 승인
-- TODO
+- 2026-11-19 메인 판단(사람 시험이 없고 명령으로 검증이 끝나는 이슈), 근거는 10-2, 대상 merge 커밋 ecdc12c
 ### 10-8. 커밋과 merge
-- TODO
+- d8b92ee feat: 시작 모델 후보의 오류율 측정 코드와 결과 문서를 추가, 5a4c397 fix: 측정 코드의 cache 삭제 범위, 판 고정, 재개와 LoRA 판정을 검토대로 고침, 3135ab8 fix: 측정 코드의 준비 잠금, 설정 원자적 쓰기, 표본 목록 대조를 검토대로 고침, merge ecdc12c(2026-11-19)
 
 ## 11. 참고
 - Qwen3-ASR 모델 카드 https://huggingface.co/Qwen/Qwen3-ASR-1.7B, 쓰는 법과 지원 언어
