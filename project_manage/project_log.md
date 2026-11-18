@@ -76,3 +76,19 @@
 - 해당 없음으로 둔 지적: 없음
 - 처리: 네 칸을 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/review-cells-1.md` 에 쓰고 app worker 에 보냈다(이슈 board 7절 끝에 7-12 부터 7-15 로 옮겨 적어 차례로 고치고 report-2.md 를 쓴다), 검토자 터미널 탭은 닫았다
 - 다음: report-2.md 를 확인해 커밋과 push, CI 확인(Android 키 고정은 `gh run rerun` 으로 두 번째 실행까지), 재검토 한 번(두 번까지)
+
+## 2026-11-19 07:58 메인(Sonnet max) 점검
+- 상태: 두 worker 가 보고를 썼다, app worker 의 두 번째 보고(`project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-2.md`)와 research worker 의 첫 보고(`project_manage/0002-2026_11_19-start_model_cer/.tmp/report-1.md`)
+- 앱 뼈대(app worker 보고 2): 검토 지적 네 개를 파일 8개에 고쳤다, 메인이 직접 확인한 것: worktree 에서 `make lint`, `make test` EXIT=0(시험 4개, IPC 시험 포함), build.yml 과 install-tools.sh 의 diff 를 읽었고, 고정한 action SHA 다섯 개(checkout, upload-artifact, setup-java, rust-cache, cache)가 각 이동 태그의 현재 commit 과 같음을 `gh api` 로 대조했다, 커밋 12bb603(`fix: 설치 도구 해시 확인, action SHA 고정, Android 키 고정, IPC 시험 추가`)를 push 해 CI 가 07:52 에 다시 시작했다
+  - worker 가 CI 가 만든 macOS 앱을 이 노트북에서 실행해 첫 화면(`seamone`, `seamone 0.1.0`, 화면이 IPC 로 command 를 불러 받은 값)을 확인했다고 보고했다(캡처는 이슈 폴더 `.tmp/macos-arm64-app-window.png`), 이 확인은 worker 주장이고 메인이 직접 확인하지는 않았다
+  - worker 가 정리하다 메인이 쓴 `.tmp/start-1.md` 를 `rm -f` 로 지웠고 같은 글로 다시 썼다고 스스로 보고했다
+  - 남은 CI 확인: Windows 의 `choco install make` 와 `make build`, 해시 확인이 세 OS 에서 통과하는지, Android 키 고정의 두 번째 실행(`gh run rerun`)
+- 시작 모델 오류율(research worker 보고 1): 메인이 직접 확인한 것: `make -C research lint`, `make -C research test` EXIT=0(51개 통과), 저장된 가설 글에서 내 독립 코드(레포 코드를 쓰지 않음)로 센 오류율이 보고와 같다(Qwen3-ASR-1.7B 한국어 56개 4.53%, whisper-large-v3-turbo 5.83%, whisper-small 앞 56개 7.65%)
+  - 결과(worker 보고, 같은 한국어 발화 64개 합산): Qwen3-ASR-1.7B 4.19%, whisper-large-v3-turbo 5.44%, whisper-small 7.47%, whisper-base 13.89%, 영어 40개는 1.78%, 2.42%, 3.68%, 5.30%, 1.7B 와 turbo 의 차이가 표준오차의 약 2.7배라 확정은 아니다, LoRA 는 Apple GPU 에서 글 디코더만 붙이는 범위로 whisper-small, turbo, Qwen3-ASR-1.7B(묶음 1) 가 돌았고 Qwen3-ASR-1.7B 묶음 4 는 GPU 메모리 한도를 넘었다
+  - worker 가 스스로 적은 규칙 이탈: 05:58 지시와 달리 whisper-small LoRA 시험을 06:20 까지 돌렸고(멈춘 시각 06:20), 모델 실행을 겹쳐 돌렸으며, 시간 한도를 넘겼고, 지시한 표본보다 적게 쟀다(부하와 디스크 때문), 메인은 근거가 메모리 부족의 실제 신호와 맞아 받아들였고 앞으로는 이탈하기 전에 근거를 board 4-2 에 먼저 적게 했다
+  - worker 가 `~/.cache/uv/archive-v0` 에서 쓰는 중이 아닌 항목 487개를 지워 uv 캐시가 9.8GB 에서 1.3GB 로 줄었다(memory 의 다시 받을 수 있는 캐시 규칙, 쓰는 중인 6개는 `ps` 로 가려 두었다)
+  - 이슈 board 2-3절의 "Whisper 는 MIT" 를 모델 카드 license 태그대로 고쳤다(large-v3-turbo 만 MIT, base, small, large-v3 는 Apache-2.0)
+  - 커밋 d8b92ee(`feat: 시작 모델 후보의 오류율 측정 코드와 결과 문서를 추가`, 새 파일 26개)를 push 하고 draft PR https://github.com/guny524/seamone/pull/7 을 열었다, 이 브랜치에는 workflow 가 없어 CI 가 돌지 않는다
+- 정한 것(메인): 표본을 더 늘리는 일(Zeroth 60개)은 부하가 낮을 때로 미룬다(다음에 돌릴 명령은 보고에 있다), Qwen3-ASR-0.6B 와 whisper-large-v3 는 받지 않는다, 시작 모델은 속도 측정을 기다려 결정한다(프로젝트 PD9)
+- 한 일: Codex Sol high 읽기 전용 검토를 시작했다(07:55, 결과 `.tmp/review/codex-2.md`, 시작 전 스냅샷 `.tmp/review/status-before-2.txt`), research worker 에게 다음 일(라벨 없는 FL 모의실험, 작은 규모, 08:35 까지, 파이프라인을 끝까지 돌려 보는 목적)을 보냈다(`project_manage/0004-2026_11_19-unlabeled_fl_sim/.tmp/start-1.md`)
+- 실수: 앱 뼈대 커밋을 처음 시도할 때 zsh 가 파일 목록 변수를 낱말로 나누지 않아 `git add` 가 실패했다, 뒤 명령은 `&&` 로 이어져 커밋과 push 는 일어나지 않았고 파일 이름을 직접 적어 다시 했다
