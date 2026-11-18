@@ -23,6 +23,9 @@ _DROPPED_CATEGORY_PREFIXES = ("P", "Z")
 _DROPPED_CATEGORIES = frozenset({"Cc", "Cf"})
 
 
+NORMALIZATION_VERSION = "v1: NFC, 소문자, 범주 P* Z* Cc Cf 제거, 숫자와 S* 는 둠"
+
+
 def normalize(text: str) -> str:
     composed = unicodedata.normalize("NFC", text).lower()
     return "".join(char for char in composed if not _is_dropped(char))

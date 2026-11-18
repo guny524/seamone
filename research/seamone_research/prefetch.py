@@ -5,11 +5,7 @@ safetensors 와 설정 파일만 받는다(.bin 사본과 fp32 사본은 받지 
 
 import argparse
 
-from huggingface_hub import snapshot_download
-
-from seamone_research.models import MODEL_SPECS
-
-ALLOW_PATTERNS = ["*.json", "*.txt", "model.safetensors", "model-*.safetensors"]
+from seamone_research.models import MODEL_SPECS, resolve_model_path
 
 
 def main() -> None:
@@ -17,7 +13,7 @@ def main() -> None:
     parser.add_argument("--models", required=True)
     args = parser.parse_args()
     for model in args.models.split():
-        path = snapshot_download(MODEL_SPECS[model].repo_id, allow_patterns=ALLOW_PATTERNS)
+        path = resolve_model_path(MODEL_SPECS[model])
         print(f"{model}: {path}", flush=True)
 
 

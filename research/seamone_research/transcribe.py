@@ -13,7 +13,7 @@ from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 from seamone_research.data import SAMPLE_RATE
 from seamone_research.memory import release_memory
-from seamone_research.models import ModelSpec
+from seamone_research.models import ModelSpec, resolve_model_path
 
 # Whisper 의 디코더 길이 한도 448 에서 시작 토큰 4개와 여유를 뺀 값
 WHISPER_MAX_NEW_TOKENS = 440
@@ -28,11 +28,11 @@ class Transcriber(Protocol):
 
 
 class WhisperTranscriber:
-    def __init__(self, repo_id: str, device: str, dtype: torch.dtype) -> None:
+    def __init__(self, model_path: str, device: str, dtype: torch.dtype) -> None:
         self._device = device
         self._dtype = dtype
-        self._processor = WhisperProcessor.from_pretrained(repo_id)
-        model = WhisperForConditionalGeneration.from_pretrained(repo_id, dtype=dtype)
+        self._processor = WhisperProcessor.from_pretrained(model_path)
+        model = WhisperForConditionalGeneration.from_pretrained(model_path, dtype=dtype)
         self._model = model.to(device).eval()
 
     @torch.inference_mode()
@@ -58,11 +58,11 @@ class WhisperTranscriber:
 
 
 class QwenAsrTranscriber:
-    def __init__(self, repo_id: str, device: str, dtype: torch.dtype, batch_size: int) -> None:
+    def __init__(self, model_path: str, device: str, dtype: torch.dtype, batch_size: int) -> None:
         from qwen_asr import Qwen3ASRModel
 
         self._model = Qwen3ASRModel.from_pretrained(
-            repo_id,
+            model_path,
             dtype=dtype,
             device_map=device,
             max_inference_batch_size=batch_size,
@@ -84,6 +84,7 @@ class QwenAsrTranscriber:
 
 def build_transcriber(spec: ModelSpec, device: str, dtype: str) -> Transcriber:
     torch_dtype = getattr(torch, dtype)
+    model_path = resolve_model_path(spec)
     if spec.family == "whisper":
-        return WhisperTranscriber(spec.repo_id, device, torch_dtype)
-    return QwenAsrTranscriber(spec.repo_id, device, torch_dtype, spec.batch_size)
+        return WhisperTranscriber(model_path, device, torch_dtype)
+    return QwenAsrTranscriber(model_path, device, torch_dtype, spec.batch_size)
