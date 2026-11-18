@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 main 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-19 07:58
+- 마지막 갱신: 2026-11-19 08:12
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -35,28 +35,28 @@
 
 ## 4. 이슈
 ### #1 앱 뼈대(Tauri 2 + Leptos)를 세우고 다섯 플랫폼 설치 파일을 CI 로 만든다 (빈 앱으로 다섯 플랫폼 묶기를 먼저 확인한다)
-- 상태: 검토 지적 반영 push 완료(커밋 12bb603), CI 재실행 중(draft PR https://github.com/guny524/seamone/pull/6, 첫 CI 는 모두 통과)
+- 상태: 재검토 중(두 번째 Codex 검토, 08:07 시작), 고친 커밋 12bb603 의 CI 는 두 번 모두 통과했고 Android 키 고정을 확인했다(draft PR https://github.com/guny524/seamone/pull/6)
 - 폴더: `project_manage/0001-2026_11_19-app_skeleton_ci` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0001-2026_11_19-app_skeleton_ci`)
 - 작업: 브랜치 `guny524/1-app-skeleton-ci`, worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`, worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 세션 `2e24423d-9a31-4d8f-8f08-04d4faaad311`, 이어하기 `claude --resume 2e24423d-9a31-4d8f-8f08-04d4faaad311 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 06:12(CI 로그를 읽고 고치기), 받은 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-1.md`, 다음 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-2.md`, 검토자 Codex Sol high 읽기 전용(Orca 터미널 `term_2f4338a7-15ec-4163-90c5-7a5141a627c8`, 세션 `01a1f08d-4843-7021-a551-da6656dd58f7`, 2026-11-19 06:25 시작, 결과 `.tmp/review/codex-1.md`, 끝남 표시 `.tmp/review/codex-1.err` 의 DONE)
 - 선행: 없음, 후속: #3 받아쓰기 엔진 interface 와 속도 측정, #5 녹음과 받아쓰기와 수정 화면
 - 막힌 이유: 없음
-- 다음 행동: 이번 CI 가 통과하면 `gh run rerun <build 실행 id>` 로 같은 커밋을 다시 돌려 Android 키 고정(cache hit 과 같은 sha256)을 확인하고, 재검토를 한 번 하고(두 번까지), 커밋 직전 증거 대조 후 merge 한다, 사람 시험(설치 파일 실행)이 남아 있어 이슈는 닫지 않는다, app worker 는 보고(report-2.md)를 쓰고 쉬는 중
+- 다음 행동: 재검토 결과(`.tmp/review/codex-3.md`)를 읽고 이전 지적 네 개가 고쳐졌는지와 새 지적을 원문으로 확인한다, 통과하면 커밋 직전 증거 대조 후 draft 를 풀고 merge 한다, 사람 시험(설치 파일 실행)이 남아 있어 이슈는 닫지 않는다, app worker 는 받아쓰기 엔진 이슈의 앞 절반을 같은 worktree 에서 하는 중
 
 ### #2 시작 모델 후보의 한국어 오류율을 같은 잣대로 잰다 (출발점 모델을 고를 근거의 절반)
-- 상태: 검토(커밋 d8b92ee 를 push 하고 draft PR https://github.com/guny524/seamone/pull/7 을 열었다, Codex Sol high 검토 진행 중)
+- 상태: 검토 지적 반영 중(커밋 d8b92ee, draft PR https://github.com/guny524/seamone/pull/7, Codex Sol high 검토에서 여섯 개를 받아 research worker 가 08:30 까지 고치는 중)
 - 폴더: `project_manage/0002-2026_11_19-start_model_cer` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0002-2026_11_19-start_model_cer`)
 - 작업: 브랜치 `guny524/2-start-model-cer`, worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`, worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56(다음 일로 라벨 없는 FL 모의실험), 받은 보고 `project_manage/0002-2026_11_19-start_model_cer/.tmp/report-1.md`, 검토자 Codex Sol high 읽기 전용(Orca 터미널 `term_6321555b-e1cf-4596-a9e7-2f1acd2961d1`, 07:55 시작, 결과 `.tmp/review/codex-2.md`)
 - 선행: 없음, 후속: #4 라벨 없는 FL 모의실험, PD9 시작 모델 결정
 - 막힌 이유: 없음
-- 다음 행동: 검토 결과를 읽고 지적마다 원문을 열어 맞는 것만 research worker 에게 칸으로 보낸다, 고친 뒤 재검토, 맨 위 CI 가 research 를 돌게 하는 일(맨 위 `ci.yml` 은 앞 이슈가 merge 된 뒤에 더한다), merge, 이 이슈는 사람 시험이 없어 닫는다
+- 다음 행동: research worker 가 review-cells-2.md 의 여섯 칸(7-9 ~ 7-14)을 고쳐 report-2.md 를 쓰면 메인이 확인해 커밋하고 push, 재검토, 맨 위 CI 가 research 를 돌게 하는 일(맨 위 `ci.yml` 은 앞 이슈가 merge 된 뒤에 더한다), merge, 이 이슈는 사람 시험이 없어 닫는다
 
 ### #3 받아쓰기 엔진 interface 를 세우고 기기별 속도를 잰다 (출발점 모델을 고를 근거의 나머지 절반)
-- 상태: 대기
+- 상태: 진행(앞 절반만: interface 와 가짜 엔진과 엔진 후보 조사, 무거운 일 없이 08:35 까지)
 - 폴더: `project_manage/0003-2026_11_19-asr_engine_speed`
-- 작업: 없음
-- 선행: #1 앱 뼈대(진행), 후속: #5 녹음과 받아쓰기와 수정 화면, PD9 시작 모델 결정
-- 막힌 이유: #1 이 merge 돼야 workspace 가 있다
-- 다음 행동: #1 merge 뒤 app worker 에게 맡긴다
+- 작업: 앞 뼈대 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`(새 파일은 메인이 경로로 골라 별도 브랜치 `guny524/3-asr-engine-speed` 로 커밋한다), worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 마지막 지시 2026-11-19 08:00, 보고 `project_manage/0003-2026_11_19-asr_engine_speed/.tmp/report-1.md`
+- 선행: #1 앱 뼈대(재검토 중, 코드는 같은 worktree 에 있다), 후속: #5 녹음과 받아쓰기와 수정 화면, PD9 시작 모델 결정
+- 막힌 이유: 속도 측정(뒤 절반)은 모델 내려받기와 C++ 빌드가 무거워 노트북이 한가할 때 한다
+- 다음 행동: app worker 가 08:35 에 보고하면 메인이 확인하고 별도 브랜치로 push 한다, 속도 측정은 다음 밤샘이나 사용자가 정할 때
 
 ### #4 라벨 없는 FL 모의실험으로 오류율을 낮추는 방법을 고른다 (이 프로젝트의 핵심 물음)
 - 상태: 진행(작은 규모로 줄여 08:35 까지, 파이프라인을 끝까지 돌려 보고 다음에 큰 규모로 돌릴 코드와 명령을 남긴다)

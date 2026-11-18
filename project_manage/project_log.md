@@ -92,3 +92,23 @@
 - 정한 것(메인): 표본을 더 늘리는 일(Zeroth 60개)은 부하가 낮을 때로 미룬다(다음에 돌릴 명령은 보고에 있다), Qwen3-ASR-0.6B 와 whisper-large-v3 는 받지 않는다, 시작 모델은 속도 측정을 기다려 결정한다(프로젝트 PD9)
 - 한 일: Codex Sol high 읽기 전용 검토를 시작했다(07:55, 결과 `.tmp/review/codex-2.md`, 시작 전 스냅샷 `.tmp/review/status-before-2.txt`), research worker 에게 다음 일(라벨 없는 FL 모의실험, 작은 규모, 08:35 까지, 파이프라인을 끝까지 돌려 보는 목적)을 보냈다(`project_manage/0004-2026_11_19-unlabeled_fl_sim/.tmp/start-1.md`)
 - 실수: 앱 뼈대 커밋을 처음 시도할 때 zsh 가 파일 목록 변수를 낱말로 나누지 않아 `git add` 가 실패했다, 뒤 명령은 `&&` 로 이어져 커밋과 push 는 일어나지 않았고 파일 이름을 직접 적어 다시 했다
+
+## 2026-11-19 08:12 메인(Sonnet max) 점검
+- 앱 뼈대 CI 확인(일회성 점검): 고친 커밋 12bb603 의 `ci` 둘과 `build`(job 6개)가 모두 성공했고 artifact 6개가 다시 올라왔다, 메인이 직접 확인한 것
+  - 7-12(CI 가 `make build` 를 부름): Windows 에서 `choco install make --version=4.4.1` 이 되고 `make build TAURI_BUILD_ARGS="--target x86_64-pc-windows-msvc --bundles nsis,msi"` 가 `cargo tauri build` 를 돌려 `release` 빌드가 끝났다, macOS, Linux 도 같은 명령으로 통과
+  - 7-13(고정): 해시 확인을 통과해 세 OS(macOS, Linux, Windows)에서 도구가 설치됐다(`설치했다:` 줄), `uses:` 13곳은 이동 태그의 현재 commit 과 같은 SHA 로 고정돼 있다
+  - 7-14(Android 서명 키): 첫 실행은 `keystore cache-hit: ''`(miss)에 키 2618바이트가 생겼고 sha256 `0dea05701b58e9e2483b0635b5a0ecbcd0b2b2516c890d91269a39d6e2c8a578`, 같은 run 을 `gh run rerun` 으로 다시 돌린 두 번째 실행은 `cache-hit: 'true'` 에 같은 파일 시각과 같은 sha256 이다, 이 키는 시험용이고 release 에 쓰지 않는다는 주석이 workflow 에 있다
+  - 7-15(IPC 시험): 맨 위 `make test` 가 Ubuntu CI 에서 통과(첫 CI 는 macOS 로컬 시험으로만 확인했던 것), 일부러 어긴 구현에서 시험이 실패하는 것은 worker 가 로컬에서 보였다
+- 앱 뼈대 재검토: Codex Sol high 읽기 전용 두 번째 검토를 08:07 에 시작했다(이전 지적 네 개의 건별 판정과 새 지적을 요청, 결과 `.tmp/review/codex-3.md`, 시작 전 스냅샷 `.tmp/review/status-before-3.txt`)
+- 시작 모델 오류율 검토 결과(Codex Sol high, 07:55 시작 08:03 끝, 원문 `.tmp/review/codex-2.md`, 검토자는 `make -C research test` 를 sandbox 의 uv 잠금 파일 쓰기 거부로 돌리지 못했다고 보고했다)
+  - 지적 여섯 개를 메인이 코드 원문을 열어 모두 맞다고 확인했다
+    - 중간, 결함: `data.py:158-161` 의 `_drop_hub_cache` 가 공유 `HF_HOME/hub/datasets--<저장소>` 폴더를 통째로 지운다(같은 저장소의 다른 파일과 다른 실행이 받은 학습 조각까지, 지금 진행 중인 라벨 없는 FL 모의실험이 Zeroth-Korean 학습 조각을 받으면 겹친다)
+    - 중간, 결함: `hypotheses.py:10-13` 이 중단으로 마지막 줄이 잘린 가설 파일을 못 읽어 재개가 막힌다
+    - 중간, 결함: `lora_probe.py:161-169` 가 기울기가 없는 가중치와 비유한 손실을 성공으로 본다
+    - 중간, 결함: 모델 판(결과 문서 24-26줄에 적힌 커밋)을 `transcribe.py`, `prefetch.py`, `lora_probe.py` 의 로더가 쓰지 않아 재실행 결과가 섞일 수 있다
+    - 중간, 결함: `data.py:260-266` 의 음성 cache 가 데이터 판과 표본을 검사하지 않고 존재만 본다
+    - 낮음, 방향: 결과 문서 185줄의 "되풀이하는 환각은 없었다" 가 두 배 길이 검사만으로 단정한다(`score.py:30-35`)
+  - 처리: 여섯 개 모두 받음(해당 없음으로 둔 것 없음), `.tmp/review-cells-2.md` 로 research worker 에게 보냈다(이슈 board 7절 끝에 7-9 부터 7-14), 지금 하는 라벨 없는 FL 모의실험보다 먼저 08:30 까지 고치게 했고 그 일의 한도는 08:50 으로 늘렸다
+  - 검토자의 도구(Serena)가 worktree 에 만든 `.serena/` 폴더는 지웠다(커밋에 들어가지 않았다)
+- 받아쓰기 엔진 이슈: app worker 에게 앞 절반(interface 와 가짜 엔진과 엔진 후보 조사와 순수 함수)을 08:00 에 보냈다(앞 뼈대 이슈와 같은 worktree, 무거운 일 없이 08:35 까지, 새 파일은 별도 브랜치 `guny524/3-asr-engine-speed` 로 메인이 커밋한다)
+- 라벨 없는 FL 모의실험: research worker 가 08:08 까지 `fedavg.py`, `fl_data.py`, `fl_sim.py`, `fl_train.py`, `pseudo_label.py` 와 시험 4개 파일을 만들었다(새 파일, 아직 안 읽음)
