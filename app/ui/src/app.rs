@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use seamone_core::AppInfo;
+use seamone_core::{AppInfo, COMMAND_GET_APP_INFO};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -10,9 +10,9 @@ extern "C" {
     async fn invoke(command: &str) -> Result<JsValue, JsValue>;
 }
 
-/// 앱 껍데기의 `get_app_info` command 를 불러 앱 이름과 판 번호를 받는다.
+/// 앱 껍데기의 `COMMAND_GET_APP_INFO` command 를 불러 앱 이름과 판 번호를 받는다.
 async fn fetch_app_info() -> Result<AppInfo, String> {
-    let value = invoke("get_app_info")
+    let value = invoke(COMMAND_GET_APP_INFO)
         .await
         .map_err(|error| format!("{error:?}"))?;
     serde_wasm_bindgen::from_value(value).map_err(|error| error.to_string())
