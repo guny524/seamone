@@ -58,3 +58,10 @@
 - 고친 것: 이 레포의 커밋 작성자 메일을 회사 메일에서 GitHub noreply 주소로 바꿨다(레포 로컬 설정), 이미 push 한 두 커밋은 그대로이고 사용자에게 올린다(project_board 6-2)
 - 실수: 06:15 의 커밋 91398a2 는 메시지(`docs: 앱 뼈대 보고 확인과 CI 시작을 기록에 적음`)와 달리 두 worker 가 쓰던 이슈 기록(두 이슈의 issue_board, issue_decision, issue_log)만 담았다, 기록 편집 스크립트가 중간에 멈췄는데 뒤 명령(커밋과 push)이 그대로 실행돼서다, 내용은 worker 의 정상 기록이라 되돌리지 않고 이 항목으로 바로잡는다
 - 다음: app worker 가 CI 로그를 읽고 고쳐 report-2.md 를 쓰면 메인이 확인해 push 한다, 06:22 에 CI 결과를 한 번 본다(일회성 cron), Claude Code 가 메모리 부족으로 메인의 background 대기 둘을 멈춘 뒤 새 대기는 걸지 않았다
+
+## 2026-11-19 06:28 메인(Sonnet max) 검토
+- 상태: GitHub Actions 세 개(ci 의 push 와 pull_request, build 의 pull_request)가 모두 성공했다, build 의 job 6개(ios, android, desktop 의 windows-x86_64, macos-arm64, macos-x86_64, linux-x86_64)가 모두 성공이고 건너뛴 단계는 macOS 와 Windows 의 "Install the Tauri Linux dependencies" 뿐이다(기대한 것)
+- 메인이 직접 확인한 것: 받은 artifact 의 이름, 크기, 형식 — Android `app-universal-debug.apk` 49.8MB(zip), iOS `seamone-ios-simulator.zip` 14.6MB, macOS `seamone_0.1.0_aarch64.dmg` 2.1MB 와 `seamone_0.1.0_x64.dmg` 2.3MB, Windows `seamone_0.1.0_x64_en-US.msi` 2.1MB 와 `seamone_0.1.0_x64-setup.exe`(NSIS) 1.4MB, Linux 78MB 는 내려받는 중이라 이름과 형식은 아직 확인하지 못했다
+- 한 일: 검토를 시작했다, 검토자는 Codex Sol(`gpt-6.1-sol`) high 읽기 전용(`-s read-only`), 의도를 주지 않고 변경과 레포만 보게 했다, 시작 전 worktree 의 미커밋 변경은 0 줄(스냅샷 `.tmp/review/status-before-1.txt`), 대상은 커밋 a3ad95f 하나(77개 파일, Cargo.lock 5416줄 포함)
+- 정한 것: 검토자를 Claude 의 background 명령이 아니라 Orca 터미널에 띄웠다(Claude Code 가 메모리 부족일 때 background 명령을 멈추므로), 결과는 파일로 받고 다음 점검에서 읽는다
+- 다음: 검토 결과를 읽고 지적마다 원문을 열어 맞는 것만 이슈 board 7절에 칸으로 더한다, 검토 지적을 고친 뒤에는 lint 와 test 를 다시 돌리고 CI 를 다시 보고 재검토는 두 번까지
