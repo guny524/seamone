@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 main 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-19 04:20
+- 마지막 갱신: 2026-11-19 04:17
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -37,18 +37,18 @@
 ### #1 앱 뼈대(Tauri 2 + Leptos)를 세우고 다섯 플랫폼 설치 파일을 CI 로 만든다 (빈 앱으로 다섯 플랫폼 묶기를 먼저 확인한다)
 - 상태: 진행
 - 폴더: `project_manage/0001-2026_11_19-app_skeleton_ci` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0001-2026_11_19-app_skeleton_ci`)
-- 작업: TODO(브랜치, worktree, worker, 세션은 띄운 뒤 적는다)
+- 작업: 브랜치 `guny524/1-app-skeleton-ci`, worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`, worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 세션 `2e24423d-9a31-4d8f-8f08-04d4faaad311`, 이어하기 `claude --resume 2e24423d-9a31-4d8f-8f08-04d4faaad311 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 04:12, 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-1.md`
 - 선행: 없음, 후속: #3 받아쓰기 엔진 interface 와 속도 측정, #5 녹음과 받아쓰기와 수정 화면
 - 막힌 이유: 없음
-- 다음 행동: 메인이 worktree 를 만들고 app worker 를 띄운다
+- 다음 행동: app worker 가 7-1 부터 7-9 까지 하고 첫 보고를 쓴다, 메인이 확인하고 커밋, push 해 CI 를 돌린다
 
 ### #2 시작 모델 후보의 한국어 오류율을 같은 잣대로 잰다 (출발점 모델을 고를 근거의 절반)
 - 상태: 진행
 - 폴더: `project_manage/0002-2026_11_19-start_model_cer` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0002-2026_11_19-start_model_cer`)
-- 작업: TODO(브랜치, worktree, worker, 세션은 띄운 뒤 적는다)
+- 작업: 브랜치 `guny524/2-start-model-cer`, worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`, worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 04:12, 보고 `project_manage/0002-2026_11_19-start_model_cer/.tmp/report-1.md`
 - 선행: 없음, 후속: #4 라벨 없는 FL 모의실험, PD9 시작 모델 결정
 - 막힌 이유: 없음
-- 다음 행동: 메인이 worktree 를 만들고 research worker 를 띄운다
+- 다음 행동: research worker 가 7절을 끝내고 보고를 쓴다, 메인이 수치를 대조하고 커밋한다
 
 ### #3 받아쓰기 엔진 interface 를 세우고 기기별 속도를 잰다 (출발점 모델을 고를 근거의 나머지 절반)
 - 상태: 대기
