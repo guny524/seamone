@@ -42,7 +42,7 @@
 - `make dev`: 앱을 개발 모드로 띄운다, 화면은 trunk 가 `localhost:1420` 에서 서버로 띄운다
 - `make lint`: 서식(`cargo fmt --check`)과 clippy 를 데스크톱 타깃과 WASM 타깃에서 돌린다, 경고는 오류로 본다
 - `make test`: 모든 crate 의 시험을 돌린다
-- `make build`: CI 가 설치 파일을 만드는 명령이다, CI 는 플랫폼마다 `TAURI_BUILD_ARGS` 로 `--target` 과 `--bundles` 를 넘겨 이 명령을 부른다, 이 프로젝트는 노트북에서 설치 파일을 만들지 않는다(설치 파일은 GitHub Actions 에서만 만든다는 `project_manage/project_decision.md` 의 결정)
+- `make build`: CI 가 데스크톱(macOS, Windows, Linux) 설치 파일을 만드는 명령이다, CI 는 플랫폼마다 `TAURI_BUILD_ARGS` 로 `--target` 과 `--bundles` 를 넘겨 이 명령을 부른다, Android 와 iOS 는 workflow 가 `cargo tauri android build` 와 `cargo tauri ios build` 를 직접 부른다(3-3절), 이 프로젝트는 노트북에서 설치 파일을 만들지 않는다(설치 파일은 GitHub Actions 에서만 만든다는 `project_manage/project_decision.md` 의 결정)
 - `make fmt`: 서식을 맞춘다
 ### 3-3. GitHub Actions
 - `ci.yml`: push 와 pull request 마다 `make lint` 와 `make test` 를 Ubuntu 에서 돌린다
@@ -58,7 +58,7 @@
 - macOS: 내려받은 `.app` 에서 `xattr -dr com.apple.quarantine seamone.app` 를 실행한 뒤 연다
 - Windows: SmartScreen 경고에서 추가 정보, 실행을 차례로 누른다
 - Linux: AppImage 는 `chmod +x` 로 실행 권한을 준 뒤 실행한다
-- Android: debug 키로 서명한 apk 라서 기기의 설정에서 출처를 알 수 없는 앱 설치를 허용한 뒤 설치한다
+- Android: debug 키로 서명한 apk 라서 기기의 설정에서 출처를 알 수 없는 앱 설치를 허용한 뒤 설치한다, 서명 키는 레포의 `.github/android/debug.keystore`(시험용으로 공개된 키, release 에 쓰지 않는다)로 모든 실행에서 같아 앞 실행의 apk 위에 덮어 설치할 수 있다
 - iOS: 시뮬레이터용만 만든다, 실기기 설치와 앱 장터 배포는 Apple 개발자 계정과 서명이 필요하다
 
 ## 4. 기록

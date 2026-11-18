@@ -118,15 +118,18 @@ jobs:
         with:
           key: android
 
-      # debug 서명 키를 실행마다 같게 해서 앞 실행의 APK 위에 덮어 설치할 수 있게 한다
-      # 이 키는 시험용이고 release 에 쓰지 않는다
-      # 캐시는 브랜치 범위 안에서만 공유되어 main 에서 처음 저장된 뒤에는 pull request 도 같은 키를 받는다
-      - name: Restore the Android debug keystore
+      # debug 서명 키를 모든 실행과 모든 브랜치에서 같게 해서 앞 실행의 APK 위에 덮어 설치할 수 있게 한다
+      # 키는 캐시가 아니라 레포(.github/android/debug.keystore)가 원본이다, 시험용으로 공개된 키이고 release 에 쓰지 않는다
+      - name: Use the committed Android debug keystore
         id: debug-keystore
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore-v1
+        run: |
+          if [ -f .github/android/debug.keystore ]; then
+            mkdir -p ~/.android
+            cp .github/android/debug.keystore ~/.android/debug.keystore
+            echo "committed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install tauri-cli and trunk
         run: scripts/install-tools.sh
@@ -138,9 +141,18 @@ jobs:
       - name: Generate the Android project
         run: cargo tauri android init --ci --skip-targets-install
 
-      # debug 로 빌드하면 Gradle 이 debug 키로 서명해 기기에 바로 설치된다, 키가 없으면 Gradle 이 만든다
+      # debug 로 빌드하면 Gradle 이 debug 키로 서명해 기기에 바로 설치된다, 레포에 키가 없으면 Gradle 이 만든다
       - name: Build the APK
         run: cargo tauri android build --debug --apk --target aarch64
+
+      # APK 를 올리기 전에 서명에 쓰인 키가 레포의 키와 같은지 확인한다, 다르면 APK 를 올리지 않는다
+      - name: Check the debug keystore
+        run: |
+          echo "committed keystore: '${{ steps.debug-keystore.outputs.committed }}'"
+          sha256sum ~/.android/debug.keystore
+          if [ "${{ steps.debug-keystore.outputs.committed }}" = "true" ]; then
+            cmp ~/.android/debug.keystore .github/android/debug.keystore
+          fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -149,12 +161,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # 키 파일이 없으면 이 단계가 실패해 키 위치가 틀린 것을 알린다, 위 artifact 는 이미 올라갔다
-      - name: Show the debug keystore fingerprint
-        run: |
-          echo "keystore cache-hit: '${{ steps.debug-keystore.outputs.cache-hit }}'"
-          ls -l ~/.android/debug.keystore
-          sha256sum ~/.android/debug.keystore
+      # 레포에 키가 아직 없을 때만(처음 한 번) Gradle 이 만든 키를 artifact 로 올려 받아 커밋하게 한다
+      - name: Upload the generated debug keystore once
+        if: steps.debug-keystore.outputs.committed == 'false'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-debug-keystore-seed
+          path: ~/.android/debug.keystore
+          if-no-files-found: error
+          retention-days: 3
 
   ios:
     runs-on: macos-latest
