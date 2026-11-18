@@ -65,17 +65,41 @@
 
 ## 4. 조사
 ### 4-1. 조사 방법
-- TODO
+- 코드: `research/seamone_research/` 의 `fl_data.py`(기기 데이터), `pseudo_label.py`(정답 달기와 믿을 만한 조각 고르기), `fedavg.py`(FL 로 합치기와 라운드마다 기기 뽑기), `fl_train.py`(학생의 학습과 받아쓰기와 믿음도), `fl_sim.py`(방법 A1, A2, A3 를 돌린다), 단위 시험 `tests/test_fedavg.py`, `test_pseudo_label.py`, `test_fl_data.py`, `test_fl_train.py`(28개), 다시 돌리는 명령 `make -C research fl-sim`(결과 문서 7절)
+- 기기: Zeroth-Korean train 조각 하나(3711발화, 화자 16명)에서 시험 세트(test)의 화자와 겹치지 않는 화자 8명을 뽑아 기기 8개로 삼았다, 기기마다 발화 6개(음성 합계 390.3초), 뽑은 목록 `research/data/fl_client_ids.json`
+- 학생: whisper-small(Apple GPU, fp16), 글 디코더의 q_proj 와 v_proj 에만 LoRA(rank 8), 묶음 4, AdamW 학습률 1e-4, 기기마다 발화 한 바퀴
+- 방법: A2 는 whisper-large-v3-turbo 가 기기 발화에 한 번 단 정답(48개, 진짜 정답 대비 CER 1.45%), A3 는 라운드 시작 때 전역 학생이 단 정답에서 평균 토큰 확률 0.9 이상만(입력에 SpecAugment 와 소음), A1 은 진짜 정답, A0 은 #2 가 잰 whisper-small 의 가설 글을 같은 표본의 앞 n개로 다시 센다
+- 시험: Zeroth-Korean 40개, FLEURS 한국어 40개, FLEURS 영어 20개(#2 의 시험 표본의 앞에서부터), 마지막 라운드 뒤 한 번 쟀다
 ### 4-2. 질문별 찾은 사실
-- TODO
+- 규모를 줄인 까닭(메인 지시 07:57 의 기기마다 발화 12개 대신 6개, 지시와 다르게 한 것이라 적는다, 데이터를 만든 08:00 뒤에 적었다)
+  - 시간 한도가 08:35 이고 시작이 07:57 이라 코드, 단위 시험, 실행, 결과 문서가 모두 38분 안에 들어가야 한다
+  - 큰 모델의 정답 달기가 발화 48개(390.3초)에 08:01 에서 08:04 까지 약 3분이었다(모델 불러오기 포함 실시간의 2.2배, load average 13에서 18), 발화 96개면 약 6분이 들고 A3 의 라운드마다 정답 달기와 학습도 두 배가 든다
+  - 부하는 높지 않았다(load average 13에서 18), 줄인 까닭은 부하가 아니라 시간이다
+- 이 이슈 밖의 일 때문에 늦춘 것: 08:10 에서 08:23 에 메인이 보낸 시작 모델 이슈의 검토 지적 여섯 칸(그 이슈 board 7-9 에서 7-14)을 먼저 고쳤다, 그동안 이 이슈의 코드 작업을 쉬었고 컴퓨터 실행 순서도 그 이슈의 LoRA 재시험(08:14 에서 08:20)에 내줘 두 번째 실행(학습률 3e-3)이 08:21 에 시작했다, 줄인 규모는 없다
+- 학습률 1e-4(board 의 출발값, 기기마다 라운드마다 걸음 2번): CER 이 A0 과 거의 같다(Zeroth-Korean 40개 A0 8.36%, A2 8.25%, A3 8.41%, A1 8.41%, FLEURS 한국어 40개는 모두 7.49%, FLEURS 영어 20개는 모두 2.59%), A0 과 가설 글이 똑같은 시험 발화가 100개 중 A2 99개, A3 99개, A1 96개라 LoRA 가 거의 움직이지 않았다, 출처 결과 문서 4-1절, 정확도 높음(저장된 가설 글로 다시 셌다)
+- 학습률 3e-3(걸음이 적어 30배로 올린 탐색 값, D6): A2 는 Zeroth 7.70%(A0 대비 -0.66%p, 상대 -7.9%, 표준오차의 1.1배), FLEURS 한국어 7.94%(+0.45%p, 상대 +6.0%, 0.9배), 영어 2.54%(-0.05%p), A3 는 Zeroth 8.25%(-0.11%p), FLEURS 한국어 7.44%(-0.05%p), 영어 2.59%(0), A1 은 Zeroth 8.25%(-0.11%p), FLEURS 한국어 8.50%(+1.01%p, 상대 +13.4%, 1.3배), 영어 2.64%(+0.05%p), 모든 차이가 표준오차의 1.3배 이하이고 A0 과 가설 글이 똑같은 발화는 100개 중 A2 42개, A3 62개, A1 14개라 모델은 움직였다, 출처 결과 문서 4-2절, 정확도 낮음(시험 세트가 작다)
+- 정답 품질과 믿을 만한 조각(Q1 의 단서): A2 큰 모델의 정답은 진짜 정답 대비 CER 1.45%(48개), A3 학생의 정답은 7.17%(라운드 1, 24개)와 9.89%(라운드 2, 24개), 믿음도 0.9 이상으로 고른 조각은 라운드마다 24개 중 5개와 3개(두 번째 실행은 5개와 4개)이고 고른 조각의 CER 은 5.22%와 1.99%, 믿음도 구간별 발화별 CER 의 평균은 0.9 이상 9개 3.2%, 0.8 이상 0.9 미만 36개 9.0%, 0.6 이상 0.8 미만 3개 25.0%라 믿음도가 높을수록 정답에 가깝다, 출처 결과 문서 4-3절, 정확도 낮음(정답 48개)
+- 비용(Q3 의 단서): 업데이트 2.359MB(글 디코더 LoRA 589,824개, fp32), 발화 하나의 학습 0.64초에서 0.86초(A1 과 A2, 묶음 4, Apple GPU), 출처 결과 문서 4-4절
 ### 4-3. 확인하지 못한 것
-- TODO
+- 큰 규모(기기 12명, 발화 60개, 라운드 4)의 결과, 왜: 시간 한도(07:57 시작, 08:35 에서 08:50 으로 늘었다)에 들지 않는다, 전체 약 3시간은 추측이다, 확인하려면 `make -C research fl-sim FL_DEVICES=12 FL_UTTS=60 FL_ROUNDS=4 FL_PER_ROUND=6 FL_EVAL="zeroth_ko=200 fleurs_ko=200 fleurs_en=100"`
+- A4 와 Q3(위쪽만 학습해도 효과가 남는가), 왜: 메인의 지시로 A4 를 하지 않았다
+- 효과가 있는지(Q1, Q2, Q4), 왜: 시험 세트가 작아(40개, 40개, 20개) A0 과의 CER 차이가 모두 표준오차의 1.3배 이하다, 확인하려면 큰 규모를 돌린다
+- 학습 전 학생의 글이 whisper-small 과 같은지, 왜: 직접 대조하지 않았다, 학습률 1e-4 의 A2 와 A3 가 A0 과 가설 글이 100개 중 99개 같아 간접으로 맞는 쪽이다
+- A2 와 A3 의 정답을 섞은 방법(7-6), 왜: 시간이 없어 건너뛰었다
+- 방법마다 라운드 0, 2, 4 의 CER 곡선, 왜: 라운드를 2 로 줄여 마지막 라운드 뒤 한 번만 쟀다(라운드 0 은 A0 의 값이다)
+- 실제 기기의 소음과 마이크, 회의 음성, 왜: 데이터가 낭독 음성이다
 
 ## 5. 결론과 판정
 ### 5-1. 질문별 결론
-- TODO
+- Q1(라벨 없는 방법이 학습에 없던 화자의 CER 을 낮추는가): 판정 불가, 학습률 3e-3 의 A2 가 Zeroth-Korean 40개에서만 CER 을 상대 7.9% 낮춘 것이 유일한 단서다(표준오차의 1.1배), 근거 4-2, 정확도 낮음
+  - 2-2절의 가설과 비교(모두 표준오차 안이라 단서일 뿐이다): "큰 모델이 단 정답이 가장 크게 낮춘다" 는 Zeroth 에서 학습률 3e-3 의 A2 가 가장 많이 낮춰 가설 쪽이고, "스스로 단 정답은 효과가 작거나 없다" 는 A3 가 A0 과 거의 같아 가설 쪽이다
+- Q2(진짜 정답과 견준 효과): 판정 불가, 학습률 3e-3 에서 A1 은 Zeroth -0.11%p, FLEURS 한국어 +1.01%p 로 A2 보다 나은 점이 없어 이 규모에서는 상한으로 쓰이지 못했다, 근거 4-2
+- Q3(위쪽만 학습해도 효과가 남는가): 답하지 못했다(A4 를 하지 않았다)
+- Q4(다른 세트와 다른 언어가 나빠지는가): 판정 불가, 학습률 3e-3 에서 FLEURS 한국어가 A1 +13.4%, A2 +6.0%, A3 -0.7%(상대)로 방법마다 달랐고 영어 20개는 거의 같았다, 모두 표준오차 안이다, 근거 4-2
 ### 5-9. 이 이슈의 결론
-- TODO
+- 라벨 없는 FL 모의실험의 코드와 명령(`make -C research fl-sim`)과 단위 시험(28개)을 갖췄고 작은 규모(기기 8명, 기기마다 발화 6개, 라운드 2, 시험 100개)로 끝까지 돌렸다, 효과는 이 규모로 판정하지 못해 큰 규모 실행이 다음 일이다(결과 문서 6절)
+- 알게 된 것: 학습률 1e-4 에서는 걸음이 적어 모델이 움직이지 않았다, 학습률 3e-3 에서는 모델이 움직였지만 방법 사이의 차이가 표준오차 안이었다, 학생이 단 정답의 믿음도는 높을수록 정답에 가깝지만 문턱 0.9 는 너무 높아 조각이 24개 중 3개에서 5개만 남았다, 글 디코더 LoRA 한 벌은 2.359MB 다
+- 추천: 큰 규모로 돌리고, A3 는 믿음도 분포에 맞춰 문턱을 정한 뒤에 돌리고, 서버 검증 관문의 시험 세트는 발화 300개 안팎으로 키운다(표준오차 0.5%p 아래, 추측), 앱의 학습 엔진이 처음 구현할 방법은 큰 규모 결과로 정한다, 근거 문서 `research/results/2026_11_19_unlabeled_fl_sim.md`
 
 ## 6. 사용자 승인
 - 해당 없음: 모의실험이고 새 사람 몫의 결정이 없다, 실제 사용자 기기에서 학습을 켜는 일은 프로젝트 PD8 의 멈출 단계다
@@ -83,17 +107,29 @@
 ## 7. 할 일과 검증
 (순서대로 한다, 시간 한도: 방법 하나의 학습과 평가는 35분 안, 이 이슈 전체는 3시간 안, 넘을 것 같으면 화자 수와 라운드 수를 줄이고 줄인 값을 적는다)
 (아래 숫자는 출발값이다, 7-2 에서 잰 묶음 하나의 시간으로 시간 한도에 맞게 고치고 고친 값을 `issue_decision.md` 에 적는다)
-- [ ] 7-1. 기기 데이터: `research/seamone_research/fl_data.py`, Zeroth-Korean train 에서 화자 12명, 화자마다 60발화를 seed 고정으로 뽑아 화자 하나를 기기 하나로 삼는다, train 전체를 받지 않고 필요한 조각만 받는다(2GB 안), 뽑은 id 목록을 `research/data/fl_client_ids.json` 으로 커밋한다, 시험 세트는 #2 의 `research/data/eval_ids.json` 을 그대로 쓴다(학습 화자와 겹치지 않는지 확인한다) / 검증: 기기 수, 기기마다 발화 수와 음성 길이를 출력해 적는다
-- [ ] 7-2. 학습 한 걸음: `research/seamone_research/fl_train.py`, 학생은 `openai/whisper-small`, LoRA(주의 층의 query 와 value, rank 8)만 학습한다, 묶음 4, 학습률 1e-4, 묶음 하나의 시간과 메모리를 재서 적는다 / 검증: 손실이 열 걸음 동안 내려간다
-- [ ] 7-3. FL 로 합치기: `research/seamone_research/fedavg.py`, 라운드 4, 라운드마다 기기 6개를 seed 고정으로 뽑고, 기기마다 전역 가중치에서 시작해 자기 발화를 한 바퀴 학습하고, 서버가 LoRA 가중치를 발화 수로 가중 평균한다 / 검증: 단위 시험(같은 가중치 둘의 평균은 그대로, 발화 수 가중이 맞는지, 기기 하나면 그 기기의 가중치)
-- [ ] 7-4. 정답 만들기: `research/seamone_research/pseudo_label.py`, A2 는 #2 에서 한국어 CER 이 가장 낮았던 남긴 모델이 기기 발화에 정답을 단다(한 번만 달아 `.tmp/research/pseudo/` 에 둔다), A3 는 라운드 시작 때의 전역 학생 모델이 정답을 달고 조각의 평균 토큰 확률이 문턱(출발값 0.9)을 넘는 것만 쓴다, A3 의 학습 입력에는 SpecAugment 와 소음을 섞는다 / 검증: 단위 시험(문턱으로 고르기), 기기 발화의 정답 대비 A2 와 A3 정답의 CER 을 적는다(정답 품질)
-- [ ] 7-5. 실행 순서 A0, A2, A1, A3, A4: 방법마다 라운드 0, 2, 4 에서 Zeroth-Korean test 200, FLEURS 한국어 200, FLEURS 영어 100 의 CER 을 재고, 발화 하나를 학습하는 시간과 업데이트 크기(MB)를 적는다, A4 는 인코더 마지막 2층과 디코더의 LoRA 만 학습하고 얼린 아래층의 출력을 한 번만 계산해 쓴다 / 검증: 방법마다 결과 줄이 `.tmp/research/fl_sim/<방법>.jsonl` 에 남는다
-- [ ] 7-6. 시간이 남으면 A2 와 A3 의 정답을 섞은 방법 하나를 더 돌린다, 남지 않으면 건너뛰고 건너뛴 사실을 적는다
-- [ ] 7-7. 결과 문서 `research/results/2026_11_19_unlabeled_fl_sim.md` 를 쓰고 이 board 4절과 5절을 채운다, 표를 쓰지 않고 목록으로 쓴다, 한계(낭독 음성, 화자 12명, 작은 규모, 학생이 Whisper small)를 적고, 다음 단계 추천(앱의 학습 엔진이 처음 구현할 방법, 서버 검증 관문의 기준)을 적는다
-- [ ] 7-8. 정리: `.tmp/research/` 의 중간 출력과 다음에 쓰지 않는 가중치, 데이터를 지우고 지운 것과 남긴 것의 크기를 적는다, 8절 수정 요약과 보고를 쓴다
+- [x] 7-1. 기기 데이터: `research/seamone_research/fl_data.py`, Zeroth-Korean train 에서 화자 12명, 화자마다 60발화를 seed 고정으로 뽑아 화자 하나를 기기 하나로 삼는다, train 전체를 받지 않고 필요한 조각만 받는다(2GB 안), 뽑은 id 목록을 `research/data/fl_client_ids.json` 으로 커밋한다, 시험 세트는 #2 의 `research/data/eval_ids.json` 을 그대로 쓴다(학습 화자와 겹치지 않는지 확인한다) / 검증: 기기 수, 기기마다 발화 수와 음성 길이를 출력해 적는다 / 결과: `research/seamone_research/fl_data.py`(`select_clients` 가 화자와 발화를 SHA-256 순서로 뽑고 시험 세트 화자를 뺀다, `build_clients` 가 train 조각 하나를 받아 wav 를 꺼내고 전용 cache 만 지운다), 뽑은 목록 `research/data/fl_client_ids.json`, 이번 규모는 기기 8명과 기기마다 발화 6개(음성 390.3초, 출발값 12명과 60개보다 작다 D1), 시험 세트(test) 화자와 겹치는 기기 화자 0명(`make -C research fl-data` 출력), 기기마다 발화 6개와 41.8초에서 65.3초, 시험은 #2 의 `eval_ids.json` 앞에서부터
+- [x] 7-2. 학습 한 걸음: `research/seamone_research/fl_train.py`, 학생은 `openai/whisper-small`, LoRA(주의 층의 query 와 value, rank 8)만 학습한다, 묶음 4, 학습률 1e-4, 묶음 하나의 시간과 메모리를 재서 적는다 / 검증: 손실이 열 걸음 동안 내려간다 / 결과: `research/seamone_research/fl_train.py`(`Student`: whisper-small 에 글 디코더 LoRA rank 8, 묶음 4, AdamW), 발화 하나의 학습 0.64초에서 0.86초(묶음 4, Apple GPU, load average 13 에서 27), 검증의 "열 걸음 손실 하락" 은 따로 돌리지 않았고 라운드 평균 손실로 갈음했다(학습률 3e-3 의 A2 는 0.517 에서 0.429, A1 은 0.571 에서 0.500 으로 내렸고 학습률 1e-4 의 A2 는 0.528 에서 0.534 로 그대로였다, 기기가 달라 평균 손실이 비교 가능한 것은 아니다)
+- [x] 7-3. FL 로 합치기: `research/seamone_research/fedavg.py`, 라운드 4, 라운드마다 기기 6개를 seed 고정으로 뽑고, 기기마다 전역 가중치에서 시작해 자기 발화를 한 바퀴 학습하고, 서버가 LoRA 가중치를 발화 수로 가중 평균한다 / 검증: 단위 시험(같은 가중치 둘의 평균은 그대로, 발화 수 가중이 맞는지, 기기 하나면 그 기기의 가중치) / 결과: `research/seamone_research/fedavg.py`(`fedavg` 발화 수 가중 평균, `sample_devices` 라운드마다 기기를 중복 없이 뽑는다, `state_megabytes`), 라운드 2 와 라운드마다 기기 4개(출발값 라운드 4 와 6개보다 작다 D1), 검증: `research/tests/test_fedavg.py` 13개(같은 가중치의 평균은 그대로, 발화 수 가중, 기기 하나면 그 가중치, 발화 0개인 기기, float32 결과, 빈 목록과 합 0 과 이름 불일치의 오류, 기기 뽑기의 결정성과 중복 없음)
+- [x] 7-4. 정답 만들기: `research/seamone_research/pseudo_label.py`, A2 는 #2 에서 한국어 CER 이 가장 낮았던 남긴 모델이 기기 발화에 정답을 단다(한 번만 달아 `.tmp/research/pseudo/` 에 둔다), A3 는 라운드 시작 때의 전역 학생 모델이 정답을 달고 조각의 평균 토큰 확률이 문턱(출발값 0.9)을 넘는 것만 쓴다, A3 의 학습 입력에는 SpecAugment 와 소음을 섞는다 / 검증: 단위 시험(문턱으로 고르기), 기기 발화의 정답 대비 A2 와 A3 정답의 CER 을 적는다(정답 품질) / 결과: `research/seamone_research/pseudo_label.py`(A2 정답 달기 `label_with_teacher` 와 `select_reliable` 믿음도 문턱), `fl_train.py` 의 `confidences`(단 글을 정답으로 놓고 한 번 순전파해 글 토큰의 평균 확률, D2), `fl_sim.py` 의 `label_by_student`, 검증: `research/tests/test_pseudo_label.py` 6개(문턱과 같으면 남긴다, 빈 글과 문장부호만 있는 글은 뺀다, 순서 유지, 평균 확률)와 `research/tests/test_fl_train.py` 3개(소음 크기, SpecAugment 가 입력을 바꾸지 않고 소리가 있는 구간 밖의 시간 띠를 건드리지 않는다), 정답 품질: A2 CER 1.45%(48개), A3 학생의 정답 7.17%와 9.89%(라운드마다 24개)
+- [x] 7-5. 실행 순서 A0, A2, A1, A3, A4: 방법마다 라운드 0, 2, 4 에서 Zeroth-Korean test 200, FLEURS 한국어 200, FLEURS 영어 100 의 CER 을 재고, 발화 하나를 학습하는 시간과 업데이트 크기(MB)를 적는다, A4 는 인코더 마지막 2층과 디코더의 LoRA 만 학습하고 얼린 아래층의 출력을 한 번만 계산해 쓴다 / 검증: 방법마다 결과 줄이 `.tmp/research/fl_sim/<방법>.jsonl` 에 남는다 / 결과: `research/seamone_research/fl_sim.py`(`make -C research fl-sim`), 실행 순서 A2, A3, A1 을 학습률 1e-4 와 3e-3 으로 두 번 돌렸다(A0 은 #2 의 whisper-small 가설 글, A4 는 하지 않았다), 결과 줄이 `.tmp/research/fl_sim/<방법>.jsonl` 에 있고 시험 세트의 가설 글이 `.tmp/research/hyp/fl-<방법>/<세트>.jsonl` 에 있다, 라운드 0, 2, 4 대신 마지막 라운드 뒤 한 번만 쟀다(라운드 2), 시험 세트는 Zeroth 40개와 FLEURS 한국어 40개와 영어 20개로 줄였다(출발값 200, 200, 100), 업데이트 2.359MB, 결과는 결과 문서 4절
+- [x] 7-6. 시간이 남으면 A2 와 A3 의 정답을 섞은 방법 하나를 더 돌린다, 남지 않으면 건너뛰고 건너뛴 사실을 적는다 / 결과: 건너뛰었다(시간이 없어 A2 와 A3 의 정답을 섞은 방법은 돌리지 않았고 대신 학습률 3e-3 의 두 번째 실행을 했다, D6)
+- [x] 7-7. 결과 문서 `research/results/2026_11_19_unlabeled_fl_sim.md` 를 쓰고 이 board 4절과 5절을 채운다, 표를 쓰지 않고 목록으로 쓴다, 한계(낭독 음성, 화자 12명, 작은 규모, 학생이 Whisper small)를 적고, 다음 단계 추천(앱의 학습 엔진이 처음 구현할 방법, 서버 검증 관문의 기준)을 적는다 / 결과: `research/results/2026_11_19_unlabeled_fl_sim.md`(한계 1절, 결론과 추천 2절, 조건 3절, 결과 4절, 판정 5절, 다음 단계 6절, 다시 돌리는 법 7절)를 썼고 이 board 4절과 5절을 채웠다, 표를 쓰지 않았다
+- [x] 7-8. 정리: `.tmp/research/` 의 중간 출력과 다음에 쓰지 않는 가중치, 데이터를 지우고 지운 것과 남긴 것의 크기를 적는다, 8절 수정 요약과 보고를 쓴다 / 결과: `.tmp/research/` 1.3MB(방법별 가설 글 `hyp/fl-*` 포함 `hyp/` 796KB, `fl_sim/` 24KB, `pseudo/` 8KB)와 `.tmp/hf/seamone_fl` 12MB(기기 wav 48개)를 남겼다(메인이 다시 계산하고 다음 큰 규모 실행이 쓴다), 가중치 whisper-small 926MB 와 whisper-large-v3-turbo 1.5GB 는 다음 큰 규모 실행이 쓰므로 남겼고 Qwen3-ASR-1.7B 4.4GB 는 이 이슈가 쓰지 않았다(지울지는 메인이 정한다, 속도 이슈가 쓰는지 모른다), `research/.venv` 1.3GB, 디스크 여유 19.99GiB(`df -k`, 08:33), 8절과 보고를 썼다
 
 ## 8. 수정 요약
-- TODO
+- `research/seamone_research/fl_data.py`: 새 파일, 기기 데이터(Zeroth-Korean train 조각 하나에서 시험 세트 화자를 뺀 화자를 기기로 뽑고 wav 를 꺼낸다, 전용 cache 에 받고 그 폴더만 지운다)
+- `research/seamone_research/fedavg.py`: 새 파일, FedAvg(발화 수 가중 평균), 라운드마다 기기 뽑기, 업데이트 크기
+- `research/seamone_research/pseudo_label.py`: 새 파일, 큰 모델의 정답 달기(A2)와 믿을 만한 조각 고르기(A3)
+- `research/seamone_research/fl_train.py`: 새 파일, 학생(whisper-small 과 글 디코더 LoRA)의 학습, 받아쓰기, 믿음도, 학습 입력 변형(소음과 SpecAugment)
+- `research/seamone_research/fl_sim.py`: 새 파일, 방법 A1, A2, A3 를 돌리고 시험 세트 CER 을 낸다(`--tag` 로 결과 이름 끝말을 붙인다)
+- `research/data/fl_client_ids.json`: 새 파일, 기기 8개의 화자와 발화 id
+- `research/Makefile`: `fmt`, `fl-data`, `fl-label`, `fl-sim` target 과 `FL_*` 변수
+- `research/README.md`: 위 target 과 파일 설명
+- `research/tests/test_fedavg.py`, `test_pseudo_label.py`, `test_fl_data.py`, `test_fl_train.py`: 새 파일, 단위 시험 28개(13, 6, 6, 3)
+- `research/results/2026_11_19_unlabeled_fl_sim.md`: 새 파일, 결과 문서
+- 시작 모델 이슈의 검토 지적 반영(그 이슈 7-9 에서 7-14)에서 고친 함수를 부르는 곳을 맞췄다: `fl_data.py` 의 전용 cache, `fl_train.py` 와 `pseudo_label.py` 가 쓰는 `resolve_model_path`(revision 으로 고정한 snapshot 폴더)
+- 이 이슈 기록: 이 board 의 4, 5, 7, 8절, `issue_decision.md` D1 에서 D7, `issue_log.md` 의 보고, `.tmp/report-1.md`
+- 지운 것: 만든 직후 지운 Zeroth-Korean train 조각 약 500MB(전용 cache `.tmp/hf/fl-raw`), `.tmp/research/` 의 이어 돌리기 script 와 임시 log 와 보고 초안
 
 ## 9. 지금 상태
 - 메인이 직접 확인한 것: 없음

@@ -60,28 +60,90 @@
 
 ## 4. 조사
 ### 4-1. 기존 코드와 구현의 핵심, 의도
-- TODO
+(`git ls-files` 와 `git grep` 으로 확인한 것, 이 worktree 는 앱 뼈대(#1)의 커밋 12bb603 위다)
+- 받아쓰기 코드는 레포에 없었다(`git grep -n -i transcri HEAD -- crates app Makefile scripts .github` 0건), `README.md:31` 에 "받아쓰기 엔진(계획)" 한 줄뿐이다
+- `crates/seamone-core/src/lib.rs`: 화면과 앱 껍데기가 같이 쓰는 타입을 `serde` 만으로 정의한다(`AppInfo`), WASM 으로도 컴파일되고 `#![forbid(unsafe_code)]` 다, 의도 앞 이슈의 "화면과 껍데기가 주고받는 타입은 `seamone-core` 에 한 번만 정의", 그래서 전사 조각 타입도 `serde` 만 쓴다
+- 맨 위 `Cargo.toml`: workspace 멤버와 공통 lint(clippy all 과 pedantic, `make lint` 가 `-D warnings` 로 돈다), 새 crate 는 `[lints] workspace = true` 로 같은 lint 를 받는다
+- `Makefile` 의 `lint` 와 `test` 는 workspace 전체를 돈다(`cargo clippy --workspace --all-targets`, `cargo test --workspace`), 새 crate 는 Makefile 을 고치지 않고 workspace 멤버로만 들어간다
 ### 4-2. 바뀌어야 할 곳
-- TODO
+(이번에 한 것과 남은 것)
+- 새 파일(이번에 만들었다): `crates/seamone-core/src/transcript.rs`(전사 조각), `crates/seamone-asr/Cargo.toml`, `crates/seamone-asr/src/lib.rs`(interface, 오류, 입력 검사), `crates/seamone-asr/src/fake.rs`(가짜 엔진), `crates/seamone-asr/src/speed.rs`(순수 함수)
+- 고친 파일(추적 중인 것 셋): 맨 위 `Cargo.toml`(workspace 멤버에 `crates/seamone-asr`), `Cargo.lock`(새 crate 한 묶음, 외부 crate 는 늘지 않았다), `crates/seamone-core/src/lib.rs`(`mod transcript;` 와 `pub use transcript::TranscriptSegment;`)
+- 남은 곳(이번 범위 밖): 엔진 feature 와 구현(7-2), 측정 CLI 와 `make bench-asr`(7-3 나머지), 측정과 결과 문서(7-4, 7-5), `README.md` 2-2 의 받아쓰기 엔진 줄(7-6)
 
 ## 5. 방안과 판정
+(엔진 후보를 2026-11-19 에 crates.io API, GitHub API, Codeberg API, 각 저장소의 README 와 BUILDING.md 로 조회해 견줬다, 이 노트북에서 빌드하거나 실행해 확인한 것은 없다, "확인하지 못함" 은 조회한 글에서 찾지 못했다는 뜻이다)
+### 5-1. whisper.cpp 를 감싼 `whisper-rs`
+- 판: whisper-rs 0.16.0, 그 안의 `whisper-rs-sys` 0.15.0
+- 마지막 갱신: crates.io 2026-03-12, 저장소(https://codeberg.org/tazz4843/whisper-rs) 2026-03-15, 보관 처리 아님, 별 68개, 원본 whisper.cpp(ggml-org)는 2026-11-18 에 push 됐고 별 55,300개, 래퍼 저장소 master 가 묶은 whisper.cpp 는 v1.8.3(2026-01-15)이고 원본 최신 릴리스는 v1.9.5(2026-10-06)다
+- 라이선스: Unlicense(래퍼), 원본 whisper.cpp 는 MIT
+- 가속기: feature `metal`(Apple GPU), `coreml`(crates.io feature 목록에만 있고 README 설명은 없음), `cuda`, `hipblas`, `vulkan`, `openblas`, CPU SIMD 는 whisper.cpp 가 맡는다(원본 README: ARM NEON, Accelerate, Metal, Core ML), Android 와 iOS 는 래퍼 README 가 "Windows, macOS, Linux 밖은 시험할 방법이 없다" 고 밝혀 래퍼로는 확인되지 않았다, 원본 whisper.cpp 에는 iOS(`examples/whisper.objc`, `whisper.swiftui`)와 Android(`examples/whisper.android`) 예제가 있다
+- 다섯 플랫폼 빌드: C++ 를 빌드한다, `whisper-rs-sys` 의 build 의존성이 `cmake`, `bindgen`(libclang 필요), C++ 컴파일러다, macOS M1 은 BUILDING.md 가 `.cargo/config.toml` 에 `rustflags = "-lc++ -l framework=Accelerate"` 와 cmake 를 요구하고, Windows 는 MSVC, LLVM(clang), cmake 를, Linux 는 "그냥 된다" 고 적었다, Android 와 iOS 빌드 안내는 없다
+- 순수 Rust: 아니다(C++ 를 cmake 로 빌드)
+- 장점: Whisper 계열(base, small, large-v3-turbo, large-v3)을 Apple GPU 로 돌리는 가장 널리 쓰이는 경로고 원본이 활발하다
+- 단점: C++ 빌드라 다섯 플랫폼 CI 에서 무겁고 Android 와 iOS 는 래퍼가 확인하지 않았다, 래퍼의 갱신이 8개월 전이고 묶은 whisper.cpp 가 최신 릴리스보다 한 minor 판(v1.8.3 대 v1.9.5) 뒤다
+- 판정: 채택(가속기 엔진, 잠정) -> 5-9
+### 5-2. Candle 의 Whisper
+- 판: candle-core 와 candle-transformers 0.11.1, Whisper 는 `candle-transformers` 의 `models::whisper`(`audio.rs`, `model.rs`, `quantized_model.rs`)
+- 마지막 갱신: crates.io 2026-10-31, 저장소(https://github.com/huggingface/candle) 2026-11-18 push, 별 21,350개, 열린 이슈 997개
+- 라이선스: crates.io 는 MIT OR Apache-2.0, GitHub 표기는 Apache-2.0
+- 모델과 기능: 예제 README 가 언어 감지와 `--language` 고정, `--timestamps`, 모델 tiny 부터 large-v3 와 distil-large-v3 를 적었다, large-v3-turbo 를 받는지는 확인하지 못함
+- 가속기: feature `metal`(Apple GPU, `candle-metal-kernels` 와 `objc2-metal`), `accelerate`(Apple CPU BLAS), `mkl`, `cuda`, Android 와 iOS 가속기는 확인하지 못함
+- 다섯 플랫폼 빌드: C++ 나 cmake 가 필요 없는 Rust 의존(`gemm`, `rayon`, `safetensors`)이고 `candle-wasm-examples/whisper` 가 있어 브라우저 WASM 으로도 돈다, `tokenizers` 는 workspace 가 `default-features = false` 로 받고 `candle-core` 가 `fancy-regex`(순수 Rust)를 켜서 C 정규식(onig)은 들지 않는 것으로 읽힌다, `candle-metal-kernels` 에는 `build.rs` 가 없어(디렉터리 목록으로 확인) 빌드 때 Xcode 의 `metal` 컴파일러를 부르지 않는 것으로 추정하지만 확인하지 못함
+- 순수 Rust: 기본 CPU 경로는 그렇다
+- 장점: C++ 없이 Whisper 를 Apple GPU 로 돌릴 수 있는 후보라 다섯 플랫폼 빌드가 가장 단순할 것으로 추측한다(확인 전)
+- 단점: Whisper 의 속도와 정확도 최적화가 whisper.cpp 만큼 다듬어졌는지 확인하지 못함, 열린 이슈가 많다
+- 판정: 대안으로 보류(`whisper-rs` 가 모바일이나 CI 빌드에서 막힐 때) -> 5-9
+### 5-3. `qwen-asr`
+- 판: qwen-asr 0.11.4(CLI 는 별도 crate `qwen-asr-cli`)
+- 마지막 갱신: crates.io 2026-11-12, 저장소(https://github.com/huanglizhuo/QwenASR) 2026-11-12 push, 별 66개, 열린 이슈 3개, 내려받은 수 2,419회(작고 새 프로젝트)
+- 라이선스: MIT
+- 모델: Qwen3-ASR 0.6B 와 1.7B, 오프라인과 streaming, 강제 정렬, `--language` 로 고정하거나 기본 자동 감지
+- 가속기: CPU 전용이다(README 가 "GPU dispatch 없음" 이라 적었다), 손으로 짠 NEON, SME, Accelerate, AMX 커널, feature `blas`(기본, macOS 는 Accelerate, Linux 는 OpenBLAS), `vdsp`, `int8-encoder`, `int8-prefill`, 모바일은 feature `ios`(정적 라이브러리와 C-FFI, `cargo build --release --target aarch64-apple-ios --features ios`)와 `android`(JNI 공유 라이브러리, `cargo ndk -t arm64-v8a build --release --features android`)가 README 에 있다
+- 다섯 플랫폼 빌드: 의존 crate 가 `libc` 하나고 cmake 나 C++ 가 필요 없다(`--no-default-features` 면 BLAS 링크도 없다), 기본 feature `blas` 는 Linux 에서 OpenBLAS 를 요구한다, README 의 빌드 안내는 macOS, Linux, iOS, Android 이고 Windows 는 적혀 있지 않다, 프로젝트 CI(`.github/workflows/ci.yml`)는 macOS 와 Ubuntu 만 돌리고 릴리스 바이너리도 aarch64-apple-darwin 과 x86_64-unknown-linux-gnu 둘뿐이라 Windows, Android, iOS 빌드는 프로젝트 CI 로 확인되지 않았다
+- 순수 Rust: 그렇다
+- 프로젝트가 밝힌 속도(우리가 잰 것이 아님): Apple M5 Pro 에서 0.6B 가 28.16초 음성을 추론 529ms 에 받아썼다(53배 실시간, 10번 가운데값), 이 노트북은 M1 이라 같은 수치를 기대할 수 없다
+- 장점: Qwen3-ASR 를 받는 후보가 이것뿐이고 순수 Rust 에 모바일 빌드 안내가 있다
+- 단점: 가속기(Apple GPU, 폰 GPU 와 NPU)를 쓰지 않는다(프로젝트 PD7 은 가속기를 쓴다), 작은 프로젝트라 유지 상태를 믿기 이르다, Windows 는 확인하지 못함
+- 판정: 채택(순수 Rust 엔진, 잠정) -> 5-9
+### 5-4. 그 밖에 찾았지만 이번에 평가하지 않은 것
+- `sherpa-onnx` 2.0.1(k2-fsa, crates.io 2026-10-27, 내려받은 수 873,278회), `sherpa-rs` 0.6.8(2025-10-05), `ort` 2.0.0-rc.15(시험판, 2026-10-19), `transcribe-rs` 0.3.12(2026-10-02), 판과 갱신일만 조회했고 라이선스와 가속기와 플랫폼은 보지 않았다
 ### 5-9. 최종 방안
-- TODO(엔진 crate 마다 지금 판, 유지 상태, 가속기 지원, 다섯 플랫폼 빌드 가능 여부를 견줘 적는다)
+- 엔진 둘을 cargo feature 뒤에 구현한다: 가속기 엔진은 `whisper-rs`(feature `metal`), 순수 Rust 엔진은 `qwen-asr`, 근거와 상태는 `issue_decision.md` D8(결정자 worker, 잠정, 사용자 확인 필요 없음)
+- 이유: 후보 모델(3-1 R3)이 Whisper 계열과 Qwen3-ASR 계열이고 Qwen3-ASR 를 받는 후보가 `qwen-asr` 뿐이며, Whisper 를 Apple GPU 로 돌리는 후보 가운데 `whisper-rs`(whisper.cpp)가 가장 널리 쓰이고 원본이 활발하다
+- 기본 feature 에는 엔진을 넣지 않는다(2-3), `whisper-rs` 는 C++ 빌드라 feature 뒤에 두고 `qwen-asr` 도 Windows 빌드를 확인하기 전까지 기본에서 뺀다
+- 갈림길: `whisper-rs` 가 Android, iOS 나 CI 의 C++ 빌드에서 막히면 Candle 의 Whisper 로 바꾼다
+- 구현 전에 확인할 것(이번에 못 함): 두 crate 의 실제 빌드(이 노트북과 CI 다섯 플랫폼), 모델 파일 크기와 메모리, M1 에서 속도, 한국어 오류율은 #2 결과
 
 ## 6. 사용자 승인
 - 해당 없음: 방향은 PD5, PD7 로 정해졌다, 시작 모델을 고르는 일은 프로젝트 PD9 에서 한다
 
 ## 7. 할 일과 검증
 (순서대로 한다, 시간 한도: 모델 하나의 측정이 15분을 넘으면 음성을 5개로 줄이고 줄인 수를 적는다)
-- [ ] 7-1. 조각 타입과 interface: skill `contract-spec` 을 읽고 `crates/seamone-core` 에 전사 조각 타입을, `crates/seamone-asr` 에 `Transcriber` interface 와 시험용 가짜 엔진을 만든다 / 검증: 가짜 엔진으로 interface 계약의 단위 시험
+- [x] 7-1. 조각 타입과 interface: skill `contract-spec` 을 읽고 `crates/seamone-core` 에 전사 조각 타입을, `crates/seamone-asr` 에 `Transcriber` interface 와 시험용 가짜 엔진을 만든다 / 검증: 가짜 엔진으로 interface 계약의 단위 시험
+  - 결과: `crates/seamone-core/src/transcript.rs:7`(전사 조각 `TranscriptSegment`: `start_ms`, `end_ms`, `text`, `speaker`)와 `:21`(`new`, 화자 칸을 비운 조각), `crates/seamone-core/src/lib.rs` 의 `mod transcript;` 와 `pub use`, `crates/seamone-asr/src/lib.rs:33`(`Transcriber`, 계약은 doc comment 에 적었다), `:44`(`TranscribeError`: `ModelUnavailable`, `InvalidInput`, `Failed`), `:67`(`check_input`), `:86`(`audio_ms`), `crates/seamone-asr/src/fake.rs:12`(`FakeTranscriber`)
+  - 지시한 계약: 입력과 출력 타입은 D1, D2, 오류 타입이 모델을 못 불러온 경우와 입력이 잘못된 경우를 가르는 것은 D4(입력 검사가 먼저), 언어 힌트가 없을 때는 엔진이 언어를 스스로 가리는 것이 D3, 한 번에 하나의 일만 하는 메서드 하나짜리 interface 로 두고 스트리밍 같은 스펙에 없는 쓰임은 넣지 않았다
+  - 검증: `make test`(08:03, `CARGO_BUILD_JOBS=1 nice -n 10`, EXIT=0)가 `seamone-asr` 20개(interface 와 가짜 엔진 12개, 7-3 의 순수 함수 8개)와 `seamone-core` 6개(전사 조각 3개, 앞 이슈 3개)를 통과했다, 가짜 엔진 시험은 돌려받은 결과만 확인한다(호출 횟수를 기대값으로 걸지 않는다), `make lint`(08:02, EXIT=0, 경고 0건)
 - [ ] 7-2. 엔진 고르기: 2-3 의 엔진 후보를 crates.io 와 저장소에서 조회해 5-9 에 견줘 적고 둘 이상을 cargo feature 뒤에 구현한다(가속기를 쓰는 것 하나, 순수 Rust 하나) / 검증: 엔진마다 한국어 음성 하나를 받아써 글이 나온다
+  - 이번에 한 것(조사만, 구현은 하지 않았다): 후보 셋(`whisper-rs`, Candle 의 Whisper, `qwen-asr`)과 그 밖의 넷을 조회해 5절에 견줘 적었다, 잠정 선택은 D8(가속기 `whisper-rs`, 순수 Rust `qwen-asr`)
+  - 남은 것: 두 엔진의 구현과 한국어 음성 하나로 받아쓰기 확인(C++ 빌드와 모델 내려받기가 필요해 이번에 하지 않았다)
 - [ ] 7-3. 측정 CLI 와 make target: 실시간 배수 계산은 순수 함수로 두고 단위 시험을 단다, 음성은 #2 의 표본에서 한국어 10개를 wav 로 꺼내 `.tmp/` 에 둔다 / 검증: `make test`, 가짜 엔진으로 CLI 가 끝까지 돈다
+  - 이번에 한 것(순수 함수만): `crates/seamone-asr/src/speed.rs:11`(`audio_secs`), `:18`(`realtime_factor`), `:28`(`median`)와 단위 시험 8개(정상값, 처리 시간 0 이하, 음수, 숫자가 아닌 값, 홀수와 짝수 개수, 빈 목록, 입력 순서와 무관), 결정 D7
+  - 남은 것: 측정 CLI 와 `make bench-asr`, 한국어 음성 10개를 wav 로 꺼내기(#2 의 표본이 필요), 가짜 엔진으로 CLI 가 끝까지 도는지
 - [ ] 7-4. 측정: 모델 파일을 `.tmp/` 에 받아 작은 것부터 재고(CPU 만, Apple GPU), 한 모델이 끝나면 그 파일을 지운다 / 검증: 결과가 `.tmp/bench/` 에 남고 결과 문서로 옮겨진다
 - [ ] 7-5. 결과 문서와 추천: 측정 조건(기기, 스레드 수, 양자화, 엔진 판), 모델마다 결과, 한계, #2 의 오류율과 합친 계층별 시작 모델 추천을 쓴다, 표를 쓰지 않고 목록으로 쓴다
 - [ ] 7-6. `README.md` 2-2 의 받아쓰기 엔진 줄을 "있음" 으로 고치고 interface 와 조각 타입을 한 줄씩 적는다, 8절 수정 요약과 보고를 쓴다
 
 ## 8. 수정 요약
-- TODO
+(7-1, 7-2 의 조사, 7-3 의 순수 함수까지의 파일이다, 이 worktree 는 앱 뼈대 브랜치 위라 아래 파일을 stage 하지 않았고 메인이 경로로 골라 별도 브랜치로 커밋한다)
+- `crates/seamone-core/src/transcript.rs`(새 파일): 전사 조각 `TranscriptSegment` 와 `new`, 단위 시험 3개
+- `crates/seamone-core/src/lib.rs`(고침): `mod transcript;` 와 `pub use transcript::TranscriptSegment;` 를 더했다
+- `crates/seamone-asr/Cargo.toml`(새 파일): 새 crate, 의존은 `seamone-core` 하나
+- `crates/seamone-asr/src/lib.rs`(새 파일): `Transcriber`, `TranscribeError`, `check_input`, `audio_ms`, `SAMPLE_RATE_HZ`, interface 단위 시험 12개
+- `crates/seamone-asr/src/fake.rs`(새 파일): 시험용 가짜 엔진 `FakeTranscriber`
+- `crates/seamone-asr/src/speed.rs`(새 파일): 순수 함수 `audio_secs`, `realtime_factor`, `median` 과 단위 시험 8개
+- `Cargo.toml`(고침): workspace 멤버에 `crates/seamone-asr`
+- `Cargo.lock`(고침): 새 crate 한 묶음, 외부 crate 는 늘지 않았다
 
 ## 9. 지금 상태
 - 메인이 직접 확인한 것: 없음

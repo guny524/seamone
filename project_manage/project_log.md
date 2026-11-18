@@ -112,3 +112,15 @@
   - 검토자의 도구(Serena)가 worktree 에 만든 `.serena/` 폴더는 지웠다(커밋에 들어가지 않았다)
 - 받아쓰기 엔진 이슈: app worker 에게 앞 절반(interface 와 가짜 엔진과 엔진 후보 조사와 순수 함수)을 08:00 에 보냈다(앞 뼈대 이슈와 같은 worktree, 무거운 일 없이 08:35 까지, 새 파일은 별도 브랜치 `guny524/3-asr-engine-speed` 로 메인이 커밋한다)
 - 라벨 없는 FL 모의실험: research worker 가 08:08 까지 `fedavg.py`, `fl_data.py`, `fl_sim.py`, `fl_train.py`, `pseudo_label.py` 와 시험 4개 파일을 만들었다(새 파일, 아직 안 읽음)
+
+## 2026-11-19 08:42 메인(Sonnet max) 점검
+- 앱 뼈대: 두 번째 검토(08:07 시작 08:13 끝) 결과를 읽었다, 이전 지적 네 개는 고쳐짐 셋과 일부 하나, 새 지적 둘(낮음 README, 중간 Android 키 보존)을 원문으로 확인해 모두 받았다
+  - 고친 것: README 의 `make build` 설명을 데스크톱으로 한정(커밋 75aeb5e), Android debug 서명 키를 캐시가 아니라 레포 `.github/android/debug.keystore` 로 두었다(커밋 aac2755, 키는 첫 CI 가 만든 것을 artifact 로 받아 커밋, sha256 dba5f1e5d6cd77045250f3d641da991ed6de0010c9a1ea422ba5be980d8aa08d), workflow 는 빌드 뒤 APK 를 올리기 전에 `cmp` 로 서명에 쓰인 키가 레포 키와 같은지 확인한다
+  - 메인이 직접 확인한 것: 마지막 CI(`ci` 둘, `build` 의 job 6개)가 모두 success, Android job 로그에 `committed keystore: 'true'` 와 레포 키와 같은 sha256, 이슈 board 10-2 증거 대조 통과(사람 시험 대기)
+  - PR https://github.com/guny524/seamone/pull/6 을 ready 로 바꿔 merge 했다(merge 커밋 f9b044d, 2026-11-19 08:36), main 작업 사본은 `git pull --ff-only` 로 맞췄다, GitHub 이슈에 진행 요약 댓글을 올렸다
+  - 실수: 시험용 키 artifact 를 받는 명령이 폴더가 없어 한 번 실패했고 뒤 명령은 `&&` 로 멈춰 아무것도 커밋되지 않았다(폴더를 만들고 다시 받았다)
+- 받아쓰기 엔진: app worker 의 첫 보고(08:22)를 확인했다, 메인이 직접 확인한 것: `make lint`, `make test` EXIT=0(시험 27개 통과, worker 가 새로 쓴 것은 23개), 커밋 dc22e89(`feat: 받아쓰기 interface, 전사 조각 타입, 가짜 엔진, 실시간 배수 계산을 추가`, 8개 파일)를 별도 브랜치 `guny524/3-asr-engine-speed` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/8 을 열었다, 엔진 후보 조사 결과(whisper-rs 와 qwen-asr 를 잠정 선택, Candle 은 대안)는 worker 가 조회한 값이고 메인이 재조회하지는 않았다
+- 시작 모델 오류율: research worker 의 보고 2(08:24)를 확인했다, 메인이 직접 확인한 것: `make -C research lint`, `make -C research test` EXIT=0(111개 통과), 삭제 범위 검사(`remove_inside`)와 잘린 가설 파일 복구(`_parse`, `repair_hypotheses`) 코드를 읽었다, 커밋 5a4c397(`fix: 측정 코드의 cache 삭제 범위, 판 고정, 재개와 LoRA 판정을 검토대로 고침`, 16개 파일)을 push 했다(PR 7 에 더해짐, 라벨 없는 FL 모의실험 몫의 변경은 뺐다)
+  - 두 번째 검토(08:31 시작 08:36 끝): 이전 지적 여섯 개는 고쳐짐 넷과 일부 둘, 새 지적 셋(중간 셋: 세트별 cache 의 실행 간 배제 없음, 측정 설정 파일의 비원자적 쓰기, 표본 목록이 바뀌어도 설정 대조 통과)을 원문으로 확인했다, 세트별 cache 의 동시 실행 경쟁은 지금 한 worker 가 쓰는 환경에서는 드물지만 맞는 지적이다
+  - 처리: 세 개를 모두 받아 `.tmp/review-cells-3.md` 로 research worker 에게 보냈다(08:50 까지), 검토 반복이 두 번에서 멈추는 규칙(review skill 4절)이라 세 번째 검토는 하지 않고 시험과 diff 로 메인이 확인한다
+- 정리: 끝난 검토자 탭 셋을 닫았다, 끝난 일의 임시 사본은 지웠다(`.tmp/ci-artifacts`, 검토 도구가 만든 `.serena/`)
