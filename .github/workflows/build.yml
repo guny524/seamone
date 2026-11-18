@@ -1,0 +1,213 @@
+name: build
+
+# 서명하지 않은 설치 파일을 만들어 artifact 로 올린다, 앱 장터와 서명은 이 workflow 의 범위 밖이다.
+# uses 는 이동할 수 있는 태그가 아니라 commit SHA 로 고정하고 태그를 주석으로 적는다.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Makefile 의 TAURI_CLI_VERSION, TRUNK_VERSION 과 같은 판을 쓴다, 판을 올리면 scripts/install-tools.sh 의 sha256 도 바꾼다
+  TAURI_CLI_VERSION: "2.12.6"
+  TRUNK_VERSION: "0.22.2"
+
+jobs:
+  desktop:
+    name: desktop (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - name: macos-x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis,msi
+          - name: linux-x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+
+      - name: Add the build target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install the Tauri Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      # Windows runner 에는 make 가 없다
+      - name: Install make
+        if: runner.os == 'Windows'
+        run: choco install make --version=4.4.1 -y --no-progress
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.name }}
+
+      - name: Install tauri-cli and trunk
+        shell: bash
+        run: scripts/install-tools.sh
+
+      - name: Check the tool versions
+        run: |
+          cargo tauri --version
+          trunk --version
+
+      # 설치 파일을 만드는 명령은 Makefile 의 build 하나다
+      - name: Build the installers
+        shell: bash
+        run: make build TAURI_BUILD_ARGS="--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: seamone-${{ matrix.name }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            target/${{ matrix.target }}/release/bundle/nsis/*.exe
+            target/${{ matrix.target }}/release/bundle/msi/*.msi
+            target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+          retention-days: 7
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+
+      - name: Add the Android target
+        run: rustup target add aarch64-linux-android
+
+      # Gradle 이 Java 위에서 돈다
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: android
+
+      # debug 서명 키를 모든 실행과 모든 브랜치에서 같게 해서 앞 실행의 APK 위에 덮어 설치할 수 있게 한다
+      # 키는 캐시가 아니라 레포(.github/android/debug.keystore)가 원본이다, 시험용으로 공개된 키이고 release 에 쓰지 않는다
+      - name: Use the committed Android debug keystore
+        id: debug-keystore
+        run: |
+          if [ -f .github/android/debug.keystore ]; then
+            mkdir -p ~/.android
+            cp .github/android/debug.keystore ~/.android/debug.keystore
+            echo "committed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install tauri-cli and trunk
+        run: scripts/install-tools.sh
+
+      # runner 에 깔린 Android SDK 와 NDK 를 쓴다
+      - name: Point NDK_HOME at the NDK preinstalled on the runner
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+
+      - name: Generate the Android project
+        run: cargo tauri android init --ci --skip-targets-install
+
+      # debug 로 빌드하면 Gradle 이 debug 키로 서명해 기기에 바로 설치된다, 레포에 키가 없으면 Gradle 이 만든다
+      - name: Build the APK
+        run: cargo tauri android build --debug --apk --target aarch64
+
+      # APK 를 올리기 전에 서명에 쓰인 키가 레포의 키와 같은지 확인한다, 다르면 APK 를 올리지 않는다
+      - name: Check the debug keystore
+        run: |
+          echo "committed keystore: '${{ steps.debug-keystore.outputs.committed }}'"
+          sha256sum ~/.android/debug.keystore
+          if [ "${{ steps.debug-keystore.outputs.committed }}" = "true" ]; then
+            cmp ~/.android/debug.keystore .github/android/debug.keystore
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: seamone-android-apk
+          path: app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      # 레포에 키가 아직 없을 때만(처음 한 번) Gradle 이 만든 키를 artifact 로 올려 받아 커밋하게 한다
+      - name: Upload the generated debug keystore once
+        if: steps.debug-keystore.outputs.committed == 'false'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-debug-keystore-seed
+          path: ~/.android/debug.keystore
+          if-no-files-found: error
+          retention-days: 3
+
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+
+      - name: Add the iOS simulator target
+        run: rustup target add aarch64-apple-ios-sim
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ios
+
+      - name: Install tauri-cli and trunk
+        run: scripts/install-tools.sh
+
+      - name: Generate the Xcode project
+        run: cargo tauri ios init --ci --skip-targets-install
+
+      # 서명 없이 시뮬레이터용으로만 빌드한다
+      - name: Build the simulator app
+        run: cargo tauri ios build --debug --target aarch64-sim --no-sign
+
+      # upload-artifact 는 실행 권한을 지키지 않아서 .app 을 zip 으로 묶어 올린다
+      - name: Zip the app
+        run: |
+          find app/src-tauri/gen/apple -name '*.app' -type d -prune
+          app_path="$(find app/src-tauri/gen/apple -name '*.app' -type d -prune | grep -m 1 'arm64-sim' || true)"
+          test -n "$app_path"
+          ditto -c -k --keepParent "$app_path" seamone-ios-simulator.zip
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: seamone-ios-simulator
+          path: seamone-ios-simulator.zip
+          if-no-files-found: error
+          retention-days: 7

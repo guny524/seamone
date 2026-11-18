@@ -1,0 +1,19 @@
+[package]
+name = "seamone-ui"
+description = "seamone 화면(Leptos, 브라우저에서 그리는 client side rendering), trunk 가 WASM 으로 빌드한다"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+seamone-core.workspace = true
+console_error_panic_hook = "0.1.7"
+leptos = { version = "0.8.23", features = ["csr"] }
+serde-wasm-bindgen = "0.6.5"
+wasm-bindgen = "0.2.130"
+wasm-bindgen-futures = "0.4.80"
+
+[lints]
+workspace = true

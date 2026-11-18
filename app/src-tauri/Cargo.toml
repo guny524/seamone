@@ -1,0 +1,28 @@
+[package]
+name = "seamone"
+description = "seamone 앱 껍데기(Tauri 2), 화면은 app/ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+# `_lib` 접미사는 bin 이름과 겹치지 않게 하려는 것이다(Windows 에서 같은 이름이면 충돌한다,
+# https://github.com/rust-lang/cargo/issues/8519). Android 와 iOS 는 이 lib 를 불러 앱을 띄운다.
+name = "seamone_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.6", features = [] }
+
+[dependencies]
+seamone-core.workspace = true
+tauri = { version = "2.12.7", features = [] }
+
+[dev-dependencies]
+# 시험에서 mock runtime 으로 등록된 command 에 IPC 요청을 보낸다
+tauri = { version = "2.12.7", features = ["test"] }
+
+[lints]
+workspace = true
