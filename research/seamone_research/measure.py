@@ -1,7 +1,9 @@
 """모델 하나가 시험 세트를 받아쓰고 가설 글을 .tmp/research/hyp/<모델>/<세트>.jsonl 에 쓴다.
 
-- 한 줄의 꼴과 읽는 법은 hypotheses.py, eval_ids.json 의 순서대로 앞에서부터 쌓는다
-- 이미 쓴 id 는 건너뛰므로 멈췄다 다시 돌려도 이어 쓴다
+- 한 줄의 꼴과 읽는 법은 hypotheses.py, eval_ids.json 의 순서대로 쌓는다
+- 이미 쓴 id 는 건너뛰어 멈췄다 다시 돌려도 이어 쓴다(끊긴 끝 줄은 버린다)
+- 가설 글 옆의 <세트>.config.json 에 측정 설정(모델과 데이터의 revision, 정규화 판)을 쓴다
+  이어 쓸 때 대조해 다르면 멈춘다(다른 판의 결과가 한 모델의 CER 로 합쳐지지 않게 한다)
 - 채점은 이 파일을 읽는 score.py 가 따로 한다
 - 걸린 시간은 같은 폴더의 timing.json 에 쌓는다(다른 worker 의 빌드와 겹치므로 참고값이다)
 """
@@ -10,10 +12,12 @@ import argparse
 import json
 import time
 from collections.abc import Iterator, Sequence
+from pathlib import Path
 
 import numpy as np
 import torch
 
+from seamone_research.cer import NORMALIZATION_VERSION
 from seamone_research.data import (
     EVAL_SETS,
     Utterance,
@@ -22,7 +26,7 @@ from seamone_research.data import (
     prepare_audio,
     read_audio,
 )
-from seamone_research.hypotheses import encode_row, read_hypotheses
+from seamone_research.hypotheses import encode_row, repair_hypotheses
 from seamone_research.memory import device_allocated_mib, peak_process_mib
 from seamone_research.models import MODEL_SPECS, ModelSpec
 from seamone_research.paths import hypothesis_dir, hypothesis_path
@@ -70,6 +74,37 @@ def append_timing(model: str, record: dict) -> None:
     path.write_text(json.dumps(runs, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
+def measurement_config(model: str, spec: ModelSpec, set_name: str, device: str, dtype: str) -> dict:
+    return {
+        "model": model,
+        "repo": spec.repo_id,
+        "revision": spec.revision,
+        "set": set_name,
+        "data_revision": EVAL_SETS[set_name].revision,
+        "normalization": NORMALIZATION_VERSION,
+        "device": device,
+        "dtype": dtype,
+        "decoding": "greedy, 언어 지정, 글 맥락 없음",
+    }
+
+
+def ensure_same_config(path: Path, config: dict, has_rows: bool) -> None:
+    """저장된 측정 설정이 지금과 다르면, 또는 가설이 있는데 설정이 없으면 멈추고 없으면 쓴다."""
+    if path.exists():
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        keys = set(saved) | set(config)
+        different = sorted(k for k in keys if saved.get(k) != config.get(k))
+        if different:
+            message = f"{path} 의 측정 설정이 지금과 다르다: {different}, 이어 쓰지 않는다"
+            raise ValueError(message)
+        return
+    if has_rows:
+        message = f"가설 글은 있는데 측정 설정 파일 {path} 이 없어 어느 판의 결과인지 알 수 없다"
+        raise ValueError(message)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+
 def measure_set(
     model: str,
     set_name: str,
@@ -77,10 +112,14 @@ def measure_set(
     spec: ModelSpec,
     limit: int | None,
     device: str,
+    dtype: str,
 ) -> dict | None:
     todo_all = load_eval_set(set_name, limit)
     path = hypothesis_path(model, set_name)
-    done = {row["id"] for row in read_hypotheses(path)}
+    rows = repair_hypotheses(path)
+    config = measurement_config(model, spec, set_name, device, dtype)
+    ensure_same_config(path.with_suffix(".config.json"), config, bool(rows))
+    done = {row["id"] for row in rows}
     todo = [u for u in todo_all if u.id not in done]
     if not todo:
         return None
@@ -124,7 +163,9 @@ def measure_model(
     transcriber = LazyTranscriber(model, spec, device, dtype)
     try:
         for set_name in set_names:
-            record = measure_set(model, set_name, transcriber, spec, limits[set_name], device)
+            record = measure_set(
+                model, set_name, transcriber, spec, limits[set_name], device, dtype
+            )
             if record is None:
                 print(f"{model} {set_name}: 이미 다 했다")
                 continue

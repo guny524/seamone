@@ -3,8 +3,13 @@
 - 후보: 세트의 test split 에서 30초 이하(Whisper 의 입력 창)이고 정규화한 정답이 비지 않은 녹음
 - 같은 문장을 여러 사람이 읽은 녹음(FLEURS)은 file_name 이 가장 앞선 하나만 후보로 둔다
 - 뽑기: seed 와 id 를 이은 글의 SHA-256 순서로 줄 세워 앞에서 count 개를 뽑는다
-  이 순서가 eval_ids.json 의 순서다(앞에서부터 잘라 쓰면 모든 모델이 같은 표본의 앞부분을 쓴다)
+  이 순서가 eval_ids.json 의 순서다
+  앞에서부터 잘라 쓰면 모든 모델이 같은 표본의 앞부분을 쓴다
 - 음성은 .tmp/hf 에만 둔다, test split 한 파일만 받아 뽑힌 녹음만 꺼내고 원본은 지운다
+- 원본은 세트마다 전용 cache(.tmp/hf/eval-raw/<세트>)에 받고 그 폴더만 지운다
+  공유 hub/ 는 건드리지 않는다
+- 준비한 음성 폴더에는 manifest.json(데이터 revision 과 id 목록의 해시)을 마지막에 쓴다
+  재사용 전에 대조한다
 """
 
 import hashlib
@@ -141,9 +146,33 @@ def _zeroth_candidates(parquet_path: Path) -> list[Candidate]:
     ]
 
 
+def raw_cache_dir(set_name: str) -> Path:
+    """준비 단계가 받는 원본 조각의 전용 cache, 다른 실행이 읽는 공유 hub/ 와 섞이지 않는다."""
+    return hf_home() / "eval-raw" / set_name
+
+
+def remove_inside(root: Path, target: Path) -> None:
+    """target 이 root 안에 있을 때만 지운다, root 자신이거나 밖이면 지우지 않고 오류를 낸다."""
+    resolved_root, resolved_target = root.resolve(), target.resolve()
+    if resolved_target == resolved_root or resolved_root not in resolved_target.parents:
+        message = f"{target} 은 {root} 안이 아니라서 지우지 않는다"
+        raise ValueError(message)
+    shutil.rmtree(resolved_target, ignore_errors=True)
+
+
+def drop_raw_cache(set_name: str) -> None:
+    target = raw_cache_dir(set_name)
+    if target.exists():
+        remove_inside(hf_home() / "eval-raw", target)
+
+
 def _download(spec: EvalSetSpec, filename: str) -> Path:
     path = hf_hub_download(
-        repo_id=spec.repo_id, filename=filename, repo_type="dataset", revision=spec.revision
+        repo_id=spec.repo_id,
+        filename=filename,
+        repo_type="dataset",
+        revision=spec.revision,
+        cache_dir=raw_cache_dir(spec.name),
     )
     return Path(path)
 
@@ -153,12 +182,6 @@ def _list_candidates(spec: EvalSetSpec) -> list[Candidate]:
     if spec.repo_id == "google/fleurs":
         return _fleurs_candidates(source)
     return _zeroth_candidates(source)
-
-
-def _drop_hub_cache(spec: EvalSetSpec) -> None:
-    cache_dir = hf_home() / "hub" / f"datasets--{spec.repo_id.replace('/', '--')}"
-    if cache_dir.parent.name == "hub" and cache_dir.name.startswith("datasets--"):
-        shutil.rmtree(cache_dir, ignore_errors=True)
 
 
 def build_eval_ids() -> dict:
@@ -226,10 +249,19 @@ def _to_mono_16k(audio: np.ndarray, sample_rate: int) -> np.ndarray:
 
 
 def _save_wav(path: Path, raw_bytes: bytes) -> float:
+    """임시 이름으로 쓴 뒤 이름을 바꿔 완성된 파일만 공개한다."""
     audio, sample_rate = soundfile.read(io.BytesIO(raw_bytes), dtype="float32")
     mono = _to_mono_16k(audio, sample_rate)
-    soundfile.write(path, mono, SAMPLE_RATE, subtype="PCM_16")
+    partial = path.with_name(path.name + ".part")
+    soundfile.write(partial, mono, SAMPLE_RATE, subtype="PCM_16", format="WAV")
+    partial.replace(path)
     return len(mono) / SAMPLE_RATE
+
+
+def _write_json_atomically(path: Path, value: object) -> None:
+    partial = path.with_name(path.name + ".part")
+    partial.write_text(json.dumps(value, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    partial.replace(path)
 
 
 def _fleurs_audio(tar_path: Path, wanted: set[str]) -> dict[str, bytes]:
@@ -257,14 +289,48 @@ def _extract_audio(spec: EvalSetSpec, ids: set[str]) -> dict[str, bytes]:
     return _fleurs_audio(_download(spec, spec.audio_file), ids)
 
 
+def manifest_for(spec: EvalSetSpec, ids: Sequence[str]) -> dict:
+    digest = hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()
+    return {
+        "repo": spec.repo_id,
+        "revision": spec.revision,
+        "count": len(ids),
+        "ids_sha256": digest,
+    }
+
+
+def _has_reference(entry: object) -> bool:
+    return (
+        isinstance(entry, dict)
+        and isinstance(entry.get("reference"), str)
+        and isinstance(entry.get("seconds"), int | float)
+    )
+
+
+def cache_is_valid(set_name: str, spec: EvalSetSpec, ids: Sequence[str]) -> bool:
+    """manifest 가 같고 정답 파일이 해석되며 필요한 id 의 정답과 wav 가 모두 있을 때만 참이다."""
+    out_dir = eval_audio_dir(set_name)
+    try:
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        references = json.loads(_references_path(set_name).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if manifest != manifest_for(spec, ids) or not isinstance(references, dict):
+        return False
+    return all(
+        _has_reference(references.get(i)) and (out_dir / _wav_name(i)).is_file() for i in ids
+    )
+
+
 def prepare_audio(set_name: str) -> None:
-    """뽑힌 녹음의 16kHz mono wav 와 정답 글을 .tmp/hf 에 둔다, 이미 있으면 받지 않는다."""
+    """뽑힌 녹음의 wav 와 정답 글을 .tmp/hf 에 둔다, 같은 판의 완성본이 있으면 받지 않는다."""
     spec = EVAL_SETS[set_name]
     ids = load_eval_ids()["sets"][set_name]["ids"]
-    out_dir = eval_audio_dir(set_name)
-    if _references_path(set_name).exists() and all((out_dir / _wav_name(i)).exists() for i in ids):
+    if cache_is_valid(set_name, spec, ids):
         return
+    out_dir = eval_audio_dir(set_name)
     out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "manifest.json").unlink(missing_ok=True)
     candidates = {c.id: c for c in _list_candidates(spec)}
     raw = _extract_audio(spec, set(ids))
     references = {}
@@ -274,10 +340,9 @@ def prepare_audio(set_name: str) -> None:
             "reference": candidates[utterance_id].reference,
             "seconds": round(seconds, 3),
         }
-    _references_path(set_name).write_text(
-        json.dumps(references, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
-    )
-    _drop_hub_cache(spec)
+    _write_json_atomically(_references_path(set_name), references)
+    _write_json_atomically(out_dir / "manifest.json", manifest_for(spec, ids))
+    drop_raw_cache(set_name)
 
 
 def load_eval_set(set_name: str, limit: int | None = None) -> list[Utterance]:

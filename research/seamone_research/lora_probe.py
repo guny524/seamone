@@ -11,6 +11,7 @@
 
 import argparse
 import json
+import math
 import time
 import traceback
 from collections.abc import Sequence
@@ -22,7 +23,7 @@ from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 from seamone_research.data import SAMPLE_RATE, Utterance, load_eval_set, prepare_audio, read_audio
 from seamone_research.memory import device_allocated_mib, peak_process_mib, release_memory
-from seamone_research.models import MODEL_SPECS, ModelSpec
+from seamone_research.models import MODEL_SPECS, ModelSpec, resolve_model_path
 from seamone_research.paths import RUN_DIR
 
 LORA_RANK = 8
@@ -61,9 +62,30 @@ class ProbeResult:
     trainable_params: int | None = None
     total_params: int | None = None
     grads_finite: bool | None = None
+    params_without_grad: int | None = None
+    losses_finite: bool | None = None
     device_mib: float | None = None
     process_rss_mib_peak: float | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class ProbeJudgement:
+    ok: bool
+    grads_finite: bool
+    params_without_grad: int
+    losses_finite: bool
+
+
+def judge_probe(grads: Sequence[torch.Tensor | None], losses: Sequence[float]) -> ProbeJudgement:
+    """모든 학습 가능한 parameter 에 유한한 기울기가 있고 모든 걸음의 손실이 유한할 때만 성공이다.
+
+    grads 는 학습 가능한 parameter 마다의 기울기이고, 손실과 이어지지 않으면 None 이다.
+    """
+    missing = sum(grad is None for grad in grads)
+    finite = bool(grads) and all(bool(torch.isfinite(g).all()) for g in grads if g is not None)
+    losses_finite = bool(losses) and all(math.isfinite(loss) for loss in losses)
+    return ProbeJudgement(missing == 0 and finite and losses_finite, finite, missing, losses_finite)
 
 
 def synchronize(device: str) -> None:
@@ -74,9 +96,10 @@ def synchronize(device: str) -> None:
 def whisper_model_and_batch(
     spec: ModelSpec, device: str, dtype: torch.dtype, utterances: Sequence[Utterance]
 ) -> tuple[torch.nn.Module, dict]:
-    processor = WhisperProcessor.from_pretrained(spec.repo_id)
+    model_path = resolve_model_path(spec)
+    processor = WhisperProcessor.from_pretrained(model_path)
     processor.tokenizer.set_prefix_tokens(language="korean", task="transcribe")
-    model = WhisperForConditionalGeneration.from_pretrained(spec.repo_id, dtype=dtype).to(device)
+    model = WhisperForConditionalGeneration.from_pretrained(model_path, dtype=dtype).to(device)
     features = processor.feature_extractor(
         [read_audio(u) for u in utterances], sampling_rate=SAMPLE_RATE, return_tensors="pt"
     ).input_features
@@ -113,7 +136,7 @@ def qwen_model_and_batch(
 ) -> tuple[torch.nn.Module, dict]:
     from qwen_asr import Qwen3ASRModel
 
-    asr = Qwen3ASRModel.from_pretrained(spec.repo_id, dtype=dtype, device_map=device)
+    asr = Qwen3ASRModel.from_pretrained(resolve_model_path(spec), dtype=dtype, device_map=device)
     processor = asr.processor
     prompt = qwen_prompt(processor)
     waves = [read_audio(u) for u in utterances]
@@ -162,11 +185,14 @@ def run_probe(
         result.loss = taken[-1][0]
         result.forward_seconds = [round(step[1], 2) for step in taken]
         result.backward_seconds = [round(step[2], 2) for step in taken]
-        grads = [p.grad for p in model.parameters() if p.requires_grad and p.grad is not None]
-        result.grads_finite = bool(grads) and all(bool(torch.isfinite(g).all()) for g in grads)
+        grads = [p.grad for p in model.parameters() if p.requires_grad]
+        judgement = judge_probe(grads, [step[0] for step in taken])
+        result.grads_finite = judgement.grads_finite
+        result.params_without_grad = judgement.params_without_grad
+        result.losses_finite = judgement.losses_finite
         result.device_mib = round(device_allocated_mib(device))
         result.process_rss_mib_peak = round(peak_process_mib())
-        result.ok = result.loss is not None and result.grads_finite
+        result.ok = judgement.ok
     except Exception as error:  # 실패한 까닭을 결과에 적으려고 모두 잡는다
         result.error = f"{type(error).__name__}: {error}"[:400]
         traceback.print_exc()

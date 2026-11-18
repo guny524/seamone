@@ -28,7 +28,7 @@ class SetScore:
 
 
 def runaway_count(rows: Sequence[Mapping[str, str]]) -> int:
-    """정규화한 가설이 정답보다 두 배 넘게 긴 발화의 수, 같은 말을 되풀이하는 환각을 가리킨다."""
+    """정규화한 가설이 정답보다 두 배 넘게 긴 발화의 수, 길이만 견주므로 반복 검사는 아니다."""
     return sum(
         len(normalize(row["hyp"])) > RUNAWAY_LENGTH_RATIO * len(normalize(row["ref"]))
         for row in rows
