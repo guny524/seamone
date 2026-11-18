@@ -1,0 +1,17 @@
+[package]
+name = "seamone-core"
+description = "seamone 의 도메인 crate, 화면(WASM)과 앱 껍데기(Tauri)가 같이 쓰는 타입과 규칙"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true
