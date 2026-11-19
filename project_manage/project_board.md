@@ -35,7 +35,7 @@
 
 ## 4. 이슈
 ### #1 앱 뼈대(Tauri 2 + Leptos)를 세우고 다섯 플랫폼 설치 파일을 CI 로 만든다 (빈 앱으로 다섯 플랫폼 묶기를 먼저 확인한다)
-- 상태: merge 됨(PR https://github.com/guny524/seamone/pull/6, merge 커밋 f9b044d, 2026-11-19 08:36), 사람 시험 대기라 이슈는 열려 있다
+- 상태: merge 됨(PR https://github.com/guny524/seamone/pull/6, merge 커밋 8f7e917, 2026-11-19 08:36), 사람 시험 대기라 이슈는 열려 있다
 - 폴더: `project_manage/0001-2026_11_19-app_skeleton_ci` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0001-2026_11_19-app_skeleton_ci`)
 - 작업: 브랜치 `guny524/1-app-skeleton-ci`, worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`, worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 세션 `2e24423d-9a31-4d8f-8f08-04d4faaad311`, 이어하기 `claude --resume 2e24423d-9a31-4d8f-8f08-04d4faaad311 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 06:12(CI 로그를 읽고 고치기), 받은 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-1.md`, 다음 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-2.md`, 검토자 Codex Sol high 읽기 전용(Orca 터미널 `term_2f4338a7-15ec-4163-90c5-7a5141a627c8`, 세션 `01a1f08d-4843-7021-a551-da6656dd58f7`, 2026-11-19 06:25 시작, 결과 `.tmp/review/codex-1.md`, 끝남 표시 `.tmp/review/codex-1.err` 의 DONE)
 - 선행: 없음, 후속: #3 받아쓰기 엔진 interface 와 속도 측정, #5 녹음과 받아쓰기와 수정 화면
@@ -43,7 +43,7 @@
 - 다음 행동: 사람 시험(Windows, Linux, Android 에서 설치 파일을 실행해 첫 화면 확인, macOS 는 worker 가 CI 앱으로 확인했다고 보고), 끝나면 이슈 마무리 코멘트와 끝내기 승인 뒤 폴더를 `_done_` 으로 옮긴다, worktree 는 받아쓰기 엔진 이슈가 이어 써서 남겼다(10-5)
 
 ### #2 시작 모델 후보의 한국어 오류율을 같은 잣대로 잰다 (출발점 모델을 고를 근거의 절반)
-- 상태: 끝남(PR https://github.com/guny524/seamone/pull/7 merge 커밋 ecdc12c, 2026-11-19 08:52, GitHub 이슈 닫음, 이슈 board 10-6 게시와 10-7 기록)
+- 상태: 끝남(PR https://github.com/guny524/seamone/pull/7 merge 커밋 7d069d4, 2026-11-19 08:52, GitHub 이슈 닫음, 이슈 board 10-6 게시와 10-7 기록)
 - 폴더: `project_manage/_done_0002-2026_11_19-start_model_cer` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/_done_0002-2026_11_19-start_model_cer`)
 - 작업: 브랜치 `guny524/2-start-model-cer`, worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`, worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56(다음 일로 라벨 없는 FL 모의실험), 받은 보고 `project_manage/0002-2026_11_19-start_model_cer/.tmp/report-1.md`, 검토자 Codex Sol high 읽기 전용(Orca 터미널 `term_6321555b-e1cf-4596-a9e7-2f1acd2961d1`, 07:55 시작, 결과 `.tmp/review/codex-2.md`)
 - 선행: 없음, 후속: #4 라벨 없는 FL 모의실험, PD9 시작 모델 결정
@@ -51,7 +51,7 @@
 - 다음 행동: 없음(끝남), 남은 일은 whisper-large-v3 측정과 표본 늘리기(다음에 부하가 낮을 때), 맨 위 `ci.yml` 에 research 의 lint 와 test 를 돌리는 job 을 더하는 일은 프로젝트 board 5-4 새 이슈 후보
 
 ### #3 받아쓰기 엔진 interface 를 세우고 기기별 속도를 잰다 (출발점 모델을 고를 근거의 나머지 절반)
-- 상태: 앞 절반 끝(interface, 가짜 엔진, 순수 함수, 엔진 후보 조사), 커밋 dc22e89 를 브랜치 `guny524/3-asr-engine-speed` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/8 을 열었다, 뒤 절반(엔진 구현과 모델 내려받기와 속도 측정)은 남음
+- 상태: 앞 절반 끝(interface, 가짜 엔진, 순수 함수, 엔진 후보 조사), 커밋 e763890 를 브랜치 `guny524/3-asr-engine-speed` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/8 을 열었다, 뒤 절반(엔진 구현과 모델 내려받기와 속도 측정)은 남음
 - 폴더: `project_manage/0003-2026_11_19-asr_engine_speed`
 - 작업: 앞 뼈대 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`(새 파일은 메인이 경로로 골라 별도 브랜치 `guny524/3-asr-engine-speed` 로 커밋한다), worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 마지막 지시 2026-11-19 08:00, 보고 `project_manage/0003-2026_11_19-asr_engine_speed/.tmp/report-1.md`
 - 선행: #1 앱 뼈대(재검토 중, 코드는 같은 worktree 에 있다), 후속: #5 녹음과 받아쓰기와 수정 화면, PD9 시작 모델 결정
@@ -59,7 +59,7 @@
 - 다음 행동: 앞 절반(draft PR 8)은 코드 검토를 아직 받지 않았다, 검토 뒤 merge, 이어서 엔진 후보를 feature 뒤에 넣어 CI 와 노트북에서 빌드되는지부터 본다(whisper-rs 와 qwen-asr 가 잠정 선택, 이슈 board 5-9), 모델 내려받기와 측정은 노트북이 한가할 때
 
 ### #4 라벨 없는 FL 모의실험으로 오류율을 낮추는 방법을 고른다 (이 프로젝트의 핵심 물음)
-- 상태: 작은 규모 실행 끝(기기 8, 기기마다 발화 6, 라운드 2, 파이프라인은 끝까지 돌고 효과는 판정하지 못함), 커밋 1dd84f0 을 브랜치 `guny524/4-unlabeled-fl-sim` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/9 을 열었다, 코드 검토는 아직 받지 않았다
+- 상태: 작은 규모 실행 끝(기기 8, 기기마다 발화 6, 라운드 2, 파이프라인은 끝까지 돌고 효과는 판정하지 못함), 커밋 0d93e7c 을 브랜치 `guny524/4-unlabeled-fl-sim` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/9 을 열었다, 코드 검토는 아직 받지 않았다
 - 폴더: `project_manage/0004-2026_11_19-unlabeled_fl_sim`
 - 작업: 시작 모델 오류율 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`(새 파일은 메인이 경로로 골라 커밋하고 별도 브랜치 `guny524/4-unlabeled-fl-sim` 으로 push 한다), worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56, 보고 `project_manage/0004-2026_11_19-unlabeled_fl_sim/.tmp/report-1.md`
 - 선행: 시작 모델 오류율 이슈(검토 중, 평가 코드와 데이터를 쓴다), 후속: 뒤의 학습 엔진 이슈
@@ -106,7 +106,7 @@
 - PD7: 속도 기준 숫자(데스크톱은 가속기로 실시간의 3배와 CPU 만으로 실시간, 폰은 가속기로 실시간)
 - PD8: 라벨 없이 키우는 방향 여섯 가지와 안전장치
 ### 6-2. 아직 정하지 않은 것 (기다리는 것)
-- main 이력의 작성자 메일: 첫 두 커밋(98ccde9, f17c964)의 작성자 메일이 회사 메일이라 공개 레포에 드러나 있다, 06:09 부터 이 레포의 새 커밋은 GitHub noreply 주소를 쓴다, 이미 push 한 이력을 고치려면 main 에 force push 가 필요해 사용자 승인이 필요하다, 추천: 레포가 새것이라 지금 고치는 것이 가장 싸다(그래도 GitHub 에 이미 남은 사본은 지워지지 않을 수 있다), 답이 없으면 그대로 둔다
+- main 이력의 작성자 메일: 첫 두 커밋(158c9d3, 3169495)의 작성자 메일이 회사 메일이라 공개 레포에 드러나 있다, 06:09 부터 이 레포의 새 커밋은 GitHub noreply 주소를 쓴다, 이미 push 한 이력을 고치려면 main 에 force push 가 필요해 사용자 승인이 필요하다, 추천: 레포가 새것이라 지금 고치는 것이 가장 싸다(그래도 GitHub 에 이미 남은 사본은 지워지지 않을 수 있다), 답이 없으면 그대로 둔다
 - 큰 학습에 쓸 GPU: 집 서버를 써도 되는지와 클라우드 예산, 2026-11-19 에 물었고 답을 받지 못했다, 오늘 밤은 노트북만 쓴다, 직접 설계한 모델의 증류는 이 답 뒤에 한다
 - PD9: 시작 모델, #2 와 #3 의 측정을 기다린다
 - 서명: iOS 실기기 설치와 앱 장터 배포에는 사용자의 Apple 개발자 계정이 필요하다

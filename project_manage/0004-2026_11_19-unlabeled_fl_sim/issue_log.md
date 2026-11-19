@@ -47,7 +47,7 @@
 - 메인 지시의 방법 목록에 없는 두 번째 실행(학습률 3e-3)을 스스로 더했다(`issue_decision.md` D6): 첫 실행이 A0 과 같아 방법 사이를 견줄 수 없어서이고 컴퓨터 시간 약 9분을 썼다, 결과는 "탐색 값" 으로 표시했고 효과의 증거로 쓰지 않았다
 - 시험(`make test`)을 모델이 올라간 동안 돌렸다(08:03 에서 08:04 는 큰 모델의 정답 달기와, 08:17 에서 08:18 은 시작 모델 이슈의 Qwen3-ASR-1.7B LoRA 재시험과, 08:22 에서 08:23 은 두 번째 실행과 겹쳤다): 시험은 모델을 올리지 않지만(가짜 로더를 쓴다) torch 와 transformers 를 불러와 메모리를 같이 썼다, 올린 모델은 한 번에 하나였다(큰 모델의 정답 달기를 끝내고 내린 뒤 학생을 올렸고, 학생 실행 사이의 LoRA 재시험은 대기열로 이어 돌렸다)
 - 08:00 에 돌린 기기 데이터 만들기의 옛 코드가 공유 `hub/datasets--kresnik--zeroth_korean` 를 통째로 지웠다(시작 모델 이슈의 검토 지적 7-9 의 결함과 같은 것), 그 폴더에는 이 이슈가 받은 파일뿐이어서 잃은 것은 없고 지금은 전용 cache 로 고쳤다(`issue_decision.md` D7)
-- 시작 모델 이슈의 검토 지적 여섯 칸(08:15 지시)을 먼저 고치느라 이 이슈의 작업이 08:10 에서 08:23 사이 멈췄고(고친 것은 보고 2 와 메인의 커밋 5a4c397 에 있다), 두 번째 검토의 새 지적 셋(08:40 지시)을 고치느라 08:38 에서 08:45 사이 다시 멈췄다(보고 3), 그 동안 컴퓨터에서는 첫 실행이 끝나고(08:14) LoRA 재시험(08:14 에서 08:20)과 두 번째 실행(08:21 부터)이 차례로 돌았다, 줄인 규모는 없다
+- 시작 모델 이슈의 검토 지적 여섯 칸(08:15 지시)을 먼저 고치느라 이 이슈의 작업이 08:10 에서 08:23 사이 멈췄고(고친 것은 보고 2 와 메인의 커밋 6d642da 에 있다), 두 번째 검토의 새 지적 셋(08:40 지시)을 고치느라 08:38 에서 08:45 사이 다시 멈췄다(보고 3), 그 동안 컴퓨터에서는 첫 실행이 끝나고(08:14) LoRA 재시험(08:14 에서 08:20)과 두 번째 실행(08:21 부터)이 차례로 돌았다, 줄인 규모는 없다
 - D5(처음 LoRA 가 0 이라 학습 전 학생이 whisper-small 과 같은 글을 낸다)는 직접 대조하지 않았다, 학습률 1e-4 에서 A2 와 A3 의 가설이 A0 과 100개 중 99개 같은 것이 간접 증거다
 
 ## 7. 자원
@@ -59,7 +59,7 @@
   - 가중치 whisper-small 과 whisper-large-v3-turbo 와 `seamone_fl`: 큰 규모 실행이 쓴다, 그 실행이 끝나면 메인이 지운다
 
 ## 8. 변경 범위
-- 기준 커밋 5a4c397(메인이 시작 모델 이슈의 첫 검토 반영을 이미 커밋했다), stage 하지 않고 두었다
+- 기준 커밋 6d642da(메인이 시작 모델 이슈의 첫 검토 반영을 이미 커밋했다), stage 하지 않고 두었다
   - 이 이슈의 새 파일: `research/seamone_research/fedavg.py`, `fl_data.py`, `fl_sim.py`, `fl_train.py`, `pseudo_label.py`, `research/data/fl_client_ids.json`, `research/tests/test_fedavg.py`, `test_fl_data.py`, `test_fl_train.py`, `test_pseudo_label.py`, `research/results/2026_11_19_unlabeled_fl_sim.md`
   - 이 이슈가 고친 추적 파일: `research/Makefile`(`fmt`, `fl-data`, `fl-label`, `fl-sim` target 과 `FL_*` 변수), `research/README.md`(fl 관련 줄과 `fmt` 줄)
   - 시작 모델 이슈의 두 번째 검토 반영(보고 3, 그 이슈 몫): `research/seamone_research/data.py`, `measure.py`, `research/tests/test_data_cache.py`, `test_measure_config.py`, 새 파일 `research/tests/test_measure_resume.py`, `research/README.md` 의 측정 설정 줄 한 줄(이 파일에 두 이슈의 줄이 섞여 있다)

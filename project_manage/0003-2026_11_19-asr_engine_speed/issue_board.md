@@ -60,7 +60,7 @@
 
 ## 4. 조사
 ### 4-1. 기존 코드와 구현의 핵심, 의도
-(`git ls-files` 와 `git grep` 으로 확인한 것, 이 worktree 는 앱 뼈대(#1)의 커밋 12bb603 위다)
+(`git ls-files` 와 `git grep` 으로 확인한 것, 이 worktree 는 앱 뼈대(#1)의 커밋 4c4d2e4 위다)
 - 받아쓰기 코드는 레포에 없었다(`git grep -n -i transcri HEAD -- crates app Makefile scripts .github` 0건), `README.md:31` 에 "받아쓰기 엔진(계획)" 한 줄뿐이다
 - `crates/seamone-core/src/lib.rs`: 화면과 앱 껍데기가 같이 쓰는 타입을 `serde` 만으로 정의한다(`AppInfo`), WASM 으로도 컴파일되고 `#![forbid(unsafe_code)]` 다, 의도 앞 이슈의 "화면과 껍데기가 주고받는 타입은 `seamone-core` 에 한 번만 정의", 그래서 전사 조각 타입도 `serde` 만 쓴다
 - 맨 위 `Cargo.toml`: workspace 멤버와 공통 lint(clippy all 과 pedantic, `make lint` 가 `-D warnings` 로 돈다), 새 crate 는 `[lints] workspace = true` 로 같은 lint 를 받는다

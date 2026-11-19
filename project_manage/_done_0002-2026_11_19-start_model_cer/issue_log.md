@@ -13,7 +13,7 @@
   - 7-6 학습 가능성: whisper-small 은 두 범위와 두 장치로 쟀고, whisper-large-v3-turbo 와 Qwen3-ASR-1.7B 는 범위 decoder 의 Apple GPU 만 쟀다
 
 ## 2. 변경 범위
-- 기준 커밋 98ccde9(`git rev-parse --short HEAD`, 브랜치 `guny524/2-start-model-cer`, 07:28), 이 커밋 뒤로 커밋한 것은 없다
+- 기준 커밋 158c9d3(`git rev-parse --short HEAD`, 브랜치 `guny524/2-start-model-cer`, 07:28), 이 커밋 뒤로 커밋한 것은 없다
 - 새 파일 26개, 전부 `research/` 아래이고 추적되지 않은 상태다(`git status --short -uall`), stage 와 커밋은 메인이 한다
   - `research/pyproject.toml`, `research/uv.lock`, `research/Makefile`, `research/.gitignore`, `research/README.md`
   - `research/data/eval_ids.json`
@@ -137,7 +137,7 @@
 - 모델을 불러올 때마다 `snapshot_download` 가 revision 의 파일이 있는지 본다(이미 받은 것은 다시 받지 않는다), 네트워크가 없으면 `HF_HUB_OFFLINE=1` 을 줘야 할 수 있다(확인하지 못했다)
 
 ## 4. 변경 범위와 커밋을 나누는 법
-- 기준 커밋 d8b92ee, 이 칸들의 수정은 추적 파일 열한 개와 새 시험 파일 넷이다
+- 기준 커밋 65bb8c4, 이 칸들의 수정은 추적 파일 열한 개와 새 시험 파일 넷이다
   - 이 칸들(검토 지적 반영, 먼저 커밋): `research/seamone_research/cer.py`, `data.py`, `hypotheses.py`, `lora_probe.py`, `measure.py`, `models.py`, `prefetch.py`, `score.py`, `transcribe.py`, `research/results/2026_11_19_start_model_cer.md`, `research/tests/test_lora_probe.py`, 새 파일 `research/tests/test_hypotheses.py`, `test_data_cache.py`, `test_models_revision.py`, `test_measure_config.py`
   - 라벨 없는 FL 모의실험(그 뒤 커밋): `research/Makefile` 전부, `research/README.md` 의 fl 관련 줄, 새 파일 `research/seamone_research/fedavg.py`, `fl_data.py`, `fl_sim.py`, `fl_train.py`, `pseudo_label.py`, `research/data/fl_client_ids.json`, `research/tests/test_fedavg.py`, `test_fl_data.py`, `test_fl_train.py`, `test_pseudo_label.py`
   - `research/README.md` 한 파일에 두 이슈의 줄이 섞여 있다: `<세트>.config.json` 을 적은 한 줄만 이 칸들의 몫이다
@@ -183,7 +183,7 @@
 - 라벨 없는 FL 모의실험은 이 칸들 때문에 08:38 에서 08:45 사이 멈췄다(컴퓨터 실행은 없었다)
 
 ## 4. 변경 범위
-- 이 칸들의 수정(기준 커밋 5a4c397 뒤, `git status`)
+- 이 칸들의 수정(기준 커밋 6d642da 뒤, `git status`)
   - 고친 추적 파일: `research/seamone_research/data.py`, `research/seamone_research/measure.py`, `research/tests/test_data_cache.py`, `research/tests/test_measure_config.py`
   - 새 파일: `research/tests/test_measure_resume.py`
   - `research/README.md`: 측정 설정 줄에 "표본 목록 해시" 를 더한 한 줄만 이 칸들의 몫이고 나머지 줄은 라벨 없는 FL 모의실험의 것이다(한 파일에 섞여 있다)

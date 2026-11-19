@@ -63,7 +63,7 @@
 ## 4. 조사
 ### 4-1. 기존 코드와 구현의 핵심, 의도
 (`git ls-files` 와 Tauri 저장소의 tag `tauri-cli-v2.12.6` 소스로 확인한 것)
-- 시작 시점의 레포에는 코드와 CI 가 없었다, 커밋 98ccde9 가 `README.md`, `LICENSE`, `.gitignore`, `project_manage/` 의 기록만 넣었다
+- 시작 시점의 레포에는 코드와 CI 가 없었다, 커밋 158c9d3 가 `README.md`, `LICENSE`, `.gitignore`, `project_manage/` 의 기록만 넣었다
 - `.gitignore`(맨 위): `.tmp/`, `target/`, `dist/` 를 이미 뺀다, 그래서 `app/ui/dist` 와 workspace 의 `target/` 은 따로 빼지 않는다
 - Tauri 2 가 정한 구조(출처: Tauri 저장소의 `crates/tauri-cli/src/helpers/app_paths.rs`, `crates/tauri-cli/src/build.rs`, create-tauri-app 저장소의 `templates/_base_/src-tauri` 와 `templates/template-leptos`)
   - Android 와 iOS 는 껍데기 crate 의 `#[cfg_attr(mobile, tauri::mobile_entry_point)] pub fn run()` 을 불러 앱을 띄운다, 그래서 껍데기 crate 는 `crate-type = ["staticlib", "cdylib", "rlib"]` 와 `_lib` 로 끝나는 lib 이름을 가져야 하고 `main.rs` 는 그 lib 의 `run()` 만 부른다
@@ -144,12 +144,12 @@
   - 돌려 본 명령: `make fmt`, `make lint`, `make test`, `make -n install`, `scripts/install-tools.sh`(실행해 `cargo-tauri` 2.12.6 과 `trunk` 0.22.2 를 설치했다)
   - 돌리지 못한 것: `make build` 와 `make dev`(메인 지시 05:58), README 3-2 의 "macOS 에서는 `target/release/bundle/` 아래 `.app` 과 `.dmg` 가 나온다" 는 Tauri 문서가 정한 위치를 적은 것이라 이 레포에서 확인하지 못했다(7-10 의 artifact 경로로 맞춘다), `make install`(소스 컴파일이라 이 노트북에서는 돌리지 않았다, D3)
 - [x] 7-10. CI 확인과 고치기: 메인이 push 했다고 알리면 `gh run list --branch <브랜치>` 와 `gh run view <id> --log-failed` 로 실패한 job 의 로그를 직접 읽고 고친다, 고친 뒤 보고를 쓰면 메인이 다시 push 한다, 같은 job 이 세 번 고쳐도 실패하면 원인 가설과 로그 줄을 4-2 에 적고 다른 job 부터 통과시킨다 / 검증: 3-4 의 CI 기준, `gh run download` 로 받은 artifact 의 이름과 크기를 적는다(받은 파일은 확인 뒤 지운다)
-  - 실행(커밋 a3ad95f, 2026-11-19 06:09 에 메인이 push 하고 draft PR 을 열었다): `ci` push 44398448917 과 pull_request 44398471687 의 `lint-test`(4분 38초)가 성공했고, `build` pull_request 44398471809 의 `desktop (macos-arm64)`, `desktop (macos-x86_64)`, `desktop (windows-x86_64)`, `desktop (linux-x86_64)`, `android`, `ios` 여섯 job 이 모두 첫 시도에서 성공했다(4분 9초 ~ 6분 44초), 실패한 job 이 없어 고칠 로그 오류 줄도 없다
+  - 실행(커밋 24ff6d2, 2026-11-19 06:09 에 메인이 push 하고 draft PR 을 열었다): `ci` push 44398448917 과 pull_request 44398471687 의 `lint-test`(4분 38초)가 성공했고, `build` pull_request 44398471809 의 `desktop (macos-arm64)`, `desktop (macos-x86_64)`, `desktop (windows-x86_64)`, `desktop (linux-x86_64)`, `android`, `ios` 여섯 job 이 모두 첫 시도에서 성공했다(4분 9초 ~ 6분 44초), 실패한 job 이 없어 고칠 로그 오류 줄도 없다
   - artifact(`gh run download 44398471809` 로 받은 파일의 이름과 바이트): `seamone-macos-arm64/dmg/seamone_0.1.0_aarch64.dmg` 2,227,221, `seamone-macos-x86_64/dmg/seamone_0.1.0_x64.dmg` 2,378,247, `seamone-windows-x86_64/nsis/seamone_0.1.0_x64-setup.exe` 1,477,948 과 `seamone-windows-x86_64/msi/seamone_0.1.0_x64_en-US.msi` 2,162,688, `seamone-linux-x86_64/deb/seamone_0.1.0_amd64.deb` 2,092,248 과 `seamone-linux-x86_64/appimage/seamone_0.1.0_amd64.AppImage` 80,640,504, `seamone-android-apk/universal/debug/app-universal-debug.apk` 52,237,431(artifact 압축본 16,460,514), `seamone-ios-simulator/seamone-ios-simulator.zip` 15,257,495
   - 내용 확인: APK 의 `lib/` 는 `arm64-v8a/libseamone_lib.so` 하나, iOS zip 의 `seamone.app/seamone` 은 Mach-O arm64 에 `platform IOSSIMULATOR`(minos 15.0)이고, macOS dmg 의 `.app` 은 `CFBundleIdentifier io.github.guny524.seamone`, 버전 0.1.0, ad-hoc 서명, 5.0MB 다, 로그의 경고는 실패가 아니다(iOS 의 `No code signing certificates found` 는 `--no-sign` 때문이고 Android 의 `source value 8 is obsolete` 는 Tauri 가 만든 `gen/android` 템플릿의 Java 8 설정이다)
   - 첫 화면 확인: CI 가 만든 macOS arm64 dmg 의 `.app` 을 이 노트북에서 실행해 창을 맨 앞으로 올리고 캡처하니 `seamone` 과 `seamone 0.1.0` 이 보인다(7-16, 캡처는 이슈 폴더 `.tmp/macos-arm64-app-window.png`), macOS x86_64, Windows, Linux, Android 의 설치 파일은 이 노트북에서 실행하지 못했다(사람 시험)
 - [ ] 7-11. 8절 수정 요약을 쓰고 마지막 보고를 쓴다
-(아래 7-12 ~ 7-15 는 Codex Sol high 의 읽기 전용 검토(06:25 시작 06:30 끝, 대상은 커밋 a3ad95f 하나)가 낸 지적 네 개를 메인이 원문으로 확인해 만든 칸이다, 검토자는 clippy 와 시험을 sandbox 의 쓰기 거부로 돌리지 못했고 서식 검사는 통과했다고 보고했다, 출처는 이슈 폴더 `.tmp/review-cells-1.md`)
+(아래 7-12 ~ 7-15 는 Codex Sol high 의 읽기 전용 검토(06:25 시작 06:30 끝, 대상은 커밋 24ff6d2 하나)가 낸 지적 네 개를 메인이 원문으로 확인해 만든 칸이다, 검토자는 clippy 와 시험을 sandbox 의 쓰기 거부로 돌리지 못했고 서식 검사는 통과했다고 보고했다, 출처는 이슈 폴더 `.tmp/review-cells-1.md`)
 - [ ] 7-12. [낮음, 방향 검토] CI 와 Makefile 의 설치 파일 빌드 명령이 둘이고 로컬 설치 파일 빌드를 안내해 프로젝트 결정 PD4(설치 파일은 GitHub Actions 에서만 만든다)와 어긋난다 / 무엇이: `.github/workflows/build.yml:77` 은 `cargo tauri build --target ... --bundles ...` 를 직접 부르고 `Makefile:34-35` 의 `build` target 은 CI 가 쓰지 않는다, README 3-2 는 "`make build`: 지금 OS 의 설치 파일을 만든다" 라고 안내한다 / 고칠 방향: desktop job 의 그 단계가 `make build TAURI_BUILD_ARGS="--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}"` 를 부르게 해 Makefile 을 설치 파일 빌드 명령의 유일한 정의로 두고, README 3-2 의 `make build` 줄을 "CI 가 설치 파일을 만드는 명령이다, 이 프로젝트는 로컬에서 설치 파일을 만들지 않는다(PD4)" 로 바꾼다, Windows runner 에 `make` 가 없어 실패하면 그 단계 앞에 `if: runner.os == 'Windows'` 로 `choco install make -y` 를 더한다 / 검증: CI 의 desktop 네 job 이 통과하고 artifact 네 개가 그대로 올라온다
   - 고친 것(CI 확인 대기): `.github/workflows/build.yml:83-85` 의 단계 `Build the installers` 가 `make build TAURI_BUILD_ARGS="--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}"` 를 `shell: bash` 로 부른다(전: `cargo tauri build --target ... --bundles ...` 를 직접 불렀다), `:65-67` 에 Windows 전용 단계 `choco install make --version=4.4.1 -y --no-progress` 를 더했다(Chocolatey 커뮤니티 feed 의 `make` 최신 판이 4.4.1 이다, Windows runner 이미지 목록에 make 가 없다), `README.md:45` 의 `make build` 줄을 "CI 가 설치 파일을 만드는 명령이고 이 프로젝트는 노트북에서 설치 파일을 만들지 않는다" 로 바꿨다(전: "지금 OS 의 설치 파일을 만든다, macOS 에서는 `target/release/bundle/` 아래 `.app` 과 `.dmg` 가 나온다")
   - 남은 검증: CI 의 desktop 네 job 이 통과하고 artifact 네 개가 그대로 올라오는지(push 뒤, Windows 에서 `make` 가 잡히는지가 불확실하다)
@@ -188,7 +188,7 @@
 - `.github/workflows/build.yml`(새 파일): 데스크톱 넷(macOS arm64 와 x86_64, Windows, Linux), Android apk, iOS 시뮬레이터 `.app` 의 설치 파일 job
 - `scripts/install-tools.sh`(새 파일): CI 와 노트북이 tauri-cli 와 trunk 를 공식 릴리스의 미리 빌드된 파일로 받는다
 - `README.md`(고침): 2-2 구성요소의 앱 껍데기와 화면을 "있음", 도메인을 "일부 있음" 으로, 3절(빌드)을 3-1 ~ 3-4 로 채움
-(아래는 커밋 a3ad95f 뒤에 검토 칸 7-12 ~ 7-15 로 더 고친 파일이다, `Cargo.lock` 은 바뀌지 않았다)
+(아래는 커밋 24ff6d2 뒤에 검토 칸 7-12 ~ 7-15 로 더 고친 파일이다, `Cargo.lock` 은 바뀌지 않았다)
 - `.github/workflows/build.yml`(고침): desktop job 이 `make build TAURI_BUILD_ARGS=...` 로 설치 파일을 만든다(Windows 는 `choco install make --version=4.4.1` 을 먼저, 7-12), 모든 `uses:` 를 commit SHA 로 고정(7-13), android job 에 debug keystore 캐시(`actions/cache`, key `android-debug-keystore-v1`)와 지문을 로그에 찍는 단계(7-14)
 - `.github/workflows/ci.yml`(고침): `uses:` 둘을 commit SHA 로 고정(7-13)
 - `scripts/install-tools.sh`(고침): 받은 압축 파일의 sha256(여섯 값)이 다르거나 값이 없으면 설치하지 않고 1 로 끝난다(7-13)
@@ -199,20 +199,20 @@
 - `app/src-tauri/Cargo.toml`(고침): `[dev-dependencies]` 에 `tauri` 의 `test` feature(7-15)
 
 ## 9. 지금 상태
-- 메인이 직접 확인한 것: 브랜치가 main 에 merge 됐다(merge 커밋 f9b044d, 2026-11-19 08:36), 마지막 CI 는 `ci` 둘과 `build` 의 job 6개가 모두 성공이고 Android job 의 로그에 `committed keystore: 'true'` 와 레포 키와 같은 sha256 이 찍혔다, 설치 파일 여덟 개의 형식을 받아 `file` 로 확인했다(첫 CI 기준), 로컬 `make lint` 와 `make test` 는 두 번 EXIT=0
+- 메인이 직접 확인한 것: 브랜치가 main 에 merge 됐다(merge 커밋 8f7e917, 2026-11-19 08:36), 마지막 CI 는 `ci` 둘과 `build` 의 job 6개가 모두 성공이고 Android job 의 로그에 `committed keystore: 'true'` 와 레포 키와 같은 sha256 이 찍혔다, 설치 파일 여덟 개의 형식을 받아 `file` 로 확인했다(첫 CI 기준), 로컬 `make lint` 와 `make test` 는 두 번 EXIT=0
 - worker 주장(아직 확인 전): CI 가 만든 macOS 앱을 노트북에서 실행해 첫 화면(`seamone`, `seamone 0.1.0`)이 뜬다(캡처 `.tmp/macos-arm64-app-window.png`, 처음 창이 비어 보인 것은 창이 맨 앞이 아니어서로 추측)
 - 남은 것: 사람 시험(10-4), 이슈 마무리 코멘트와 끝내기 승인(사람 시험 뒤)
 - 판단거리: 앱 identifier(D4)와 임시 아이콘은 사용자 확인 대기(추천 그대로), 새 이슈 후보는 프로젝트 board 5-4
 
 ## 10. Closing
 ### 10-1. 검토
-- Codex Sol(`gpt-6.1-sol`) high 읽기 전용 두 번: 첫 검토(06:25, 지적 네 개: 낮음 둘, 중간 둘)는 모두 원문을 열어 맞다고 확인해 받아 고쳤다(커밋 12bb603), 두 번째 검토(08:07 시작 08:13 끝)는 이전 지적 네 개를 고쳐짐 셋과 일부 하나(Android 키가 캐시 하나에만 기대는 것)로 판정하고 새 지적 둘(낮음: README 가 모바일 빌드도 `make build` 로 설명, 중간: 캐시만으로는 Android 키가 보존되지 않는 경로)을 냈다, 둘 다 원문으로 확인해 받아 고쳤다(75aeb5e 는 README 와 workflow, aac2755 는 레포에 시험용 키를 두는 것), 검토 반복은 두 번에서 멈추는 규칙(review skill 4절)이라 세 번째 검토 대신 CI 로 확인했다, 해당 없음으로 둔 지적은 없다, 원문은 `.tmp/review/codex-1.md`, `codex-3.md`
+- Codex Sol(`gpt-6.1-sol`) high 읽기 전용 두 번: 첫 검토(06:25, 지적 네 개: 낮음 둘, 중간 둘)는 모두 원문을 열어 맞다고 확인해 받아 고쳤다(커밋 4c4d2e4), 두 번째 검토(08:07 시작 08:13 끝)는 이전 지적 네 개를 고쳐짐 셋과 일부 하나(Android 키가 캐시 하나에만 기대는 것)로 판정하고 새 지적 둘(낮음: README 가 모바일 빌드도 `make build` 로 설명, 중간: 캐시만으로는 Android 키가 보존되지 않는 경로)을 냈다, 둘 다 원문으로 확인해 받아 고쳤다(c2c9e91 는 README 와 workflow, 2337513 는 레포에 시험용 키를 두는 것), 검토 반복은 두 번에서 멈추는 규칙(review skill 4절)이라 세 번째 검토 대신 CI 로 확인했다, 해당 없음으로 둔 지적은 없다, 원문은 `.tmp/review/codex-1.md`, `codex-3.md`
 ### 10-2. 커밋 직전 증거 대조
-- 검증한 판본: 이슈 브랜치 aac2755, 그때의 기준 브랜치 b0ce9cd
-- 마지막 수정 뒤 시험: aac2755 는 CI 로 확인했다(`ci` push, `ci` pull_request, `build` pull_request 모두 success, `build` 의 Android job 에서 레포 키 사용 확인), 로컬 시험은 12bb603 에서 `make lint`, `make test` EXIT=0(시험 4개)
+- 검증한 판본: 이슈 브랜치 2337513, 그때의 기준 브랜치 0ef6953
+- 마지막 수정 뒤 시험: 2337513 는 CI 로 확인했다(`ci` push, `ci` pull_request, `build` pull_request 모두 success, `build` 의 Android job 에서 레포 키 사용 확인), 로컬 시험은 4c4d2e4 에서 `make lint`, `make test` EXIT=0(시험 4개)
 - 요구마다(3-1): R1 변경에 있음(화면, command, core 한 줄기와 IPC 시험), R2 변경에 있음(`make lint`, `test`, `build`, CI 의 desktop 이 `make build` 를 부름), R3 변경에 있음(`ci.yml`), R4 변경에 있음(dmg 둘, exe 와 msi, deb 와 AppImage 가 artifact 로 올라옴), R5 변경에 있음(debug apk, 서명 키는 레포의 키), R6 변경에 있음(iOS 시뮬레이터 zip), 요구하지 않은 동작은 임시 아이콘과 `scripts/install-tools.sh` 의 해시 확인(검토 지적으로 더함)
 - 최종 방안대로 했는지: 같음(구현 방향 PD4, PD5), 방향 안의 선택은 이슈 decision 의 D1 에서 D11
-- 수정 요약(8절)이 실제 diff 의 파일과 같은지: 다름, `.github/android/debug.keystore`(메인이 더한 커밋 aac2755)가 8절에 없고 나머지는 8절이 파일을 묶어 적은 차이다(아이콘 52개 등)
+- 수정 요약(8절)이 실제 diff 의 파일과 같은지: 다름, `.github/android/debug.keystore`(메인이 더한 커밋 2337513)가 8절에 없고 나머지는 8절이 파일을 묶어 적은 차이다(아이콘 52개 등)
 - 완료 기준마다(3-4): 로컬 `make lint`, `test` 통과, CI 의 lint 와 test 통과, 설치 파일 여덟 개 artifact 통과, 로컬 `make build` 는 하지 않음(PD4 와 메모리 한계로 CI 확인으로 바꿈, 메인의 결정), 사람 시험은 대기
 - 결과: 통과(사람 시험 대기)
 ### 10-3. merge 직전 재확인
@@ -227,7 +227,7 @@
 ### 10-7. 끝내기 승인
 - 사람 시험이 있는 이슈라 사용자가 됐다고 해야 끝난다, 대기
 ### 10-8. 커밋과 merge
-- a3ad95f feat: Tauri 2 앱 뼈대와 다섯 플랫폼 설치 파일 CI 를 추가, 12bb603 fix: 설치 도구 해시 확인, action SHA 고정, Android 키 고정, IPC 시험 추가, 75aeb5e fix: Android 서명 키를 레포에서 가져오게 하고 README 의 빌드 설명을 맞춤, aac2755 fix: Android debug 서명 키를 레포에 두어 모든 실행에서 같게 함, merge f9b044d(2026-11-19)
+- 24ff6d2 feat: Tauri 2 앱 뼈대와 다섯 플랫폼 설치 파일 CI 를 추가, 4c4d2e4 fix: 설치 도구 해시 확인, action SHA 고정, Android 키 고정, IPC 시험 추가, c2c9e91 fix: Android 서명 키를 레포에서 가져오게 하고 README 의 빌드 설명을 맞춤, 2337513 fix: Android debug 서명 키를 레포에 두어 모든 실행에서 같게 함, merge 8f7e917(2026-11-19)
 
 ## 11. 참고
 - Tauri 2 문서 https://v2.tauri.app, 다섯 플랫폼 묶기와 mobile init

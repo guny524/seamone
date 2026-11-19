@@ -53,21 +53,21 @@
 ## 2026-11-19 06:20 메인(Sonnet max) 점검
 - 상태: app worker 가 첫 보고(`project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-1.md`)를 썼다, research worker 는 LoRA 시험을 쉬는 중이고 보고 없음
 - 메인이 직접 확인한 것: 06:07 worktree 에서 `CARGO_BUILD_JOBS=1 nice -n 10 make lint` EXIT=0, `make test` EXIT=0(시험 4개 통과: core 3개와 command 1개), 커밋 대상 77개 파일에 `.tmp`, `target`, `gen`, `dist` 와 비밀값이 섞이지 않음
-- 한 일: 커밋 a3ad95f(`feat: Tauri 2 앱 뼈대와 다섯 플랫폼 설치 파일 CI 를 추가`, 77개 파일)를 브랜치 `guny524/1-app-skeleton-ci` 에 push, draft PR https://github.com/guny524/seamone/pull/6 을 열었다(`build.yml` 이 pull_request 에서만 돌아서), CI 세 개(ci push, ci pull_request, build pull_request)가 06:10 에 시작했다
+- 한 일: 커밋 24ff6d2(`feat: Tauri 2 앱 뼈대와 다섯 플랫폼 설치 파일 CI 를 추가`, 77개 파일)를 브랜치 `guny524/1-app-skeleton-ci` 에 push, draft PR https://github.com/guny524/seamone/pull/6 을 열었다(`build.yml` 이 pull_request 에서만 돌아서), CI 세 개(ci push, ci pull_request, build pull_request)가 06:10 에 시작했다
 - 정한 것: 노트북 메모리가 한계라 로컬 `make build` 와 `cargo tauri dev` 는 하지 않고 설치 파일은 CI 로만 확인한다(프로젝트 PD4 에서 나온 결정, 메인), 이 이슈 완료 기준의 로컬 `make build` 와 창 확인은 CI artifact 와 사람 시험으로 대신한다
 - 고친 것: 이 레포의 커밋 작성자 메일을 회사 메일에서 GitHub noreply 주소로 바꿨다(레포 로컬 설정), 이미 push 한 두 커밋은 그대로이고 사용자에게 올린다(project_board 6-2)
-- 실수: 06:15 의 커밋 91398a2 는 메시지(`docs: 앱 뼈대 보고 확인과 CI 시작을 기록에 적음`)와 달리 두 worker 가 쓰던 이슈 기록(두 이슈의 issue_board, issue_decision, issue_log)만 담았다, 기록 편집 스크립트가 중간에 멈췄는데 뒤 명령(커밋과 push)이 그대로 실행돼서다, 내용은 worker 의 정상 기록이라 되돌리지 않고 이 항목으로 바로잡는다
+- 실수: 06:15 의 커밋 e6ea2be 는 메시지(`docs: 앱 뼈대 보고 확인과 CI 시작을 기록에 적음`)와 달리 두 worker 가 쓰던 이슈 기록(두 이슈의 issue_board, issue_decision, issue_log)만 담았다, 기록 편집 스크립트가 중간에 멈췄는데 뒤 명령(커밋과 push)이 그대로 실행돼서다, 내용은 worker 의 정상 기록이라 되돌리지 않고 이 항목으로 바로잡는다
 - 다음: app worker 가 CI 로그를 읽고 고쳐 report-2.md 를 쓰면 메인이 확인해 push 한다, 06:22 에 CI 결과를 한 번 본다(일회성 cron), Claude Code 가 메모리 부족으로 메인의 background 대기 둘을 멈춘 뒤 새 대기는 걸지 않았다
 
 ## 2026-11-19 06:28 메인(Sonnet max) 검토
 - 상태: GitHub Actions 세 개(ci 의 push 와 pull_request, build 의 pull_request)가 모두 성공했다, build 의 job 6개(ios, android, desktop 의 windows-x86_64, macos-arm64, macos-x86_64, linux-x86_64)가 모두 성공이고 건너뛴 단계는 macOS 와 Windows 의 "Install the Tauri Linux dependencies" 뿐이다(기대한 것)
 - 메인이 직접 확인한 것: 받은 artifact 의 이름, 크기, 형식 — Android `app-universal-debug.apk` 49.8MB(zip), iOS `seamone-ios-simulator.zip` 14.6MB, macOS `seamone_0.1.0_aarch64.dmg` 2.1MB 와 `seamone_0.1.0_x64.dmg` 2.3MB, Windows `seamone_0.1.0_x64_en-US.msi` 2.1MB 와 `seamone_0.1.0_x64-setup.exe`(NSIS) 1.4MB, Linux 78MB 는 내려받는 중이라 이름과 형식은 아직 확인하지 못했다
-- 한 일: 검토를 시작했다, 검토자는 Codex Sol(`gpt-6.1-sol`) high 읽기 전용(`-s read-only`), 의도를 주지 않고 변경과 레포만 보게 했다, 시작 전 worktree 의 미커밋 변경은 0 줄(스냅샷 `.tmp/review/status-before-1.txt`), 대상은 커밋 a3ad95f 하나(77개 파일, Cargo.lock 5416줄 포함)
+- 한 일: 검토를 시작했다, 검토자는 Codex Sol(`gpt-6.1-sol`) high 읽기 전용(`-s read-only`), 의도를 주지 않고 변경과 레포만 보게 했다, 시작 전 worktree 의 미커밋 변경은 0 줄(스냅샷 `.tmp/review/status-before-1.txt`), 대상은 커밋 24ff6d2 하나(77개 파일, Cargo.lock 5416줄 포함)
 - 정한 것: 검토자를 Claude 의 background 명령이 아니라 Orca 터미널에 띄웠다(Claude Code 가 메모리 부족일 때 background 명령을 멈추므로), 결과는 파일로 받고 다음 점검에서 읽는다
 - 다음: 검토 결과를 읽고 지적마다 원문을 열어 맞는 것만 이슈 board 7절에 칸으로 더한다, 검토 지적을 고친 뒤에는 lint 와 test 를 다시 돌리고 CI 를 다시 보고 재검토는 두 번까지
 
 ## 2026-11-19 06:58 메인(Sonnet max) 검토
-- 검토: Codex Sol(`gpt-6.1-sol`) high 읽기 전용, 06:25 시작 06:30 끝, 앞뒤 미커밋 변경 같음(스냅샷 `.tmp/review/status-before-1.txt` 와 `status-after-1.txt`), 대상은 커밋 a3ad95f 하나, 원문은 `.tmp/review/codex-1.md`(세션 `01a1f08d-4843-7021-a551-da6656dd58f7`), 검토자는 clippy 와 시험을 sandbox 쓰기 거부로 돌리지 못했고 서식 검사는 통과했다고 보고했다
+- 검토: Codex Sol(`gpt-6.1-sol`) high 읽기 전용, 06:25 시작 06:30 끝, 앞뒤 미커밋 변경 같음(스냅샷 `.tmp/review/status-before-1.txt` 와 `status-after-1.txt`), 대상은 커밋 24ff6d2 하나, 원문은 `.tmp/review/codex-1.md`(세션 `01a1f08d-4843-7021-a551-da6656dd58f7`), 검토자는 clippy 와 시험을 sandbox 쓰기 거부로 돌리지 못했고 서식 검사는 통과했다고 보고했다
 - 지적 네 개를 메인이 원문을 열어 모두 맞다고 확인했다
   - 낮음, 방향: CI 의 desktop job 은 `cargo tauri build` 를 직접 부르고(`.github/workflows/build.yml:77`) `Makefile` 의 `build` target 은 CI 가 쓰지 않으며 README 3-2 는 로컬 설치 파일 빌드를 안내해 프로젝트 결정 PD4 와 어긋난다 -> 받음, CI 가 `make build` 를 부르게 하고 README 를 고친다
   - 중간, 결함: `scripts/install-tools.sh` 가 받은 압축 파일의 해시를 확인하지 않고, 두 workflow 의 `uses:` 12곳이 이동 가능한 태그다 -> 받음, 해시 확인과 commit SHA 고정
@@ -79,7 +79,7 @@
 
 ## 2026-11-19 07:58 메인(Sonnet max) 점검
 - 상태: 두 worker 가 보고를 썼다, app worker 의 두 번째 보고(`project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-2.md`)와 research worker 의 첫 보고(`project_manage/0002-2026_11_19-start_model_cer/.tmp/report-1.md`)
-- 앱 뼈대(app worker 보고 2): 검토 지적 네 개를 파일 8개에 고쳤다, 메인이 직접 확인한 것: worktree 에서 `make lint`, `make test` EXIT=0(시험 4개, IPC 시험 포함), build.yml 과 install-tools.sh 의 diff 를 읽었고, 고정한 action SHA 다섯 개(checkout, upload-artifact, setup-java, rust-cache, cache)가 각 이동 태그의 현재 commit 과 같음을 `gh api` 로 대조했다, 커밋 12bb603(`fix: 설치 도구 해시 확인, action SHA 고정, Android 키 고정, IPC 시험 추가`)를 push 해 CI 가 07:52 에 다시 시작했다
+- 앱 뼈대(app worker 보고 2): 검토 지적 네 개를 파일 8개에 고쳤다, 메인이 직접 확인한 것: worktree 에서 `make lint`, `make test` EXIT=0(시험 4개, IPC 시험 포함), build.yml 과 install-tools.sh 의 diff 를 읽었고, 고정한 action SHA 다섯 개(checkout, upload-artifact, setup-java, rust-cache, cache)가 각 이동 태그의 현재 commit 과 같음을 `gh api` 로 대조했다, 커밋 4c4d2e4(`fix: 설치 도구 해시 확인, action SHA 고정, Android 키 고정, IPC 시험 추가`)를 push 해 CI 가 07:52 에 다시 시작했다
   - worker 가 CI 가 만든 macOS 앱을 이 노트북에서 실행해 첫 화면(`seamone`, `seamone 0.1.0`, 화면이 IPC 로 command 를 불러 받은 값)을 확인했다고 보고했다(캡처는 이슈 폴더 `.tmp/macos-arm64-app-window.png`), 이 확인은 worker 주장이고 메인이 직접 확인하지는 않았다
   - worker 가 정리하다 메인이 쓴 `.tmp/start-1.md` 를 `rm -f` 로 지웠고 같은 글로 다시 썼다고 스스로 보고했다
   - 남은 CI 확인: Windows 의 `choco install make` 와 `make build`, 해시 확인이 세 OS 에서 통과하는지, Android 키 고정의 두 번째 실행(`gh run rerun`)
@@ -88,13 +88,13 @@
   - worker 가 스스로 적은 규칙 이탈: 05:58 지시와 달리 whisper-small LoRA 시험을 06:20 까지 돌렸고(멈춘 시각 06:20), 모델 실행을 겹쳐 돌렸으며, 시간 한도를 넘겼고, 지시한 표본보다 적게 쟀다(부하와 디스크 때문), 메인은 근거가 메모리 부족의 실제 신호와 맞아 받아들였고 앞으로는 이탈하기 전에 근거를 board 4-2 에 먼저 적게 했다
   - worker 가 `~/.cache/uv/archive-v0` 에서 쓰는 중이 아닌 항목 487개를 지워 uv 캐시가 9.8GB 에서 1.3GB 로 줄었다(memory 의 다시 받을 수 있는 캐시 규칙, 쓰는 중인 6개는 `ps` 로 가려 두었다)
   - 이슈 board 2-3절의 "Whisper 는 MIT" 를 모델 카드 license 태그대로 고쳤다(large-v3-turbo 만 MIT, base, small, large-v3 는 Apache-2.0)
-  - 커밋 d8b92ee(`feat: 시작 모델 후보의 오류율 측정 코드와 결과 문서를 추가`, 새 파일 26개)를 push 하고 draft PR https://github.com/guny524/seamone/pull/7 을 열었다, 이 브랜치에는 workflow 가 없어 CI 가 돌지 않는다
+  - 커밋 65bb8c4(`feat: 시작 모델 후보의 오류율 측정 코드와 결과 문서를 추가`, 새 파일 26개)를 push 하고 draft PR https://github.com/guny524/seamone/pull/7 을 열었다, 이 브랜치에는 workflow 가 없어 CI 가 돌지 않는다
 - 정한 것(메인): 표본을 더 늘리는 일(Zeroth 60개)은 부하가 낮을 때로 미룬다(다음에 돌릴 명령은 보고에 있다), Qwen3-ASR-0.6B 와 whisper-large-v3 는 받지 않는다, 시작 모델은 속도 측정을 기다려 결정한다(프로젝트 PD9)
 - 한 일: Codex Sol high 읽기 전용 검토를 시작했다(07:55, 결과 `.tmp/review/codex-2.md`, 시작 전 스냅샷 `.tmp/review/status-before-2.txt`), research worker 에게 다음 일(라벨 없는 FL 모의실험, 작은 규모, 08:35 까지, 파이프라인을 끝까지 돌려 보는 목적)을 보냈다(`project_manage/0004-2026_11_19-unlabeled_fl_sim/.tmp/start-1.md`)
 - 실수: 앱 뼈대 커밋을 처음 시도할 때 zsh 가 파일 목록 변수를 낱말로 나누지 않아 `git add` 가 실패했다, 뒤 명령은 `&&` 로 이어져 커밋과 push 는 일어나지 않았고 파일 이름을 직접 적어 다시 했다
 
 ## 2026-11-19 08:12 메인(Sonnet max) 점검
-- 앱 뼈대 CI 확인(일회성 점검): 고친 커밋 12bb603 의 `ci` 둘과 `build`(job 6개)가 모두 성공했고 artifact 6개가 다시 올라왔다, 메인이 직접 확인한 것
+- 앱 뼈대 CI 확인(일회성 점검): 고친 커밋 4c4d2e4 의 `ci` 둘과 `build`(job 6개)가 모두 성공했고 artifact 6개가 다시 올라왔다, 메인이 직접 확인한 것
   - 7-12(CI 가 `make build` 를 부름): Windows 에서 `choco install make --version=4.4.1` 이 되고 `make build TAURI_BUILD_ARGS="--target x86_64-pc-windows-msvc --bundles nsis,msi"` 가 `cargo tauri build` 를 돌려 `release` 빌드가 끝났다, macOS, Linux 도 같은 명령으로 통과
   - 7-13(고정): 해시 확인을 통과해 세 OS(macOS, Linux, Windows)에서 도구가 설치됐다(`설치했다:` 줄), `uses:` 13곳은 이동 태그의 현재 commit 과 같은 SHA 로 고정돼 있다
   - 7-14(Android 서명 키): 첫 실행은 `keystore cache-hit: ''`(miss)에 키 2618바이트가 생겼고 sha256 `0dea05701b58e9e2483b0635b5a0ecbcd0b2b2516c890d91269a39d6e2c8a578`, 같은 run 을 `gh run rerun` 으로 다시 돌린 두 번째 실행은 `cache-hit: 'true'` 에 같은 파일 시각과 같은 sha256 이다, 이 키는 시험용이고 release 에 쓰지 않는다는 주석이 workflow 에 있다
@@ -115,29 +115,29 @@
 
 ## 2026-11-19 08:42 메인(Sonnet max) 점검
 - 앱 뼈대: 두 번째 검토(08:07 시작 08:13 끝) 결과를 읽었다, 이전 지적 네 개는 고쳐짐 셋과 일부 하나, 새 지적 둘(낮음 README, 중간 Android 키 보존)을 원문으로 확인해 모두 받았다
-  - 고친 것: README 의 `make build` 설명을 데스크톱으로 한정(커밋 75aeb5e), Android debug 서명 키를 캐시가 아니라 레포 `.github/android/debug.keystore` 로 두었다(커밋 aac2755, 키는 첫 CI 가 만든 것을 artifact 로 받아 커밋, sha256 dba5f1e5d6cd77045250f3d641da991ed6de0010c9a1ea422ba5be980d8aa08d), workflow 는 빌드 뒤 APK 를 올리기 전에 `cmp` 로 서명에 쓰인 키가 레포 키와 같은지 확인한다
+  - 고친 것: README 의 `make build` 설명을 데스크톱으로 한정(커밋 c2c9e91), Android debug 서명 키를 캐시가 아니라 레포 `.github/android/debug.keystore` 로 두었다(커밋 2337513, 키는 첫 CI 가 만든 것을 artifact 로 받아 커밋, sha256 dba5f1e5d6cd77045250f3d641da991ed6de0010c9a1ea422ba5be980d8aa08d), workflow 는 빌드 뒤 APK 를 올리기 전에 `cmp` 로 서명에 쓰인 키가 레포 키와 같은지 확인한다
   - 메인이 직접 확인한 것: 마지막 CI(`ci` 둘, `build` 의 job 6개)가 모두 success, Android job 로그에 `committed keystore: 'true'` 와 레포 키와 같은 sha256, 이슈 board 10-2 증거 대조 통과(사람 시험 대기)
-  - PR https://github.com/guny524/seamone/pull/6 을 ready 로 바꿔 merge 했다(merge 커밋 f9b044d, 2026-11-19 08:36), main 작업 사본은 `git pull --ff-only` 로 맞췄다, GitHub 이슈에 진행 요약 댓글을 올렸다
+  - PR https://github.com/guny524/seamone/pull/6 을 ready 로 바꿔 merge 했다(merge 커밋 8f7e917, 2026-11-19 08:36), main 작업 사본은 `git pull --ff-only` 로 맞췄다, GitHub 이슈에 진행 요약 댓글을 올렸다
   - 실수: 시험용 키 artifact 를 받는 명령이 폴더가 없어 한 번 실패했고 뒤 명령은 `&&` 로 멈춰 아무것도 커밋되지 않았다(폴더를 만들고 다시 받았다)
-- 받아쓰기 엔진: app worker 의 첫 보고(08:22)를 확인했다, 메인이 직접 확인한 것: `make lint`, `make test` EXIT=0(시험 27개 통과, worker 가 새로 쓴 것은 23개), 커밋 dc22e89(`feat: 받아쓰기 interface, 전사 조각 타입, 가짜 엔진, 실시간 배수 계산을 추가`, 8개 파일)를 별도 브랜치 `guny524/3-asr-engine-speed` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/8 을 열었다, 엔진 후보 조사 결과(whisper-rs 와 qwen-asr 를 잠정 선택, Candle 은 대안)는 worker 가 조회한 값이고 메인이 재조회하지는 않았다
-- 시작 모델 오류율: research worker 의 보고 2(08:24)를 확인했다, 메인이 직접 확인한 것: `make -C research lint`, `make -C research test` EXIT=0(111개 통과), 삭제 범위 검사(`remove_inside`)와 잘린 가설 파일 복구(`_parse`, `repair_hypotheses`) 코드를 읽었다, 커밋 5a4c397(`fix: 측정 코드의 cache 삭제 범위, 판 고정, 재개와 LoRA 판정을 검토대로 고침`, 16개 파일)을 push 했다(PR 7 에 더해짐, 라벨 없는 FL 모의실험 몫의 변경은 뺐다)
+- 받아쓰기 엔진: app worker 의 첫 보고(08:22)를 확인했다, 메인이 직접 확인한 것: `make lint`, `make test` EXIT=0(시험 27개 통과, worker 가 새로 쓴 것은 23개), 커밋 e763890(`feat: 받아쓰기 interface, 전사 조각 타입, 가짜 엔진, 실시간 배수 계산을 추가`, 8개 파일)를 별도 브랜치 `guny524/3-asr-engine-speed` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/8 을 열었다, 엔진 후보 조사 결과(whisper-rs 와 qwen-asr 를 잠정 선택, Candle 은 대안)는 worker 가 조회한 값이고 메인이 재조회하지는 않았다
+- 시작 모델 오류율: research worker 의 보고 2(08:24)를 확인했다, 메인이 직접 확인한 것: `make -C research lint`, `make -C research test` EXIT=0(111개 통과), 삭제 범위 검사(`remove_inside`)와 잘린 가설 파일 복구(`_parse`, `repair_hypotheses`) 코드를 읽었다, 커밋 6d642da(`fix: 측정 코드의 cache 삭제 범위, 판 고정, 재개와 LoRA 판정을 검토대로 고침`, 16개 파일)을 push 했다(PR 7 에 더해짐, 라벨 없는 FL 모의실험 몫의 변경은 뺐다)
   - 두 번째 검토(08:31 시작 08:36 끝): 이전 지적 여섯 개는 고쳐짐 넷과 일부 둘, 새 지적 셋(중간 셋: 세트별 cache 의 실행 간 배제 없음, 측정 설정 파일의 비원자적 쓰기, 표본 목록이 바뀌어도 설정 대조 통과)을 원문으로 확인했다, 세트별 cache 의 동시 실행 경쟁은 지금 한 worker 가 쓰는 환경에서는 드물지만 맞는 지적이다
   - 처리: 세 개를 모두 받아 `.tmp/review-cells-3.md` 로 research worker 에게 보냈다(08:50 까지), 검토 반복이 두 번에서 멈추는 규칙(review skill 4절)이라 세 번째 검토는 하지 않고 시험과 diff 로 메인이 확인한다
 - 정리: 끝난 검토자 탭 셋을 닫았다, 끝난 일의 임시 사본은 지웠다(`.tmp/ci-artifacts`, 검토 도구가 만든 `.serena/`)
 
 ## 2026-11-19 08:55 메인(Sonnet max) 점검
 - 시작 모델 오류율: research worker 의 보고 3(08:45)을 확인했다, 메인이 직접 확인한 것: `make -C research lint`, `make -C research test` EXIT=0(129개 통과), 세트별 잠금(`fcntl.flock`)과 `prepare_audio` 의 잠금 뒤 재확인 코드를 읽었다, worker 가 일부러 어긴 구현 아홉 가지에서 시험이 실패하는 것을 확인했다고 보고했고 메인은 이것을 다시 하지 않았다
-- 커밋 3135ab8(`fix: 측정 코드의 준비 잠금, 설정 원자적 쓰기, 표본 목록 대조를 검토대로 고침`, 6개 파일)을 push 했다(README 는 이 이슈 몫의 한 줄만 `git apply --cached --unidiff-zero` 로 골랐다), 세 번째 검토는 하지 않았다(두 번에서 멈추는 규칙)
-- PR https://github.com/guny524/seamone/pull/7 을 ready 로 바꿔 merge 했다(merge 커밋 ecdc12c, 08:52), 이슈 마무리 코멘트를 올리고 이슈를 닫았고 폴더를 `_done_0002-2026_11_19-start_model_cer` 로 옮겼다(git 이 추적하지 않는 `.tmp/` 가 같이 가도록 `mv` 로 옮기고 `git add -A` 로 rename 을 잡았다)
+- 커밋 398e2fb(`fix: 측정 코드의 준비 잠금, 설정 원자적 쓰기, 표본 목록 대조를 검토대로 고침`, 6개 파일)을 push 했다(README 는 이 이슈 몫의 한 줄만 `git apply --cached --unidiff-zero` 로 골랐다), 세 번째 검토는 하지 않았다(두 번에서 멈추는 규칙)
+- PR https://github.com/guny524/seamone/pull/7 을 ready 로 바꿔 merge 했다(merge 커밋 7d069d4, 08:52), 이슈 마무리 코멘트를 올리고 이슈를 닫았고 폴더를 `_done_0002-2026_11_19-start_model_cer` 로 옮겼다(git 이 추적하지 않는 `.tmp/` 가 같이 가도록 `mv` 로 옮기고 `git add -A` 로 rename 을 잡았다)
 - 앱 뼈대의 app worker 터미널은 Claude 프로세스가 끝나 있었다(할 일이 없는 상태라 다시 띄우지 않았다)
 
 ## 2026-11-19 08:58 메인(Sonnet max) 사용자 보고(아침 보고)
 - 요점: 밤새(04:10 부터 08:58) 앱 뼈대와 시작 모델 오류율 측정 이슈를 merge 하고 끝냈다, 받아쓰기 엔진과 라벨 없는 FL 모의실험은 작은 규모의 앞 절반을 draft PR 로 올렸고, 노트북 메모리가 한계라 큰 일은 하지 않았다
 - 이슈와 PR
-  - 앱 뼈대(이슈 1): PR https://github.com/guny524/seamone/pull/6 merge(f9b044d), GitHub Actions 가 macOS dmg 둘, Windows exe 와 msi, Linux deb 와 AppImage, Android debug apk, iOS 시뮬레이터 zip 을 서명 없이 만든다(모두 CI 로 확인, 형식도 받아 확인), 사람 시험(설치 파일 실행)이 남아 이슈는 열려 있다
-  - 시작 모델 오류율(이슈 2): PR https://github.com/guny524/seamone/pull/7 merge(ecdc12c), 이슈 닫음, 결과는 `research/results/2026_11_19_start_model_cer.md`
-  - 받아쓰기 엔진(이슈 3): 앞 절반(interface, 전사 조각 타입, 가짜 엔진, 순수 함수, 엔진 후보 조사)을 draft PR https://github.com/guny524/seamone/pull/8(커밋 dc22e89), 코드 검토 아직
-  - 라벨 없는 FL 모의실험(이슈 4): 작은 규모 실행을 draft PR https://github.com/guny524/seamone/pull/9(커밋 1dd84f0), 코드 검토 아직
+  - 앱 뼈대(이슈 1): PR https://github.com/guny524/seamone/pull/6 merge(8f7e917), GitHub Actions 가 macOS dmg 둘, Windows exe 와 msi, Linux deb 와 AppImage, Android debug apk, iOS 시뮬레이터 zip 을 서명 없이 만든다(모두 CI 로 확인, 형식도 받아 확인), 사람 시험(설치 파일 실행)이 남아 이슈는 열려 있다
+  - 시작 모델 오류율(이슈 2): PR https://github.com/guny524/seamone/pull/7 merge(7d069d4), 이슈 닫음, 결과는 `research/results/2026_11_19_start_model_cer.md`
+  - 받아쓰기 엔진(이슈 3): 앞 절반(interface, 전사 조각 타입, 가짜 엔진, 순수 함수, 엔진 후보 조사)을 draft PR https://github.com/guny524/seamone/pull/8(커밋 e763890), 코드 검토 아직
+  - 라벨 없는 FL 모의실험(이슈 4): 작은 규모 실행을 draft PR https://github.com/guny524/seamone/pull/9(커밋 0d93e7c), 코드 검토 아직
   - 녹음, 기기 안 받아쓰기, 수정 화면(이슈 5): 시작하지 못했다(받아쓰기 엔진 interface 가 먼저)
 - 얻은 것(근거는 결과 문서, 표본이 작아 확정은 아니다)
   - 한국어 오류율(같은 발화 64개): Qwen3-ASR 1.7B 4.19%, whisper-large-v3-turbo 5.44%, whisper-small 7.47%, whisper-base 13.89%, 영어 40개는 1.78%, 2.42%, 3.68%, 5.30%, 앞 둘의 차이는 표준오차의 약 2.7배
@@ -147,11 +147,11 @@
 - [밤사이 결정](메인이 정하고 근거를 적은 것, 사용자 확인 대기는 project_board 6-1)
   - 프로젝트 결정 PD2(라이선스 Apache-2.0), PD3(기록을 git 에 두고 공개), PD5(Rust, Tauri 2, Leptos), PD7(속도 기준 숫자), PD8(라벨 없이 키우는 방향 여섯 가지), PD10(첫 판은 녹음과 받아쓰기와 수정까지), PD11(실험은 PyTorch), 근거는 각 결정 항목
   - 앱 뼈대의 로컬 `make build` 와 창 확인은 하지 않고 설치 파일은 CI 로만 확인(PD4 와 메모리 한계), Android debug 서명 키를 레포에 둠(시험용으로 공개된 키), 검토는 두 번에서 멈추고 메인이 시험과 diff 로 확인, background 대기 명령은 시스템이 메모리 부족으로 멈춘 뒤 다시 걸지 않고 점검 cron 으로 보고 파일을 직접 확인, 라벨 없는 FL 모의실험과 받아쓰기 엔진은 작은 규모와 앞 절반으로 줄임
-- 사용자에게 묻고 답을 못 받은 것(project_board 6-2): 집 서버 RTX 3060 Ti 를 큰 학습에 써도 되는지(추천: 써도 된다, 답이 없어 노트북만 씀), 이미 push 한 두 커밋(98ccde9, f17c964)의 작성자 메일이 회사 메일이라 공개 레포에 드러난 것을 main 에 force push 로 바꿀지(추천: 새 레포인 지금 바꾼다, 답이 없어 그대로 둠, 06:09 부터 새 커밋은 noreply 주소)
+- 사용자에게 묻고 답을 못 받은 것(project_board 6-2): 집 서버 RTX 3060 Ti 를 큰 학습에 써도 되는지(추천: 써도 된다, 답이 없어 노트북만 씀), 이미 push 한 두 커밋(158c9d3, 3169495)의 작성자 메일이 회사 메일이라 공개 레포에 드러난 것을 main 에 force push 로 바꿀지(추천: 새 레포인 지금 바꾼다, 답이 없어 그대로 둠, 06:09 부터 새 커밋은 noreply 주소)
 - 검토: Codex Sol(`gpt-6.1-sol`) high 읽기 전용 네 번(앱 뼈대 둘, 시작 모델 둘), 지적 열다섯 개(낮음 넷, 중간 열하나)를 모두 원문으로 확인해 받아 고쳤다, 해당 없음으로 둔 것은 없다, 받아쓰기 엔진과 라벨 없는 FL 모의실험의 코드는 아직 검토받지 않았다
 - 쓴 모델: 계획 Fable 5.2 xhigh(04:10 쯤까지), 이후 메인 Sonnet 5.5 max(04:18 에 바꿈), worker 둘 Sonnet 5.5 max, 검토 Codex Sol high, Gemini 로 넘기는 일은 없었다(worker 한도 소진 없음)
 - 실수와 정정(숨기지 않는다)
-  - 06:15 의 기록 커밋 91398a2 는 메시지와 달리 두 worker 의 이슈 기록만 담았다(편집 스크립트가 멈췄는데 뒤 명령이 커밋과 push 를 했다), 내용은 정상이라 되돌리지 않고 log 에 바로잡았다
+  - 06:15 의 기록 커밋 e6ea2be 는 메시지와 달리 두 worker 의 이슈 기록만 담았다(편집 스크립트가 멈췄는데 뒤 명령이 커밋과 push 를 했다), 내용은 정상이라 되돌리지 않고 log 에 바로잡았다
   - 05:07 에 다시 받을 수 있는 Go, gradle, npm 캐시를 지울 때 도는 프로세스를 확인하는 명령과 지우는 명령을 한 번에 묶어, 다른 세션의 `go test` 와 gradle, kotlin 데몬이 쓰던 캐시까지 지웠다(go test 는 지운 뒤 끝났고 결과는 못 봤다, 데몬은 살아 있다)
   - 공개 레포의 첫 두 커밋 작성자 메일이 회사 메일이다(위 질문)
   - 마무리에서 이 셸의 `rm` 이 휴지통으로 보내는 별칭이라 지운 가중치와 빌드 폴더 12GB 가 휴지통에 들어갔고, 내가 넣은 네 항목만 정확한 이름으로 영구 삭제해 디스크 여유를 21GB 에서 33GB 로 되돌렸다
@@ -165,3 +165,35 @@
 - 자원(마무리에서 지움): `.tmp/hf` 의 가중치 6.8GB, 앞 이슈 worktree 의 `target/` 4.6GB, 시작 모델 worktree 의 `research/.venv` 1.3GB 를 지웠다(다시 받거나 다시 만들 수 있다, 디스크 여유 33.5GB), 남긴 것: worktree 둘(`/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci` 는 브랜치 `guny524/3-asr-engine-speed`, `2-start-model-cer` 는 `guny524/4-unlabeled-fl-sim` 를 쓴다, 그 PR 이 merge 되면 `dispatch-worker` skill 6절로 정리), 시험 음성 `.tmp/hf/seamone_eval` 169MB 와 가설 글(`.tmp/research/hyp/`, 다시 만들 수 없는 측정 증거), 이 레포의 `.tmp/review/` 의 검토 원문
 - 점검 cron 과 일회성 점검을 모두 지웠고 모델 설정은 되돌렸다(아래 마지막 줄)
 - 08:57 마무리 확인: 점검 cron 둘(주기 점검 90bfd2b1, 끝내기 일회성 cc9b85bd)을 지웠다, 모델 설정을 되돌렸다(`~/.claude/settings.json` 의 model `claude-fable-5-2`, Fable effort `xhigh`, Sonnet effort `medium`, 바꾸기 전 값과 같다), worker 탭 둘과 검토자 탭을 모두 닫았고 메인이 띄운 `caffeinate` 를 끝냈다, 08:58 로 걸어 둔 끝내기 일회성 점검은 그 전에 같은 일을 마쳐 지웠다
+
+## 2026-11-19 09:25 메인(Opus) 사용자 전달
+- 사용자 지시(2026-11-19): "이전 commit 도 edit 해 guny524@gmail.com 을 쓰게 local 에서 전부 바꾸고 push force 해"
+- 한 일: 로컬 브랜치 다섯(main, guny524/1-app-skeleton-ci, guny524/2-start-model-cer, guny524/3-asr-engine-speed, guny524/4-unlabeled-fl-sim)을 `git filter-branch --env-filter` 한 번으로 다시 써서 23개 커밋의 작성자와 커미터 메일(`mingi.jo@zeroone.ai`, `43983919+guny524@users.noreply.github.com`)을 `guny524@gmail.com` 으로 바꾸고 `--force-with-lease` 로 force push 했다, 레포 로컬 설정 `user.email` 도 `guny524@gmail.com` 으로 바꿨다
+- 확인한 것: 다섯 브랜치 모두 tip 의 tree 가 다시 쓰기 전과 같고(내용은 그대로, 메타데이터만 바뀜) 원격과 로컬이 같다, 원격 이력의 메일은 21개 커밋이 작성자와 커미터 모두 gmail 이고 PR merge 커밋 둘은 작성자가 gmail, 커미터가 GitHub 계정(`noreply@github.com`)이라 그대로 두었다
+- 남은 노출: GitHub 이 옛 회사 메일 커밋 98ccde9 와 f17c964 를 hash 로 아직 보여 준다, 98ccde9 는 merge 된 PR 6, 7 의 읽기 전용 참조(`refs/pull/6/head`, `refs/pull/7/head`)의 조상이라 남고, f17c964 는 참조가 없지만 GitHub 이 아직 지우지 않았다, 지우려면 GitHub Support 에 요청하거나 레포를 다시 만들어야 한다(사용자 판단 대기)
+- GitHub 이슈 1, 2 의 댓글은 옛 merge hash(f9b044d, ecdc12c)를 말한다, 새 hash 는 아래 짝을 본다, 댓글은 고치지 않았다
+- 이 레포 기록(`project_manage/`) 안의 옛 7자리 hash 는 아래 짝으로 모두 새 hash 로 바꿨다
+- 옛 hash -> 새 hash
+  - 454e332 -> da95165 docs: 밤샘 실행 마무리 확인을 log 에 적음
+  - 5625578 -> 58552f4 docs: 밤샘 실행의 아침 보고와 마지막 상태를 board 와 log 에 적음
+  - 1dd84f0 -> 0d93e7c feat: 라벨 없는 FL 모의실험 코드와 작은 규모 실행 결과를 추가
+  - bfc2119 -> 0d9fe1b docs: 시작 모델 오류율 이슈를 merge 하고 끝내며 기록을 마감함
+  - ecdc12c -> 7d069d4 Merge pull request #7 from guny524/guny524/2-start-model-cer
+  - 3135ab8 -> 398e2fb fix: 측정 코드의 준비 잠금, 설정 원자적 쓰기, 표본 목록 대조를 검토대로 고침
+  - a410745 -> 87db078 docs: 앞 이슈 merge, worker 이슈 기록, 두 번째 검토 결과를 board 와 log 에 적음
+  - f9b044d -> 8f7e917 Merge pull request #6 from guny524/guny524/1-app-skeleton-ci
+  - 5a4c397 -> 6d642da fix: 측정 코드의 cache 삭제 범위, 판 고정, 재개와 LoRA 판정을 검토대로 고침
+  - dc22e89 -> e763890 feat: 받아쓰기 interface, 전사 조각 타입, 가짜 엔진, 실시간 배수 계산을 추가
+  - aac2755 -> 2337513 fix: Android debug 서명 키를 레포에 두어 모든 실행에서 같게 함
+  - 75aeb5e -> c2c9e91 fix: Android 서명 키를 레포에서 가져오게 하고 README 의 빌드 설명을 맞춤
+  - b0ce9cd -> 0ef6953 docs: 앱 뼈대 CI 재확인, 두 번째 검토, 시작 모델 검토 지적을 board 와 log 에 적음
+  - 166d736 -> 269b2b6 docs: 두 이슈의 보고 확인과 PR, 검토 시작을 board 와 log 에 적음
+  - d8b92ee -> 65bb8c4 feat: 시작 모델 후보의 오류율 측정 코드와 결과 문서를 추가
+  - 12bb603 -> 4c4d2e4 fix: 설치 도구 해시 확인, action SHA 고정, Android 키 고정, IPC 시험 추가
+  - f02469a -> 5cfca26 docs: 앱 뼈대 검토 결과와 고칠 칸 네 개를 board 와 log 에 적음
+  - e591599 -> 8fee8ac docs: 앱 뼈대 CI 통과와 Codex 검토 시작을 board 와 log 에 적음
+  - 7d68d19 -> 92b3043 docs: 앱 뼈대 보고 확인, 커밋 push, CI 시작을 board 와 log 에 적음
+  - 91398a2 -> e6ea2be docs: 앱 뼈대 보고 확인과 CI 시작을 기록에 적음
+  - a3ad95f -> 24ff6d2 feat: Tauri 2 앱 뼈대와 다섯 플랫폼 설치 파일 CI 를 추가
+  - f17c964 -> 3169495 docs: 나머지 이슈 셋의 기록과 밤샘 실행 절차를 적음
+  - 98ccde9 -> 158c9d3 chore: 프로젝트 기록, 라이선스, README 를 처음 넣음
