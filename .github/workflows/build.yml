@@ -89,7 +89,12 @@ jobs:
       # 설치 파일을 만드는 명령은 Makefile 의 build 하나다
       - name: Build the installers
         shell: bash
-        run: make build TAURI_BUILD_ARGS="--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}"
+        run: |
+          build_args="--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}"
+          if [[ "$RUNNER_OS" == "macOS" && "$CARGO_FEATURES" == "desktop-whisper" ]]; then
+            build_args="$build_args --config app/src-tauri/tauri.whisper-macos.conf.json"
+          fi
+          make build TAURI_BUILD_ARGS="$build_args"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
