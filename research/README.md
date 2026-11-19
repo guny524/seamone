@@ -18,6 +18,14 @@
 - `make -C research lora LORA_MODELS=... LORA_DEVICES=mps`: LoRA 를 붙여 순전파와 역전파를 돌려 성공 여부와 시간과 메모리를 잰다
   - `LORA_BATCH`(기본 4)는 음성 묶음 크기, `LORA_SCOPE` 는 LoRA 를 붙일 범위(`all` 은 음성 인코더와 글 디코더 모두, `decoder` 는 글 디코더만)
 
+- `make -C research fmt`: ruff 로 형식을 고쳐 쓴다(lint 의 형식 검사가 실패했을 때)
+- `make -C research fl-sim`: 라벨 없는 FL 모의실험(기기 데이터, 큰 모델의 정답, 학생의 FL)을 차례로 돈다
+  - 작은 규모가 기본값이다, 큰 규모는 `FL_DEVICES=12 FL_UTTS=60 FL_ROUNDS=4 FL_PER_ROUND=6 FL_EVAL="zeroth_ko=200 fleurs_ko=200 fleurs_en=100"` 처럼 준다
+  - `FL_METHODS` 로 방법을 고른다(a1 진짜 정답, a2 큰 모델이 단 정답, a3 스스로 단 정답)
+  - 학습률은 `FL_LR`, 결과 이름 끝말은 `FL_TAG`(예: `FL_LR=3e-3 FL_TAG=-lr3e-3` 이면 `fl-a2-lr3e-3` 로 쌓인다)
+  - A0(학습 없음)은 `make -C research score MODELS="whisper-small fl-a2 fl-a3"` 가 whisper-small 의 가설 글을 같은 표본의 앞부분으로 다시 센다
+- `make -C research fl-data`, `make -C research fl-label`: 기기 데이터와 큰 모델의 정답만 따로 만든다
+
 ## 2. 자리
 - `seamone_research/cer.py`: 글 정규화와 CER 계산
 - `seamone_research/data.py`: 시험 세트(FLEURS 한국어와 영어, Zeroth-Korean)의 표본 뽑기와 음성 준비
@@ -25,7 +33,8 @@
 - `seamone_research/measure.py`, `hypotheses.py`: 받아쓰기 실행과 가설 글 파일 읽기와 쓰기
 - `seamone_research/score.py`, `compare.py`: 채점, 같은 발화에서 모델끼리 견주기
 - `seamone_research/lora_probe.py`: 학습 가능성 시험
+- `seamone_research/fl_data.py`, `pseudo_label.py`, `fedavg.py`, `fl_train.py`, `fl_sim.py`: 라벨 없는 FL 모의실험(기기 데이터, 정답 달기, FL 로 합치기, 학생의 학습, 방법 비교)
 - `seamone_research/paths.py`, `memory.py`, `prefetch.py`: 폴더 자리, 메모리 재기와 돌려주기, 가중치 미리 받기
-- `data/eval_ids.json`: 표본 id 목록, git 에 둔다
+- `data/eval_ids.json`, `data/fl_client_ids.json`: 시험 표본과 FL 기기의 id 목록, git 에 둔다
 - `results/`: 결과 문서
 - 가중치와 시험 음성은 메인 레포의 `.tmp/hf` 한 곳에만 둔다(Makefile 이 `HF_HOME` 으로 정한다, worktree 마다 받지 않는다)

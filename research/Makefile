@@ -23,7 +23,18 @@ LORA_DEVICES ?= mps cpu
 LORA_BATCH ?= 4
 LORA_SCOPE ?= all
 
-.PHONY: install lint test eval-ids prefetch cer score compare lora
+# 라벨 없는 FL 모의실험(작은 규모가 기본값이다, 큰 규모는 FL_DEVICES=12 FL_UTTS=60 FL_ROUNDS=4 FL_PER_ROUND=6 처럼 준다)
+FL_DEVICES ?= 8
+FL_UTTS ?= 6
+FL_ROUNDS ?= 2
+FL_PER_ROUND ?= 4
+FL_METHODS ?= a2 a3
+FL_EVAL ?= zeroth_ko=40 fleurs_ko=40 fleurs_en=20
+FL_TEACHER ?= whisper-large-v3-turbo
+FL_LR ?= 1e-4
+FL_TAG ?=
+
+.PHONY: install fmt lint test eval-ids prefetch cer score compare lora fl-data fl-label fl-sim
 
 install:
 	uv sync
@@ -31,6 +42,10 @@ install:
 # 시험 세트의 표본 id 목록(data/eval_ids.json)을 만들고 그 음성을 .tmp/hf 에 둔다
 eval-ids:
 	uv run python -m seamone_research.data
+
+# 형식을 고쳐 쓴다(lint 의 형식 검사가 실패했을 때)
+fmt:
+	uv run ruff format .
 
 lint:
 	uv run ruff check .
@@ -67,3 +82,19 @@ lora:
 				|| echo "중단됨: $$model $$device"; \
 		done; \
 	done
+
+# 기기 데이터: Zeroth-Korean train 조각 하나에서 화자 FL_DEVICES 명, 화자마다 발화 FL_UTTS 개(받은 조각은 지운다)
+fl-data:
+	$(NICE) uv run python -m seamone_research.fl_data --devices $(FL_DEVICES) --utts $(FL_UTTS)
+
+# A2 의 정답: 큰 모델(FL_TEACHER)이 기기 발화에 한 번 달고 내린다
+fl-label:
+	$(NICE) uv run python -m seamone_research.pseudo_label --model $(FL_TEACHER)
+
+# 모델 하나씩 차례로 돈다(기기 데이터, 큰 모델의 정답, 학생의 FL), A0 은 #2 가 잰 whisper-small 의 가설을 쓴다
+fl-sim: export PYTORCH_MPS_HIGH_WATERMARK_RATIO = 1.0
+fl-sim: export PYTORCH_MPS_LOW_WATERMARK_RATIO = 0.8
+fl-sim:
+	$(MAKE) fl-data
+	$(if $(findstring a2,$(FL_METHODS)),$(MAKE) fl-label)
+	$(NICE) uv run python -m seamone_research.fl_sim --methods "$(FL_METHODS)" --devices $(FL_DEVICES) --utts $(FL_UTTS) --rounds $(FL_ROUNDS) --per-round $(FL_PER_ROUND) --eval "$(FL_EVAL)" --lr $(FL_LR) --tag="$(FL_TAG)"
