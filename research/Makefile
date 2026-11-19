@@ -23,7 +23,7 @@ LORA_DEVICES ?= mps cpu
 LORA_BATCH ?= 4
 LORA_SCOPE ?= all
 
-.PHONY: install lint test eval-ids prefetch cer score compare lora
+.PHONY: install fmt lint test eval-ids prefetch cer score compare lora training-fixture verified-step
 
 install:
 	uv sync
@@ -67,3 +67,15 @@ lora:
 				|| echo "중단됨: $$model $$device"; \
 		done; \
 	done
+
+fmt:
+	uv run ruff format .
+
+FIXTURE ?= ../.tmp/research/training-fixture/fixture.json
+PROOF_DIR ?= ../.tmp/research/verified-step
+PROOF_DEVICE ?= cpu
+training-fixture:
+	$(NICE) uv run python -m seamone_research.training_fixture --output "$(dir $(FIXTURE))"
+
+verified-step:
+	$(NICE) uv run python -m seamone_research.verified_step --fixture "$(FIXTURE)" --output "$(PROOF_DIR)" --device $(PROOF_DEVICE)

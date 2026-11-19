@@ -13,6 +13,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  TAURI_CLI_VERSION: "2.12.6"
+  TRUNK_VERSION: "0.22.2"
 
 jobs:
   lint-test:
@@ -38,3 +40,36 @@ jobs:
 
       - name: Test
         run: make test
+
+      - name: Optional offline desktop engine regression
+        run: |
+          make lint CARGO_FEATURES=desktop-whisper
+          make test CARGO_FEATURES=desktop-whisper
+
+      - name: Install pinned UI build tools
+        run: scripts/install-tools.sh
+
+      - name: Install UI regression dependencies
+        run: npm ci --prefix app/ui/tests --ignore-scripts --no-audit --no-fund
+
+      - name: UI regression with the runner Chrome
+        shell: bash
+        run: |
+          chrome_path="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome_path" || { echo "No Chrome/Chromium executable on this runner" >&2; exit 1; }
+          SEAMONE_CHROME="$chrome_path" make ui-test
+
+  research-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned uv
+        run: python3 -m pip install --user uv==0.13.7
+
+      - name: Install locked research dependencies
+        run: uv sync --locked --project research
+
+      - name: Research regression without model or corpus downloads
+        run: make -C research test

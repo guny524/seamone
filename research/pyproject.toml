@@ -1,7 +1,7 @@
 [project]
 name = "seamone-research"
 version = "0.1.0"
-description = "seamone 의 시작 모델 고르기와 라벨 없는 학습 실험(PyTorch), 앱에는 들어가지 않는다"
+description = "seamone 모델 평가와 사람 정답을 쓴 로컬 학습 증명(PyTorch), 앱에는 들어가지 않는다"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "torch>=2.15",

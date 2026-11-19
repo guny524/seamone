@@ -3,9 +3,15 @@
   "productName": "seamone",
   "identifier": "io.github.guny524.seamone",
   "build": {
-    "beforeDevCommand": { "script": "trunk serve", "cwd": "../ui" },
+    "beforeDevCommand": {
+      "script": "trunk serve",
+      "cwd": "../ui"
+    },
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": { "script": "trunk build --release", "cwd": "../ui" },
+    "beforeBuildCommand": {
+      "script": "trunk build --release",
+      "cwd": "../ui"
+    },
     "frontendDist": "../ui/dist"
   },
   "app": {
@@ -18,7 +24,8 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'",
+      "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:1420; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'"
     }
   },
   "bundle": {

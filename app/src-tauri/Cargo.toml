@@ -13,11 +13,25 @@ publish.workspace = true
 name = "seamone_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+desktop-whisper = ["seamone-asr/whisper"]
+
 [build-dependencies]
 tauri-build = { version = "2.7.6", features = [] }
 
 [dependencies]
 seamone-core.workspace = true
+seamone-asr = { path = "../../crates/seamone-asr" }
+serde.workspace = true
+serde_json.workspace = true
+rusqlite = { version = "0.39", features = ["bundled", "fallible_uint"] }
+hound = "3.5.1"
+uuid = { version = "1.23", features = ["v4"] }
+base64 = "0.22"
+sha2 = "0.10"
+tauri-plugin-dialog = "2.8.4"
+tauri-plugin-clipboard-manager = "2"
 tauri = { version = "2.12.7", features = [] }
 
 [dev-dependencies]

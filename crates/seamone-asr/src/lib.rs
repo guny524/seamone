@@ -5,6 +5,16 @@
 #![forbid(unsafe_code)]
 
 mod fake;
+#[cfg(all(
+    feature = "whisper",
+    not(any(target_os = "android", target_os = "ios"))
+))]
+mod whisper;
+#[cfg(all(
+    feature = "whisper",
+    not(any(target_os = "android", target_os = "ios"))
+))]
+pub use whisper::WhisperTranscriber;
 pub mod speed;
 
 pub use fake::FakeTranscriber;
@@ -15,6 +25,10 @@ use seamone_core::TranscriptSegment;
 
 /// 엔진이 받는 음성의 표본 속도(Hz), 모든 엔진이 이 속도의 mono 음성만 받는다.
 pub const SAMPLE_RATE_HZ: u32 = 16_000;
+
+pub const SMALL_SHA256: &str = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b";
+pub const MODEL_PROVENANCE: &str =
+    "ggerganov/whisper.cpp@80da2d8bfee42b0e836fc3a9890373e5defc00a6:ggml-small.bin";
 
 /// 음성을 글로 받아쓰는 엔진.
 ///

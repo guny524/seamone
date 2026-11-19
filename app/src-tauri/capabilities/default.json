@@ -1,7 +1,23 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "기본 창이 쓰는 권한",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "앱에 포함된 main 창에서만 로컬 보관함 command를 사용한다",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-get-app-info",
+    "allow-get-library",
+    "allow-get-segments",
+    "allow-import-wav",
+    "allow-transcribe-recording",
+    "allow-select-model",
+    "allow-get-playback",
+    "allow-playback-ended",
+    "allow-save-review",
+    "allow-dismiss-info",
+    "allow-export-text",
+    "allow-save-text-file",
+    "allow-copy-saved-text"
+  ]
 }

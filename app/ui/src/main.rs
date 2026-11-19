@@ -1,4 +1,6 @@
+mod api;
 mod app;
+mod workspace;
 
 use app::App;
 use leptos::prelude::*;

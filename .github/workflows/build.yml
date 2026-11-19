@@ -7,6 +7,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      desktop-whisper:
+        description: Include the offline Whisper small desktop engine (no bundled model)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,6 +31,8 @@ jobs:
     name: desktop (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      CARGO_FEATURES: ${{ inputs['desktop-whisper'] && 'desktop-whisper' || '' }}
     strategy:
       fail-fast: false
       matrix:

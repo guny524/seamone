@@ -1,5 +1,5 @@
 # research
-- seamone 의 모델 고르기와 라벨 없는 학습 실험 코드다, PyTorch 로 쓰고 앱에는 들어가지 않는다(프로젝트 결정 PD11)
+- seamone 모델 후보의 오류율과 로컬 학습 계산을 확인하는 PyTorch 연구 코드다, 앱에는 들어가지 않는다
 - Python 3.12 와 uv, 가상환경은 `research/.venv`
 
 ## 1. make target
@@ -29,3 +29,12 @@
 - `data/eval_ids.json`: 표본 id 목록, git 에 둔다
 - `results/`: 결과 문서
 - 가중치와 시험 음성은 메인 레포의 `.tmp/hf` 한 곳에만 둔다(Makefile 이 `HF_HOME` 으로 정한다, worktree 마다 받지 않는다)
+
+## 3. 사람 정답 fixture로 실제 optimizer 한 번 돌리기
+- `make -C research prefetch MODELS=whisper-small`로 고정한 PyTorch 모델을 먼저 준비한다, `verified-step`은 로컬 cache의 revision만 읽는다
+- `make -C research training-fixture`는 고정한 `google/fleurs` revision의 한국어 train split에서 짧은 발화 하나와 사람 정답을 받아 `.tmp/research/training-fixture/`에 둔다, archive를 끝까지 내려받지 않는다
+- `make -C research verified-step PROOF_DEVICE=cpu`는 Whisper small decoder의 q/v projection에 LoRA를 붙여 AdamW optimizer step 한 번을 실행한다
+- 기반 모델의 모든 고정 parameter를 전후 SHA-256으로 대조하고 adapter 변화량이 0보다 큰지 확인한다, `proof.json`과 adapter는 `.tmp/research/verified-step/`에 둔다
+- `FIXTURE`와 `PROOF_DIR`로 입력 manifest와 출력 폴더를 지정한다, manifest는 공개 사람 정답의 train split만 받고 평가 ID와 충돌하거나 음성 SHA-256이 다르면 거절한다
+- fixture와 정답, 모델 가중치, adapter는 git에 넣지 않는다, 이 입력은 앱의 검증이나 학습 대기열로 들어가지 않는다
+- 이 시험은 학습 계산이 실행됐는지 확인한다, CER 개선이나 앱의 native 학습, GGML adapter 적용을 증명하지 않는다
