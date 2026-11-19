@@ -22,6 +22,12 @@
 - 2026-11-19 "어쨌든 모르겠고 이제 나한테 물어보지 말고 지금 너 /conversation-rag 보면은 예전에 너 스스로 모델 바꿔서 한 거 있거든. 그러니까 지금은 페이블 5.2로 플랜 세울 때 동안 페이블 5.2 엑스트라 하이로 가고, 그 이후부터는 소넷 맥스로 너가 스스로 바꿔서 계속 진행을 해."
 
 ## 3. 운영 방침
+- 2026-11-20 밤샘 실행: 오전 7시 한국 시간까지 60분마다 점검한다. 계획 검토자는 Claude Opus 5.5 max, 구현 worker는 Codex Sol high 한 명, 구현 검토자는 Claude Sonnet max다
+- 현재 우선순위: 녹음·받아쓰기·수정 화면 이슈의 WAV 검수 경로, 사람 확인 학습 입력과 앱 첫 안내. 구현 worktree는 `/Users/min-jo/orca/workspaces/seamone/5-verified-transcript`다. 사용자 기준은 사람 확인 전사로 기기에서 자동 학습하는 결정(PD13)에 있다
+- 원문: "opus 5.5 max 한테 검토 받고 받아들여야 할것만 걸러서 받아들인 후에 바로 구현 시작해 goal 로 잡아서 내일 아침 7시까지 돌아"
+- 위임 범위: 별도 worktree에서 구현, 프로젝트의 make target으로 시험, 필요 시 작업 브랜치의 GitHub Actions로 설치 파일을 확인한다. 실제 연합학습 서버와 생산 모델 배포는 이후 작업이다
+- 물을 것: 없음
+- 아래 값은 2026-11-19 밤샘 실행 기록이다
 - 우선순위 문서: 이 board 5절
 - 동시 worker 수와 모델: Sonnet max 2개(2026-11-19 밤샘 실행), 한도가 끝나면 Gemini 3.8 Flash high(기본값)
 - 검토 모델: Codex Sol high(2026-11-19 사용자), 검토 지적은 그 코드를 쓴 worker 가 고친다(기본값), 자문 모델: 정하지 않음
@@ -64,15 +70,15 @@
 - 작업: 시작 모델 오류율 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`(새 파일은 메인이 경로로 골라 커밋하고 별도 브랜치 `guny524/4-unlabeled-fl-sim` 으로 push 한다), worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56, 보고 `project_manage/0004-2026_11_19-unlabeled_fl_sim/.tmp/report-1.md`
 - 선행: 시작 모델 오류율 이슈(검토 중, 평가 코드와 데이터를 쓴다), 후속: 뒤의 학습 엔진 이슈
 - 막힌 이유: 없음(앞 이슈의 코드는 같은 worktree 에 있다)
-- 다음 행동: 큰 규모 실행(`make -C research fl-sim FL_DEVICES=12 FL_UTTS=60 FL_ROUNDS=4 FL_PER_ROUND=6 FL_METHODS="a2 a3 a1" FL_EVAL="zeroth_ko=200 fleurs_ko=200 fleurs_en=100"`, 약 3시간은 어림)을 노트북이 한가할 때 돌리고, A3 의 믿음도 문턱을 분포에 맞추고, 코드 검토 뒤 merge, 가중치는 이 밤 끝에 지웠으니 `make -C research prefetch` 로 다시 받는다
+- 다음 행동: 기존 소규모 실행 결과를 연구 기록으로 보존한다. 다음 LoRA 학습 실험의 입력은 현재 정책에 따라 사람이 확인한 전사로 준비한다
 
 ### #5 녹음, 기기 안 받아쓰기, 수정 화면을 만든다 (앱의 첫 쓸모)
-- 상태: 대기
+- 상태: 데스크톱 WAV 검수 경로와 학습 준비를 작업 브랜치 `guny524/5-verified-transcript`(14b610c)에서 검증했다. 5개 플랫폼 설치 파일과 CI가 통과했다
 - 폴더: `project_manage/0005-2026_11_19-record_transcribe_edit`
-- 작업: 없음
+- 작업: `/Users/min-jo/orca/workspaces/seamone/5-verified-transcript`에서 구현. 두 단계 검수, 로컬 학습 대기열, 앱 첫 실행 안내 및 PyTorch 연구 증명
 - 선행: #3 받아쓰기 엔진 interface(대기), 후속: 뒤의 학습 엔진 이슈
-- 막힌 이유: #3 의 `Transcriber` interface 가 있어야 한다
-- 다음 행동: #3 merge 뒤 app worker 에게 맡긴다
+- 선행 코드: 받아쓰기 엔진 초안의 `Transcriber` interface와 검증용 Whisper small을 작업 브랜치에 연결했다
+- 다음 행동: 설치 파일을 실기기에서 확인한다. 마이크 녹음과 앱 안에서 실제 학습한 가중치를 추론에 반영하는 경로를 이어 간다
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
@@ -94,7 +100,7 @@
 - 두 계층 사이 증류: 데스크톱 계층 모델에서 폰 계층 모델로, 나온 곳 PD6
 - 화자 구분과 요약, 나온 곳 PD10
 - 서명과 배포: Apple 과 Windows 인증서, 앱 장터, 나온 곳 #1 제외 범위
-- 개인정보 안내와 FL 참여 동의 화면, 나온 곳 PD8
+- 첫 실행의 개인정보 안내와 연합학습 보호 경계, 나온 곳 PD13
 
 ## 6. 사용자에게 올릴 것
 ### 6-1. 확인이 필요한 것 (잠정으로 정하고 진행한 것)
