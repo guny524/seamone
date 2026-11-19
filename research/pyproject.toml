@@ -1,0 +1,78 @@
+[project]
+name = "seamone-research"
+version = "0.1.0"
+description = "seamone 의 시작 모델 고르기와 라벨 없는 학습 실험(PyTorch), 앱에는 들어가지 않는다"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch>=2.15",
+    # qwen-asr 0.0.6 이 transformers 4.57.6 과 accelerate 1.12.0 을 고정한다
+    "transformers==4.57.6",
+    "qwen-asr==0.0.6",
+    "peft>=0.21",
+    # transformers 4.57.6 이 huggingface-hub 1 미만을 요구한다
+    "huggingface-hub>=0.34,<1.0",
+    "soundfile>=0.14",
+    "librosa>=1.0",
+    "pyarrow>=24",
+    "jiwer>=4.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.17",
+    "pytest>=9",
+]
+
+[tool.uv]
+# 파일 몇 개로 이뤄진 실험 코드라 패키지로 빌드하지 않는다
+package = false
+# qwen-asr 가 데모 화면(qwen_asr/cli)에서만 쓰는 의존성과 강제 정렬기가 한국어 토큰화에서만 부르는 soynlp 를 설치하지 않는다
+# (qwen_asr 의 나머지 코드는 이것들을 import 하지 않는다, nagisa 는 최상위 import 라 남긴다)
+override-dependencies = [
+    "gradio; sys_platform == 'never'",
+    "flask; sys_platform == 'never'",
+    "sox; sys_platform == 'never'",
+    "pytz; sys_platform == 'never'",
+    "soynlp; sys_platform == 'never'",
+    "qwen-omni-utils; sys_platform == 'never'",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "C90",  # mccabe
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "A",    # flake8-builtins
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "PLR",  # pylint refactor
+    "PLW",  # pylint warning
+    "RUF",  # ruff-specific
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.pylint]
+max-args = 8
+max-statements = 50
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = [
+    "PLR2004",  # assert result == 42 처럼 magic number 를 바로 비교
+    "E501",     # 기대값을 그대로 적은 긴 줄
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v --tb=short"

@@ -1,2 +1,14 @@
 # 이슈 결정
 (형식은 `project-issue-conductor` skill 의 `references/record-format.md` 6절, 지우지 않고 쌓는다)
+
+- D1 2026-11-19 판을 고정했다: tauri 2.12.7, tauri-build 2.7.6, tauri-cli 2.12.6, Leptos 0.8.23, trunk 0.22.2, wasm-bindgen 0.2.130, serde-wasm-bindgen 0.6.5, 이유: crates.io API 의 `max_stable_version` 조회에서 나온 안정판이다, tauri 3.0.0-alpha 와 leptos 0.9.0-rc1 은 시험판이고 PD5 가 정한 것은 Tauri 2 라서 쓰지 않는다, worker
+- D2 2026-11-19 Rust 를 `rust-toolchain.toml` 로 1.99.1 에 고정했다(components 는 clippy 와 rustfmt, 타깃은 wasm32-unknown-unknown), CI 는 `rustup toolchain install` 한 줄로 같은 판을 받는다, 이유: `stable` 을 따라가면 새 clippy 경고가 `-D warnings` 로 CI 를 깨고 노트북과 CI 의 컴파일러가 갈라진다, worker
+- D3 2026-11-19 tauri-cli 2.12.6 과 trunk 0.22.2 는 공식 릴리스의 미리 빌드된 파일을 `scripts/install-tools.sh` 로 `~/.cargo/bin` 에 설치했다, 이유: 시킨 대로 `cargo install` 을 시작했으나 부하 평균 40 이 넘는 노트북에서 tauri-cli 컴파일만 20분 가까이 걸려 멈췄다, 같은 판의 공식 파일을 쓰면 CI 와 노트북이 같은 바이너리를 쓴다, `make install` 은 소스로 받는 `cargo install --locked` 로 둔다, worker
+- D4 2026-11-19 앱 identifier 를 `io.github.guny524.seamone` 으로 정했다, 이유: Android 패키지 이름에 하이픈이 들어갈 수 없고 `.app` 으로 끝나면 안 된다, 레포 주인의 GitHub 계정에서 역순으로 이은 이름이라 겹치지 않는다, 사용자 확인 대기(앱 장터에 올리기 전에 바꿀 수 있다), worker
+- D5 2026-11-19 `gen/android` 와 `gen/apple` 은 커밋하지 않고 CI 가 `init` 으로 만든다(board 3-7 의 첫 가정), `app/src-tauri/.gitignore` 에 `/gen/` 을 둔다, 이유: 뼈대 단계에는 손으로 고칠 것이 없다, 마이크 권한처럼 생성된 프로젝트를 고쳐야 하는 이슈(#5)가 오면 그때 커밋하는 쪽으로 바꾼다, worker
+- D6 2026-11-19 Android 는 `cargo tauri android build --debug --apk --target aarch64` 로 만든다(JDK 21 temurin, runner 에 깔린 SDK 와 NDK 를 `NDK_HOME=$ANDROID_NDK_LATEST_HOME` 로 쓴다), 이유: debug 빌드는 Gradle 이 debug 키로 서명해 기기에 바로 설치된다, 대부분의 폰이 aarch64 라서 ABI 하나로 CI 시간을 줄인다, Tauri 저장소의 모바일 CI(`test-api-e2e-mobile.yml`)와 같은 명령이다, worker
+- D7 2026-11-19 iOS 는 `cargo tauri ios init --ci --skip-targets-install` 뒤 `cargo tauri ios build --debug --target aarch64-sim --no-sign` 로 만든다, 이유: tauri-cli 2.12.6 의 `cargo tauri ios build --help` 에 `--target aarch64-sim` 과 `--no-sign` 이 있고, Tauri 저장소의 모바일 CI 가 서명 없는 시뮬레이터 빌드에 쓰는 명령과 같다, worker
+- D8 2026-11-19 macOS x86_64 는 Intel runner 없이 `macos-latest`(arm64)에서 `--target x86_64-apple-darwin` 으로 교차 빌드한다, Linux 는 `ubuntu-22.04`(AppImage 가 낮은 glibc 에서 돈다), 이유: Tauri 공식 GitHub Actions 문서의 matrix 와 같다, worker
+- D9 2026-11-19 화면은 `window.__TAURI__.core.invoke` 로 command 를 부르고(`withGlobalTauri: true`, create-tauri-app 의 Leptos 템플릿과 같은 방식) CSP 는 `null` 로 둔다, 이유: 뼈대 단계다, CSP 를 좁히는 일은 화면에 기능이 붙을 때 한다(프로젝트 board 5-4 새 이슈 후보에 올릴 것), worker
+- D10 2026-11-19 profile 을 정했다: dev 는 `debug = "line-tables-only"`, release 는 `lto = "thin"`, `strip`, `panic = "abort"`, 화면 crate 만 `opt-level = "z"`, 이유: PD12(디스크 절약), fat LTO 는 노트북과 CI 의 빌드 시간을 크게 늘린다, worker
+- D11 2026-11-19 `make lint` 와 `make test` 는 빈 `app/ui/dist` 폴더만 만들고 trunk 를 돌리지 않는다, 이유: 앱 껍데기 crate 의 `tauri::generate_context!` 가 컴파일할 때 `frontendDist` 폴더를 요구하고 lint 와 test 는 화면을 쓰지 않는다, CI 의 lint job 에 trunk 설치와 WASM 빌드를 넣지 않는다, worker
