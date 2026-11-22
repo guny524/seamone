@@ -1,5 +1,6 @@
 use crate::{audio::canonical_spec, store::Store};
 use seamone_asr::FakeTranscriber;
+use seamone_core::error_marks::ErrorMark;
 use seamone_core::review::{
     LabelSource, ReviewAction, ReviewRequest, ReviewSegment, SampleRange, Verdict,
 };
@@ -24,7 +25,7 @@ impl Fixture {
         wav.finalize().unwrap();
         Self { root, source }
     }
-    fn store(&self) -> Store {
+    pub(crate) fn store(&self) -> Store {
         Store::open(&self.root.join("app")).unwrap()
     }
     pub(crate) fn transcribed(&self) -> (Store, ReviewSegment) {
@@ -50,6 +51,539 @@ fn request(segment: &ReviewSegment, action: ReviewAction) -> ReviewRequest {
         expected_revision: segment.revision,
         action,
     }
+}
+
+#[test]
+fn saved_error_marks_reopen_and_flag_only_overlapping_rows_without_relabeling() {
+    use seamone_core::TranscriptSegment;
+
+    let f = Fixture::new();
+    let mut store = f.store();
+    let info = store.import(&f.source).unwrap();
+    let lines = [(0, 300, "가"), (300, 600, "나"), (700, 1000, "다")];
+    let original = store
+        .commit_transcription(
+            &info,
+            lines
+                .into_iter()
+                .map(|(start_ms, end_ms, text)| TranscriptSegment {
+                    start_ms,
+                    end_ms,
+                    text: text.into(),
+                    speaker: None,
+                    timing: None,
+                })
+                .collect(),
+            "test",
+            "fixture-v1",
+        )
+        .unwrap();
+    let checked = store
+        .mutate(&request(
+            &original[0],
+            ReviewAction::Judge {
+                verdict: Verdict::Yes,
+            },
+        ))
+        .unwrap();
+    let draft = store
+        .mutate(&request(
+            &original[1],
+            ReviewAction::SaveDraft {
+                text: "수정 초안".into(),
+            },
+        ))
+        .unwrap();
+
+    let mark = ErrorMark {
+        id: Uuid::new_v4().to_string(),
+        recording_id: info.id.clone(),
+        recording_revision: info.revision,
+        range: SampleRange {
+            start: 4500,
+            end: 6500,
+        },
+    };
+    let mut second_connection = f.store();
+    let barrier = std::sync::Barrier::new(2);
+    std::thread::scope(|scope| {
+        let first = scope.spawn(|| {
+            barrier.wait();
+            store.save_error_mark(&mark).unwrap();
+        });
+        barrier.wait();
+        second_connection.save_error_mark(&mark).unwrap();
+        first.join().unwrap();
+    });
+
+    let mut gap = mark.clone();
+    gap.id = Uuid::new_v4().to_string();
+    gap.range = SampleRange {
+        start: 9600,
+        end: 11_200,
+    };
+    assert!(
+        second_connection
+            .save_error_mark(&ErrorMark {
+                id: mark.id.clone(),
+                ..gap.clone()
+            })
+            .is_err()
+    );
+    second_connection.save_error_mark(&gap).unwrap();
+
+    let store = f.store();
+    assert_eq!(
+        store.error_mark_page(&info.id, 0).unwrap().marks,
+        vec![mark, gap]
+    );
+    let affected = store.segments(&info.id).unwrap();
+    for (row, old) in affected.iter().take(2).zip([checked, draft]) {
+        assert_eq!(row.range, old.range);
+        assert_eq!(row.machine_text, old.machine_text);
+        assert_eq!(row.text, old.text);
+        assert_eq!(row.verdict, old.verdict);
+        assert_eq!(row.revision, old.revision + 1);
+        assert!(row.needs_review());
+        assert_eq!(row.needs_correction, old.needs_correction);
+        assert_eq!(row.error_marked_text.as_deref(), Some(old.text.as_str()));
+        assert!(row.verified.is_none());
+        assert!(store.eligible(&row.id, row.revision).is_err());
+    }
+    assert_eq!(affected[2], original[2]);
+    assert_eq!(store.library(false).unwrap().pending_training, 0);
+}
+
+#[test]
+fn batch_rolls_back_all_ranges_and_same_id_retries_once() {
+    use seamone_core::error_marks::ErrorMarkBatch;
+
+    let f = Fixture::new();
+    let (mut store, segment) = f.transcribed();
+    let checked = store
+        .mutate(&request(
+            &segment,
+            ReviewAction::Judge {
+                verdict: Verdict::Yes,
+            },
+        ))
+        .unwrap();
+    let zero_and_one = SampleRange {
+        start: 0,
+        end: 4_000,
+    };
+    let four = SampleRange {
+        start: 8_000,
+        end: 10_000,
+    };
+    let batch = ErrorMarkBatch {
+        id: "two branches".into(),
+        recording_id: checked.recording_id.clone(),
+        recording_revision: checked.recording_revision,
+        ranges: vec![four, zero_and_one, four],
+    };
+    let db = rusqlite::Connection::open(f.root.join("app/seamone.sqlite3")).unwrap();
+    db.execute_batch("CREATE TRIGGER fail_second BEFORE INSERT ON error_marks WHEN NEW.start_sample=8000 BEGIN SELECT RAISE(ABORT,'test failure'); END;").unwrap();
+    assert!(store.save_error_marks(&batch).is_err());
+    assert_eq!(store.segment(&checked.id).unwrap(), checked);
+    assert_eq!(store.library(false).unwrap().pending_training, 1);
+    assert_eq!(
+        store.error_mark_page(&batch.recording_id, 0).unwrap().marks,
+        []
+    );
+    db.execute_batch("DROP TRIGGER fail_second;").unwrap();
+
+    let invalid = ErrorMarkBatch {
+        ranges: vec![
+            zero_and_one,
+            SampleRange {
+                start: 15_999,
+                end: 16_001,
+            },
+        ],
+        ..batch.clone()
+    };
+    assert!(store.save_error_marks(&invalid).is_err());
+    assert!(
+        store
+            .save_error_marks(&ErrorMarkBatch {
+                recording_revision: batch.recording_revision + 1,
+                ..batch.clone()
+            })
+            .is_err()
+    );
+    assert_eq!(store.segment(&checked.id).unwrap(), checked);
+
+    store.save_error_marks(&batch).unwrap();
+    drop(store);
+    let mut store = f.store();
+    store
+        .save_error_marks(&ErrorMarkBatch {
+            ranges: vec![zero_and_one, four],
+            ..batch.clone()
+        })
+        .unwrap();
+    assert!(
+        store
+            .save_error_marks(&ErrorMarkBatch {
+                ranges: vec![zero_and_one],
+                ..batch.clone()
+            })
+            .is_err()
+    );
+    let saved = store.error_mark_page(&batch.recording_id, 0).unwrap().marks;
+    assert_eq!(
+        saved.iter().map(|mark| mark.range).collect::<Vec<_>>(),
+        [zero_and_one, four]
+    );
+    let marked = store.segment(&checked.id).unwrap();
+    assert_eq!(marked.revision, checked.revision + 1);
+    assert_eq!(
+        marked.error_marked_text.as_deref(),
+        Some(checked.text.as_str())
+    );
+    assert_eq!(store.library(false).unwrap().pending_training, 0);
+    assert!(store.eligible(&marked.id, marked.revision).is_err());
+}
+
+#[test]
+fn remarking_dismissed_audio_refreshes_review_without_duplicate_sample_rows() {
+    use seamone_core::error_marks::ErrorMarkBatch;
+
+    let f = Fixture::new();
+    let (mut store, segment) = f.transcribed();
+    let zero_and_one = SampleRange {
+        start: 0,
+        end: 4_000,
+    };
+    let four = SampleRange {
+        start: 8_000,
+        end: 10_000,
+    };
+    let batch = ErrorMarkBatch {
+        id: "first review".into(),
+        recording_id: segment.recording_id.clone(),
+        recording_revision: segment.recording_revision,
+        ranges: vec![zero_and_one, four],
+    };
+    store.save_error_marks(&batch).unwrap();
+    let marked = store.segment(&segment.id).unwrap();
+    let dismissed = store
+        .mutate(&request(&marked, ReviewAction::DismissErrorMark))
+        .unwrap();
+    store.save_error_marks(&batch).unwrap();
+    assert_eq!(store.segment(&segment.id).unwrap(), dismissed);
+
+    store
+        .save_error_marks(&ErrorMarkBatch {
+            id: "later review".into(),
+            ..batch.clone()
+        })
+        .unwrap();
+    let marked_again = store.segment(&segment.id).unwrap();
+    assert_eq!(marked_again.revision, dismissed.revision + 1);
+    assert_eq!(
+        marked_again.error_marked_text.as_deref(),
+        Some(dismissed.text.as_str())
+    );
+    assert_eq!(
+        store
+            .error_mark_page(&batch.recording_id, 0)
+            .unwrap()
+            .marks
+            .iter()
+            .map(|mark| mark.range)
+            .collect::<Vec<_>>(),
+        [zero_and_one, four]
+    );
+    store
+        .save_error_marks(&ErrorMarkBatch {
+            id: "partly new audio".into(),
+            ranges: vec![
+                SampleRange {
+                    start: 3_000,
+                    end: 9_000,
+                },
+                SampleRange {
+                    start: 3_500,
+                    end: 5_000,
+                },
+            ],
+            ..batch.clone()
+        })
+        .unwrap();
+    let marks = store.error_mark_page(&batch.recording_id, 0).unwrap().marks;
+    assert_eq!(
+        marks.iter().map(|mark| mark.range).collect::<Vec<_>>(),
+        [
+            zero_and_one,
+            four,
+            SampleRange {
+                start: 4_000,
+                end: 8_000
+            }
+        ]
+    );
+}
+
+#[test]
+fn reopening_version_three_keeps_marks_and_transcript_rows_without_token_timing() {
+    let f = Fixture::new();
+    let (mut store, segment) = f.transcribed();
+    let legacy_mark = ErrorMark {
+        id: "legacy mark".into(),
+        recording_id: segment.recording_id.clone(),
+        recording_revision: segment.recording_revision,
+        range: SampleRange { start: 16, end: 32 },
+    };
+    store.save_error_mark(&legacy_mark).unwrap();
+    let marked = store.segment(&segment.id).unwrap();
+    drop(store);
+    let old = rusqlite::Connection::open(f.root.join("app/seamone.sqlite3")).unwrap();
+    old.execute_batch("DROP TABLE error_mark_batches; PRAGMA user_version = 3;")
+        .unwrap();
+    drop(old);
+
+    let store = f.store();
+    let reopened = store.segment(&marked.id).unwrap();
+    assert_eq!(reopened, marked);
+    assert_eq!(reopened.display_timing(), None);
+    assert_eq!(
+        store
+            .error_mark_page(&segment.recording_id, 0)
+            .unwrap()
+            .marks,
+        [legacy_mark]
+    );
+}
+
+#[test]
+fn mark_migration_preserves_verified_data_and_rejects_stale_or_invalid_inputs() {
+    let f = Fixture::new();
+    let (mut store, segment) = f.transcribed();
+    let checked = store
+        .mutate(&request(
+            &segment,
+            ReviewAction::Judge {
+                verdict: Verdict::Yes,
+            },
+        ))
+        .unwrap();
+    let pending = store.import(&f.source).unwrap();
+    drop(store);
+    let old = rusqlite::Connection::open(f.root.join("app/seamone.sqlite3")).unwrap();
+    old.execute_batch(
+        "DROP TABLE error_mark_batches; DROP TABLE error_marks; PRAGMA user_version = 2;",
+    )
+    .unwrap();
+    drop(old);
+    let mut store = f.store();
+    assert_eq!(store.segment(&checked.id).unwrap(), checked);
+    assert!(store.eligible(&checked.id, checked.revision).is_ok());
+
+    let mark = ErrorMark {
+        id: "invalid".into(),
+        recording_id: segment.recording_id.clone(),
+        recording_revision: segment.recording_revision,
+        range: segment.range,
+    };
+    for invalid in [
+        ErrorMark {
+            recording_id: pending.id,
+            ..mark.clone()
+        },
+        ErrorMark {
+            recording_revision: segment.recording_revision + 1,
+            ..mark.clone()
+        },
+        ErrorMark {
+            range: SampleRange {
+                start: 0,
+                end: pending.samples + 1,
+            },
+            ..mark
+        },
+    ] {
+        assert!(store.save_error_mark(&invalid).is_err());
+    }
+    assert_eq!(
+        store
+            .error_mark_page(&segment.recording_id, 0)
+            .unwrap()
+            .marks,
+        []
+    );
+    assert_eq!(store.segment(&checked.id).unwrap(), checked);
+}
+
+#[test]
+fn error_mark_blocks_unchanged_latest_text_after_draft_save_and_reopen() {
+    let f = Fixture::new();
+    let (mut store, segment) = f.transcribed();
+    let edited = store
+        .mutate(&request(
+            &segment,
+            ReviewAction::SaveDraft {
+                text: "표시 당시수정한 글".into(),
+            },
+        ))
+        .unwrap();
+    let mark = ErrorMark {
+        id: Uuid::new_v4().to_string(),
+        recording_id: edited.recording_id.clone(),
+        recording_revision: edited.recording_revision,
+        range: SampleRange {
+            start: edited.range.start,
+            end: edited.range.start + 16,
+        },
+    };
+    store.save_error_mark(&mark).unwrap();
+    let marked = store.segment(&edited.id).unwrap();
+    for action in [
+        ReviewAction::ConfirmCorrection,
+        ReviewAction::CorrectAndConfirm {
+            text: "  표시 당시수정한 글  ".into(),
+        },
+    ] {
+        assert_eq!(
+            store.mutate(&request(&marked, action)).unwrap_err(),
+            seamone_core::review::ReviewError::UnchangedErrorMarked.to_string(),
+        );
+    }
+    let draft = store
+        .mutate(&request(
+            &marked,
+            ReviewAction::SaveDraft {
+                text: "  표시 당시수정한 글  ".into(),
+            },
+        ))
+        .unwrap();
+    drop(store);
+    let mut store = f.store();
+    assert!(
+        store
+            .mutate(&request(&draft, ReviewAction::ConfirmCorrection))
+            .is_err()
+    );
+    let changed_draft = store
+        .mutate(&request(
+            &draft,
+            ReviewAction::SaveDraft {
+                text: "표시 당시 수정한 글".into(),
+            },
+        ))
+        .unwrap();
+    assert!(
+        store
+            .mutate(&request(
+                &changed_draft,
+                ReviewAction::CorrectAndConfirm { text: edited.text }
+            ))
+            .is_err()
+    );
+    assert_eq!(store.library(false).unwrap().pending_training, 0);
+    let confirmed = store
+        .mutate(&request(&changed_draft, ReviewAction::ConfirmCorrection))
+        .unwrap();
+    assert!(store.eligible(&confirmed.id, confirmed.revision).is_ok());
+}
+
+#[test]
+fn dismissing_a_repeated_error_mark_preserves_draft_and_original_ranges() {
+    let f = Fixture::new();
+    let (mut store, segment) = f.transcribed();
+    let first = ErrorMark {
+        id: "first".into(),
+        recording_id: segment.recording_id.clone(),
+        recording_revision: segment.recording_revision,
+        range: SampleRange {
+            start: segment.range.start,
+            end: segment.range.start + 16,
+        },
+    };
+    store.save_error_mark(&first).unwrap();
+    let marked = store.segment(&segment.id).unwrap();
+    assert!(marked.needs_review());
+    let draft = store
+        .mutate(&request(
+            &marked,
+            ReviewAction::SaveDraft {
+                text: "사용자가 고친 글".into(),
+            },
+        ))
+        .unwrap();
+    let second = ErrorMark {
+        id: "second".into(),
+        range: SampleRange {
+            start: first.range.end,
+            end: first.range.end + 16,
+        },
+        ..first.clone()
+    };
+    store.save_error_mark(&second).unwrap();
+    store.save_error_mark(&first).unwrap();
+    let remarked = store.segment(&segment.id).unwrap();
+    assert_eq!(remarked.revision, draft.revision + 1);
+    assert_eq!(
+        remarked.error_marked_text.as_deref(),
+        Some(draft.text.as_str())
+    );
+    assert!(
+        store
+            .mutate(&request(&remarked, ReviewAction::ConfirmCorrection))
+            .is_err()
+    );
+
+    let dismissed = store
+        .mutate(&request(&remarked, ReviewAction::DismissErrorMark))
+        .unwrap();
+    store.save_error_mark(&second).unwrap();
+    drop(store);
+    let store = f.store();
+    assert_eq!(store.segment(&segment.id).unwrap(), dismissed);
+    assert_eq!(dismissed.error_marked_text, None);
+    assert_eq!(dismissed.text, draft.text);
+    assert_eq!(dismissed.machine_text, segment.machine_text);
+    assert_eq!(dismissed.range, segment.range);
+    assert!(dismissed.needs_correction);
+    assert!(store.eligible(&dismissed.id, dismissed.revision).is_err());
+    assert_eq!(store.library(false).unwrap().pending_training, 0);
+    assert_eq!(
+        store
+            .error_mark_page(&segment.recording_id, 0)
+            .unwrap()
+            .marks,
+        [first, second]
+    );
+}
+
+#[test]
+fn a_failed_mark_write_rolls_back_correction_and_allows_retry() {
+    let f = Fixture::new();
+    let (mut store, segment) = f.transcribed();
+    let mark = ErrorMark {
+        id: Uuid::new_v4().to_string(),
+        recording_id: segment.recording_id.clone(),
+        recording_revision: segment.recording_revision,
+        range: SampleRange {
+            start: segment.range.start,
+            end: segment.range.start + 1,
+        },
+    };
+    let db = rusqlite::Connection::open(f.root.join("app/seamone.sqlite3")).unwrap();
+    db.execute_batch("CREATE TRIGGER fail_mark BEFORE INSERT ON error_marks BEGIN SELECT RAISE(ABORT,'test failure'); END;").unwrap();
+    assert!(store.save_error_mark(&mark).is_err());
+    assert_eq!(store.segment(&segment.id).unwrap(), segment);
+    assert_eq!(
+        store
+            .error_mark_page(&segment.recording_id, 0)
+            .unwrap()
+            .marks,
+        []
+    );
+    db.execute_batch("DROP TRIGGER fail_mark;").unwrap();
+    store.save_error_mark(&mark).unwrap();
+    assert!(store.segment(&segment.id).unwrap().needs_review());
 }
 
 #[test]
@@ -720,23 +1254,46 @@ fn real_desktop_path() {
     let segments = inference::transcribe(&state, &info.id).unwrap();
     assert_ne!(segments, Vec::<ReviewSegment>::new());
     assert!(segments.iter().all(|s| !s.machine_text.trim().is_empty()));
-    let s = &segments[0];
-    let request = request(
-        s,
-        ReviewAction::Judge {
-            verdict: Verdict::No,
+    let s = segments
+        .iter()
+        .find(|line| line.display_timing().is_some_and(|spans| spans.len() > 1))
+        .unwrap_or_else(|| panic!("Whisper small returned no aligned text groups: {segments:?}"));
+    let old_playback = state.playback(&s.id, s.revision).unwrap();
+    state.playback_ended(&old_playback.token).unwrap();
+    let middle = s.range.start + (s.range.end - s.range.start) / 2;
+    let mark = ErrorMark {
+        id: Uuid::new_v4().to_string(),
+        recording_id: info.id.clone(),
+        recording_revision: info.revision,
+        range: SampleRange {
+            start: s.range.start,
+            end: middle,
         },
-    );
-    assert!(state.review(&request, None).is_err());
-    let playback = state.playback(&s.id, s.revision).unwrap();
-    assert!(state.review(&request, Some(&playback.token)).is_err());
-    // Simulated UI ended event exercises the native gate; this is not a human label.
-    state.playback_ended(&playback.token).unwrap();
-    let rejected = state.review(&request, Some(&playback.token)).unwrap();
+    };
+    let marked = {
+        let mut store = state.store().unwrap();
+        let preview = store
+            .audio
+            .range_wav(&info.id, mark.range, info.samples)
+            .unwrap();
+        assert_eq!(
+            u64::from(
+                hound::WavReader::new(Cursor::new(preview))
+                    .unwrap()
+                    .duration()
+            ),
+            middle - s.range.start
+        );
+        store.save_error_mark(&mark).unwrap();
+        let marked = store.segment(&s.id).unwrap();
+        assert!(marked.needs_review());
+        assert!(store.eligible(&marked.id, marked.revision).is_err());
+        marked
+    };
     let draft = state
         .review(
-            &super::store_tests::request(
-                &rejected,
+            &request(
+                &marked,
                 ReviewAction::SaveDraft {
                     text: "통합시험용 수정본".into(),
                 },
@@ -744,9 +1301,13 @@ fn real_desktop_path() {
             None,
         )
         .unwrap();
-    let confirm = super::store_tests::request(&draft, ReviewAction::ConfirmCorrection);
-    assert!(state.review(&confirm, Some(&playback.token)).is_err());
+    assert!(draft.display_timing().is_none());
+    let confirm = request(&draft, ReviewAction::ConfirmCorrection);
+    assert!(state.review(&confirm, None).is_err());
+    assert!(state.review(&confirm, Some(&old_playback.token)).is_err());
     let playback = state.playback(&draft.id, draft.revision).unwrap();
+    assert!(state.review(&confirm, Some(&playback.token)).is_err());
+    // Exercise the native gate with a simulated UI event.
     state.playback_ended(&playback.token).unwrap();
     let confirmed = state.review(&confirm, Some(&playback.token)).unwrap();
     assert!(
@@ -758,9 +1319,16 @@ fn real_desktop_path() {
     );
     drop(state);
     let store = f.store();
-    assert_eq!(store.segment(&confirmed.id).unwrap(), confirmed);
+    let reopened = store.segment(&confirmed.id).unwrap();
+    assert_eq!(reopened, confirmed);
+    assert_eq!(reopened.machine_timing, s.machine_timing);
+    assert!(reopened.display_timing().is_none());
+    assert_eq!(
+        store.error_mark_page(&info.id, 0).unwrap().marks,
+        vec![mark]
+    );
     println!(
-        "real Whisper inference -> canonical import -> range WAV -> No -> draft -> explicit confirm -> eligible -> reopen passed (simulated review, no training)"
+        "canonical import -> real Whisper small with multiple DTW text spans -> range preview -> error mark -> full revision playback -> explicit confirmation -> eligible -> reopen passed (simulated review, no training)"
     );
 
     #[cfg(unix)]

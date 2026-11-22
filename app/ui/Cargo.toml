@@ -11,7 +11,9 @@ publish.workspace = true
 seamone-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-web-sys = { version = "0.3", features = ["HtmlAudioElement", "HtmlMediaElement", "KeyboardEvent", "HtmlTextAreaElement", "HtmlElement", "Window", "Document", "Storage"] }
+web-sys = { version = "0.3", features = ["HtmlAudioElement", "HtmlMediaElement", "KeyboardEvent", "HtmlTextAreaElement", "HtmlElement", "Window", "Document", "Storage", "CanvasRenderingContext2d", "HtmlCanvasElement", "ImageData"] }
+base64 = "0.22"
+hound = "3.5.1"
 console_error_panic_hook = "0.1.7"
 leptos = { version = "0.8.23", features = ["csr"] }
 serde-wasm-bindgen = "0.6.5"

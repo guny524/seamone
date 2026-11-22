@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Seamone에서 녹음과 전사를 기기에 보관하고, 음성을 다시 들으며 틀린 구간만 찾아 고쳐 보세요.">
+  <title>Seamone · 기기에서 받아쓰기</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-content">
+      <a class="brand" href="./">Seamone</a>
+      <nav aria-label="페이지 메뉴">
+        <a href="#privacy">개인정보</a>
+        <a href="#download">시험 빌드</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main">
+    <div class="wrap hero">
+      <div class="hero-copy">
+        <h1>녹음부터 교정까지,<br>내 기기에서.</h1>
+        <p>녹음하거나 파일을 열어 기기에서 음성을 받아씁니다. 음성을 다시 들으며 틀린 곳에 표시하고, 표시한 구간만 모아서 고칠 수 있습니다.</p>
+        <a class="button" href="#download">시험 빌드 보기</a>
+      </div>
+      <figure class="preview">
+        <img src="review-preview.webp" alt="Seamone에서 전사 위에 재생 위치를 표시하고, 저장한 오류 두 곳을 시간축과 교정 목록에 보여주는 화면" width="1160" height="816">
+        <figcaption>빠른 검수 화면 예시</figcaption>
+      </figure>
+    </div>
+
+    <section class="privacy" id="privacy" aria-labelledby="privacy-heading">
+      <div class="wrap">
+        <h2 id="privacy-heading">음성과 전사는 기기에 남습니다</h2>
+        <p class="intro">현재 앱은 녹음과 전사, 수정본을 기기에 저장합니다. 사용자가 실제 발화와 일치한다고 확인한 전사만 학습 대기열에 담습니다.</p>
+        <h3>향후 연합학습이 도입되면</h3>
+        <ol class="privacy-flow">
+          <li><strong>기기 안에서 학습</strong><span>확인한 전사와 원본 음성으로 백그라운드에서 학습합니다.</span></li>
+          <li><strong>모델 변경분 보호</strong><span>변경분 크기를 제한하고 노이즈를 더해 특정 녹음 내용을 추측하기 어렵게 합니다.</span></li>
+          <li><strong>보안 집계</strong><span>서버는 여러 기기의 변경분을 합한 값으로 공통 모델을 갱신합니다.</span></li>
+        </ol>
+        <p class="fine-print">기기 안 학습과 모델 변경분 전송은 준비 중입니다.</p>
+      </div>
+    </section>
+
+    <section class="wrap download" id="download" aria-labelledby="download-heading">
+      <div class="download-heading">
+        <div>
+          <h2 id="download-heading">시험 빌드 받기</h2>
+          <p>GitHub Actions에서 성공한 빌드를 열고 <strong>Artifacts</strong>에서 기기에 맞는 파일을 고르세요.</p>
+        </div>
+        <a class="button" href="https://github.com/guny524/seamone/actions/workflows/build.yml">GitHub 빌드 목록</a>
+      </div>
+      <dl class="platforms">
+        <div><dt>macOS</dt><dd>Apple Silicon·Intel용 DMG · 서명 전</dd></div>
+        <div><dt>Windows</dt><dd>x86-64용 EXE·MSI · 서명 전</dd></div>
+        <div><dt>Linux</dt><dd>x86-64용 DEB·AppImage</dd></div>
+        <div><dt>Android</dt><dd>디버그 APK · 시험용</dd></div>
+        <div><dt>iOS</dt><dd>시뮬레이터용 앱</dd></div>
+      </dl>
+      <p class="fine-print">기기 안 받아쓰기를 시험하려면 Whisper 엔진이 포함된 데스크톱 빌드와 Whisper small 모델 파일이 필요합니다.</p>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap footer-content">
+      <a class="brand" href="./">Seamone</a>
+      <a href="https://github.com/guny524/seamone">GitHub 소스와 실행 안내</a>
+    </div>
+  </footer>
+</body>
+</html>

@@ -4,11 +4,13 @@
 //! WASM 으로도 컴파일되므로 파일, 소켓, 스레드처럼 브라우저에 없는 것에 기대지 않는다.
 #![forbid(unsafe_code)]
 
+pub mod capture;
+pub mod error_marks;
 pub mod review;
 pub mod review_flow;
 mod transcript;
 
-pub use transcript::TranscriptSegment;
+pub use transcript::{TimedText, TranscriptSegment, valid_alignment};
 
 use serde::{Deserialize, Serialize};
 

@@ -1,4 +1,5 @@
 //! Human review and training eligibility, shared by native storage and the WASM UI.
+use crate::transcript::{TimedText, valid_alignment};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -64,10 +65,15 @@ pub struct ReviewSegment {
     pub revision: u64,
     pub range: SampleRange,
     pub machine_text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine_timing: Option<Vec<TimedText>>,
     pub text: String,
     pub verdict: Option<Verdict>,
     /// Draft edits need a separate pass without inventing a binary No verdict.
     pub needs_correction: bool,
+    /// Text at the latest error mark, retained through subsequent draft saves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_marked_text: Option<String>,
     pub verified: Option<VerifiedText>,
 }
 
@@ -78,6 +84,7 @@ pub enum ReviewAction {
     SaveDraft { text: String },
     CorrectAndConfirm { text: String },
     ConfirmCorrection,
+    DismissErrorMark,
     Invalidate,
 }
 
@@ -98,6 +105,7 @@ pub enum ReviewError {
     MissingSource,
     NotVerified,
     UnchangedRejected,
+    UnchangedErrorMarked,
 }
 
 impl fmt::Display for ReviewError {
@@ -110,6 +118,7 @@ impl fmt::Display for ReviewError {
             Self::MissingSource => "녹음 원본이 없거나 바뀌었습니다. 이 조각은 학습에 쓰지 않습니다.",
             Self::NotVerified => "이 수정본에는 사람이 확인한 정답이 없습니다.",
             Self::UnchangedRejected => "처음 No로 판정한 글과 같습니다. 처음 판정을 취소하고 다시 검수하세요.",
+            Self::UnchangedErrorMarked => "오류를 표시할 때 저장된 글과 같습니다. 글을 고치거나 이 조각의 오류 판정을 해제하세요.",
         })
     }
 }
@@ -118,9 +127,43 @@ impl std::error::Error for ReviewError {}
 
 impl ReviewSegment {
     #[must_use]
+    pub fn display_timing(&self) -> Option<&[TimedText]> {
+        self.machine_timing.as_deref().filter(|timing| {
+            self.text == self.machine_text && valid_alignment(timing, &self.text, self.range)
+        })
+    }
+
+    #[must_use]
     pub fn rejected_text_unchanged(&self, text: &str) -> bool {
         self.verdict == Some(Verdict::No) && text.trim() == self.machine_text.trim()
     }
+
+    #[must_use]
+    pub fn needs_review(&self) -> bool {
+        self.needs_correction || self.error_marked_text.is_some()
+    }
+
+    #[must_use]
+    pub fn awaits_correction(&self) -> bool {
+        self.needs_review() && self.verified.is_none()
+    }
+
+    #[must_use]
+    pub fn correction_error(&self, text: &str) -> Option<ReviewError> {
+        if self.rejected_text_unchanged(text) {
+            return Some(ReviewError::UnchangedRejected);
+        }
+        self.error_marked_text
+            .as_ref()
+            .filter(|marked| marked.trim() == text.trim())
+            .map(|_| ReviewError::UnchangedErrorMarked)
+    }
+
+    #[must_use]
+    pub fn can_confirm_correction(&self, text: &str) -> bool {
+        self.needs_review() && self.verified.is_none() && self.correction_error(text).is_none()
+    }
+
     /// Listening is enforced by the review controller. Storage performs exact-revision CAS.
     pub fn apply(&self, request: &ReviewRequest, samples: u64) -> Result<Self, ReviewError> {
         if request.segment_id != self.id || request.expected_revision != self.revision {
@@ -138,8 +181,7 @@ impl ReviewSegment {
         match &request.action {
             ReviewAction::Judge { verdict } => {
                 self.range.validate(samples)?;
-                if self.verdict.is_some() || self.needs_correction || self.text != self.machine_text
-                {
+                if self.verdict.is_some() || self.needs_review() || self.text != self.machine_text {
                     return Err(ReviewError::InvalidTransition);
                 }
                 next.verdict = Some(*verdict);
@@ -158,36 +200,32 @@ impl ReviewSegment {
                 next.text.clone_from(text);
                 next.needs_correction = true;
             }
-            ReviewAction::ConfirmCorrection => {
-                self.range.validate(samples)?;
-                validate_text(&self.text)?;
-                if self.rejected_text_unchanged(&self.text) {
-                    return Err(ReviewError::UnchangedRejected);
-                }
-                if !self.needs_correction || self.verified.is_some() {
-                    return Err(ReviewError::InvalidTransition);
-                }
-                next.verified = Some(VerifiedText {
-                    revision: next.revision,
-                    text: self.text.clone(),
-                    source: LabelSource::Corrected,
-                });
-            }
-            ReviewAction::CorrectAndConfirm { text } => {
+            ReviewAction::ConfirmCorrection | ReviewAction::CorrectAndConfirm { .. } => {
+                let text = if let ReviewAction::CorrectAndConfirm { text } = &request.action {
+                    text
+                } else {
+                    &self.text
+                };
                 self.range.validate(samples)?;
                 validate_text(text)?;
-                if self.rejected_text_unchanged(text) {
-                    return Err(ReviewError::UnchangedRejected);
+                if let Some(error) = self.correction_error(text) {
+                    return Err(error);
                 }
-                if !self.needs_correction || self.verified.is_some() {
+                if !self.needs_review() || self.verified.is_some() {
                     return Err(ReviewError::InvalidTransition);
                 }
+                next.needs_correction = true;
                 next.text.clone_from(text);
                 next.verified = Some(VerifiedText {
                     revision: next.revision,
                     text: text.clone(),
                     source: LabelSource::Corrected,
                 });
+            }
+            ReviewAction::DismissErrorMark => {
+                if self.verified.is_some() || next.error_marked_text.take().is_none() {
+                    return Err(ReviewError::InvalidTransition);
+                }
             }
             ReviewAction::Invalidate => {
                 next.verdict = None;
@@ -234,11 +272,11 @@ impl EligibleExample {
         let valid = match label.source {
             LabelSource::Accepted => {
                 segment.verdict == Some(Verdict::Yes)
-                    && !segment.needs_correction
+                    && !segment.needs_review()
                     && label.text == segment.machine_text
             }
             LabelSource::Corrected => {
-                segment.needs_correction && !segment.rejected_text_unchanged(&label.text)
+                segment.needs_review() && segment.correction_error(&label.text).is_none()
             }
         };
         if !valid {
@@ -303,9 +341,11 @@ mod tests {
                 end: 1600,
             },
             machine_text: "안녕".into(),
+            machine_timing: None,
             text: "안녕".into(),
             verdict: None,
             needs_correction: false,
+            error_marked_text: None,
             verified: None,
         }
     }
@@ -441,6 +481,23 @@ mod tests {
     fn a_rejected_unchanged_corrected_snapshot_is_ineligible() {
         let mut s = segment();
         s.verdict = Some(Verdict::No);
+        s.needs_correction = true;
+        s.verified = Some(VerifiedText {
+            revision: s.revision,
+            text: s.text.clone(),
+            source: LabelSource::Corrected,
+        });
+        assert_eq!(
+            EligibleExample::check(&s, 1600, true),
+            Err(ReviewError::NotVerified)
+        );
+    }
+
+    #[test]
+    fn an_unchanged_marked_snapshot_is_ineligible() {
+        let mut s = segment();
+        s.error_marked_text = Some("이전에 편집한 글".into());
+        s.text = "  이전에 편집한 글  ".into();
         s.needs_correction = true;
         s.verified = Some(VerifiedText {
             revision: s.revision,

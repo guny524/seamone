@@ -1,6 +1,35 @@
 //! 받아쓴 글의 조각, 받아쓰기 엔진이 돌려주고 화면이 보여 주고 고친다.
 
+use crate::review::SampleRange;
 use serde::{Deserialize, Serialize};
+
+/// Verbatim text sharing one model-aligned span on the recording's 16 kHz sample axis.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimedText {
+    pub range: SampleRange,
+    pub text: String,
+}
+
+#[must_use]
+pub fn valid_alignment(timing: &[TimedText], text: &str, line: SampleRange) -> bool {
+    let mut remaining = text;
+    let mut previous_end = line.start;
+    for span in timing {
+        if span.text.is_empty()
+            || span.range.start < previous_end
+            || span.range.start >= span.range.end
+            || span.range.end > line.end
+        {
+            return false;
+        }
+        let Some(rest) = remaining.strip_prefix(&span.text) else {
+            return false;
+        };
+        remaining = rest;
+        previous_end = span.range.end;
+    }
+    !timing.is_empty() && remaining.is_empty()
+}
 
 /// 받아쓴 글 한 조각, 음성의 한 구간(`start_ms` 부터 `end_ms` 까지)에 글 하나가 대응한다.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -13,6 +42,8 @@ pub struct TranscriptSegment {
     pub text: String,
     /// 말한 사람의 이름표, 화자 구분은 뒤 이슈가 하므로 지금은 모든 엔진이 `None` 으로 둔다
     pub speaker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing: Option<Vec<TimedText>>,
 }
 
 impl TranscriptSegment {
@@ -24,6 +55,7 @@ impl TranscriptSegment {
             end_ms,
             text: text.into(),
             speaker: None,
+            timing: None,
         }
     }
 }

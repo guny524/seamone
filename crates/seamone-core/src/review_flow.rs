@@ -70,9 +70,9 @@ impl ReviewFlow {
             .iter()
             .filter(|s| match mode {
                 ReviewMode::Binary => {
-                    s.verdict.is_none() && !s.needs_correction && s.text == s.machine_text
+                    s.verdict.is_none() && !s.needs_review() && s.text == s.machine_text
                 }
-                ReviewMode::Correction => s.needs_correction && s.verified.is_none(),
+                ReviewMode::Correction => s.awaits_correction(),
                 ReviewMode::Browse => true,
             })
             .map(Frame::from)
@@ -103,6 +103,10 @@ impl ReviewFlow {
     #[must_use]
     pub fn frame(&self) -> Option<&Frame> {
         self.frames.first()
+    }
+    #[must_use]
+    pub fn frames(&self) -> &[Frame] {
+        &self.frames
     }
     #[must_use]
     pub fn remaining(&self) -> usize {
@@ -147,11 +151,16 @@ impl ReviewFlow {
     }
 
     pub fn ended(&mut self, ticket: &Ticket) -> bool {
-        if self.phase != Phase::Playing(ticket.clone()) {
+        if !self.playing(ticket) {
             return false;
         }
         self.phase = Phase::Listened;
         true
+    }
+
+    #[must_use]
+    pub fn playing(&self, ticket: &Ticket) -> bool {
+        matches!(&self.phase, Phase::Playing(active) if active == ticket)
     }
 
     pub fn playback_failed(&mut self, ticket: &Ticket) -> bool {
@@ -214,9 +223,11 @@ mod tests {
                 end: 16_000,
             },
             machine_text: "네".into(),
+            machine_timing: None,
             text: "네".into(),
             verdict: None,
             needs_correction: false,
+            error_marked_text: None,
             verified: None,
         }
     }

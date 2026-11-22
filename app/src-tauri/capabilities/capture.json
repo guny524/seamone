@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "capture",
+  "description": "앱에 포함된 데스크톱 main 창에서 사용자가 녹음을 시작하고 마무리한다",
+  "platforms": ["linux", "macOS", "windows"],
+  "windows": ["main"],
+  "permissions": ["allow-start-recording", "allow-finish-recording"]
+}

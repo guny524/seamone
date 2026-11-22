@@ -1,15 +1,19 @@
 //! App-owned canonical PCM, with exact bounded range reads for the review player.
 use hound::{SampleFormat, WavReader, WavSpec, WavWriter};
-use seamone_core::review::{SAMPLE_RATE, SampleRange};
+use seamone_core::{
+    capture::MAX_RECORDING_SECONDS,
+    review::{SAMPLE_RATE, SampleRange},
+};
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
-    io::{Cursor, Read},
+    io::{BufWriter, Cursor, Read, Seek},
     path::{Path, PathBuf},
 };
 
-pub const MAX_RECORDING_SAMPLES: u64 = SAMPLE_RATE * 60 * 30;
+pub const MAX_RECORDING_SAMPLES: u64 = SAMPLE_RATE * MAX_RECORDING_SECONDS as u64;
 
+#[derive(Clone)]
 pub struct AudioLibrary {
     root: PathBuf,
 }
@@ -38,49 +42,35 @@ impl AudioLibrary {
         Ok(canonical)
     }
 
-    /// Input is selected by a native dialog, never supplied by the webview.
-    pub fn import(&self, id: &str, source: &Path) -> Result<(u64, String), String> {
-        let source = source.canonicalize().map_err(|e| e.to_string())?;
+    pub fn scratch_file(&self) -> Result<File, String> {
+        tempfile::tempfile_in(&self.root)
+            .map_err(|e| format!("음성 임시 파일을 만들지 못했습니다. {e}"))
+    }
+
+    pub fn open_source(&self, source: &Path) -> Result<File, String> {
+        let source = source
+            .canonicalize()
+            .map_err(|e| format!("선택한 음성 파일을 열지 못했습니다. {e}"))?;
         if source.starts_with(&self.root) || !source.is_file() {
-            return Err("앱의 보관 폴더 밖에 있는 WAV 파일을 고르세요.".into());
+            return Err("앱의 보관 폴더 밖에 있는 일반 음성 파일을 고르세요.".into());
         }
-        let file = File::open(source).map_err(|e| e.to_string())?;
-        if file.metadata().map_err(|e| e.to_string())?.len() > MAX_RECORDING_SAMPLES * 2 + 65_536 {
-            return Err("WAV 파일은 30분 이하, 16kHz mono PCM16이어야 합니다.".into());
-        }
-        let mut reader = WavReader::new(file).map_err(|e| format!("WAV를 읽지 못했습니다: {e}"))?;
-        check_spec(reader.spec())?;
-        let samples = u64::from(reader.duration());
-        if samples == 0 || samples > MAX_RECORDING_SAMPLES {
-            return Err("음성은 0초 초과, 30분 이하여야 합니다.".into());
-        }
+        File::open(source).map_err(|e| format!("선택한 음성 파일을 열지 못했습니다. {e}"))
+    }
+
+    pub fn publish(&self, id: &str, audio: &mut StagedAudio) -> Result<String, String> {
         let path = self.path(id)?;
-        let file = File::options()
+        audio.file.rewind().map_err(|e| e.to_string())?;
+        let mut file = File::options()
             .write(true)
             .create_new(true)
             .open(&path)
             .map_err(|e| e.to_string())?;
         let result = (|| {
-            let mut writer = WavWriter::new(file, canonical_spec()).map_err(|e| e.to_string())?;
-            let mut count = 0_u64;
-            for sample in reader.samples::<i16>() {
-                if count >= samples {
-                    return Err("WAV 길이가 header와 다릅니다.".into());
-                }
-                writer
-                    .write_sample(sample.map_err(|e| e.to_string())?)
-                    .map_err(|e| e.to_string())?;
-                count += 1;
-            }
-            if count != samples {
-                return Err("WAV가 중간에서 잘렸습니다.".into());
-            }
-            writer.finalize().map_err(|e| e.to_string())?;
-            File::open(&path)
-                .and_then(|f| f.sync_all())
-                .map_err(|e| e.to_string())?;
-            Ok((samples, digest(&path)?))
+            std::io::copy(&mut audio.file, &mut file).map_err(|e| e.to_string())?;
+            file.sync_all().map_err(|e| e.to_string())?;
+            digest(&path)
         })();
+        drop(file);
         if result.is_err() {
             let _ = fs::remove_file(&path);
         }
@@ -132,6 +122,57 @@ impl AudioLibrary {
         }
         writer.finalize().map_err(|e| e.to_string())?;
         Ok(cursor.into_inner())
+    }
+}
+
+pub struct StagedAudio {
+    file: File,
+    pub samples: u64,
+}
+
+pub struct AudioWriter {
+    file: File,
+    wav: WavWriter<BufWriter<File>>,
+    samples: u64,
+}
+
+impl AudioWriter {
+    pub fn new(library: &AudioLibrary) -> Result<Self, String> {
+        let file = library.scratch_file()?;
+        let wav = WavWriter::new(
+            BufWriter::new(file.try_clone().map_err(|e| e.to_string())?),
+            canonical_spec(),
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(Self {
+            file,
+            wav,
+            samples: 0,
+        })
+    }
+
+    pub fn write(&mut self, sample: i16) -> Result<(), String> {
+        if self.samples >= MAX_RECORDING_SAMPLES {
+            return Err(crate::normalize::LENGTH_ERROR.into());
+        }
+        self.wav
+            .write_sample(sample)
+            .map_err(|e| format!("음성 파일에 쓰지 못했습니다. {e}"))?;
+        self.samples += 1;
+        Ok(())
+    }
+
+    pub fn finish(self) -> Result<StagedAudio, String> {
+        if self.samples == 0 {
+            return Err(crate::normalize::EMPTY_ERROR.into());
+        }
+        self.wav
+            .finalize()
+            .map_err(|e| format!("음성 파일을 마무리하지 못했습니다. {e}"))?;
+        Ok(StagedAudio {
+            file: self.file,
+            samples: self.samples,
+        })
     }
 }
 

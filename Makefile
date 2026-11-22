@@ -45,11 +45,15 @@ clean:
 	cargo clean
 	rm -rf $(UI_DIST)
 
-.PHONY: ui-test
+.PHONY: ui-test site-preview
 ui-test:
 	cd app/ui && trunk build
 	mkdir -p .tmp/browser
 	TMPDIR="$(CURDIR)/.tmp/browser" node app/ui/tests/review.mjs
+
+SITE_PORT ?= 4173
+site-preview:
+	python3 -m http.server $(SITE_PORT) --bind 127.0.0.1 --directory site
 
 # Optional offline desktop inference, not an installer build.
 .PHONY: desktop-proof

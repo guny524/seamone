@@ -1,5 +1,10 @@
 mod api;
 mod app;
+mod capture;
+mod onboarding;
+mod quick_review;
+mod spectrum;
+mod timeline;
 mod workspace;
 
 use app::App;

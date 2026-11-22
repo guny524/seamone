@@ -1,6 +1,7 @@
-use crate::api;
+use crate::{api, quick_review::QuickReview};
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
+    error_marks::{ErrorMark, ErrorMarkPage},
     review::{
         LibraryPage, PlaybackReply, RecordingInfo, ReviewAction, ReviewRequest, ReviewSegment,
     },
@@ -20,6 +21,8 @@ pub struct Workspace {
     pub library: RwSignal<Option<LibraryPage>>,
     pub recording: RwSignal<Option<String>>,
     pub segments: RwSignal<Vec<ReviewSegment>>,
+    pub marks: RwSignal<Vec<ErrorMark>>,
+    pub quick: QuickReview,
     pub flow: RwSignal<ReviewFlow>,
     pub draft: RwSignal<String>,
     pub playback: RwSignal<Option<Playback>>,
@@ -28,6 +31,7 @@ pub struct Workspace {
     pub error: RwSignal<String>,
     pub status: RwSignal<String>,
     pub show_info: RwSignal<bool>,
+    info_dismissed: RwSignal<bool>,
     navigation: RwSignal<u64>,
 }
 
@@ -53,18 +57,23 @@ async fn load_segments(recording: &str) -> Result<Vec<ReviewSegment>, String> {
 
 impl Workspace {
     pub fn new() -> Self {
+        let error = RwSignal::new(String::new());
+        let status = RwSignal::new(String::new());
         Self {
             library: RwSignal::new(None),
             recording: RwSignal::new(None),
             segments: RwSignal::new(Vec::new()),
+            marks: RwSignal::new(Vec::new()),
+            quick: QuickReview::new(error, status),
             flow: RwSignal::new(ReviewFlow::default()),
             draft: RwSignal::new(String::new()),
             playback: RwSignal::new(None),
             proof: RwSignal::new(None),
             busy: RwSignal::new(false),
-            error: RwSignal::new(String::new()),
-            status: RwSignal::new(String::new()),
+            error,
+            status,
             show_info: RwSignal::new(false),
+            info_dismissed: RwSignal::new(false),
             navigation: RwSignal::new(0),
         }
     }
@@ -73,7 +82,7 @@ impl Workspace {
         spawn_local(async move {
             match api::call::<LibraryPage>("get_library", json!({})).await {
                 Ok(page) => {
-                    if !page.info_seen {
+                    if !page.info_seen && !self.info_dismissed.get_untracked() {
                         self.show_info.set(true);
                     }
                     self.library.set(Some(page));
@@ -83,25 +92,73 @@ impl Workspace {
         });
     }
 
+    pub fn dismiss_info(self) {
+        self.info_dismissed.set(true);
+        self.show_info.set(false);
+        spawn_local(async move {
+            if let Err(error) = api::call::<()>("dismiss_info", json!({})).await {
+                self.error.set(error);
+            }
+        });
+    }
+
+    pub fn needs_intro(self) -> bool {
+        !self.info_dismissed.get()
+            && self
+                .library
+                .with(|page| page.as_ref().is_some_and(|page| !page.info_seen))
+    }
+
     pub fn open(self, id: String) {
         self.exit();
         self.navigation.update(|n| *n = n.wrapping_add(1));
         let navigation = self.navigation.get_untracked();
         self.recording.set(Some(id.clone()));
         self.segments.set(Vec::new());
+        self.marks.set(Vec::new());
         self.busy.set(true);
         self.error.set(String::new());
+        self.load_review_data(id, navigation);
+    }
+
+    fn load_review_data(self, id: String, navigation: u64) {
         spawn_local(async move {
-            let result = load_segments(&id).await;
+            let result =
+                async { Ok::<_, String>((load_segments(&id).await?, load_marks(&id).await?)) }
+                    .await;
             if self.navigation.get_untracked() != navigation {
                 return;
             }
             self.busy.set(false);
             match result {
-                Ok(segments) => self.segments.set(segments),
+                Ok((segments, marks)) => {
+                    self.segments.set(segments);
+                    self.marks.set(marks);
+                }
                 Err(e) => self.error.set(e),
             }
         });
+    }
+
+    pub fn refresh_quick_results(self) {
+        let Some(id) = self.recording.get_untracked() else {
+            return;
+        };
+        self.navigation.update(|n| *n = n.wrapping_add(1));
+        self.busy.set(true);
+        self.load_review_data(id, self.navigation.get_untracked());
+    }
+
+    pub fn open_quick_correction(self) {
+        if self.busy.get_untracked()
+            || self.quick.saving.get_untracked()
+            || self.quick.narrowing.with_untracked(Option::is_some)
+        {
+            return;
+        }
+        self.quick.exit();
+        self.status.set(String::new());
+        self.start(ReviewMode::Correction, &self.segments.get_untracked());
     }
 
     pub fn import(self) {
@@ -109,18 +166,31 @@ impl Workspace {
             return;
         }
         self.busy.set(true);
+        self.error.set(String::new());
+        self.status.set(String::new());
         spawn_local(async move {
-            let result = api::call::<Option<RecordingInfo>>("import_wav", json!({})).await;
+            let result = api::call::<Option<RecordingInfo>>("import_audio", json!({})).await;
             self.busy.set(false);
             match result {
                 Ok(Some(info)) => {
-                    self.refresh();
-                    self.open(info.id);
+                    self.open_ingested(info);
                 }
                 Ok(None) => {}
                 Err(e) => self.error.set(e),
             }
         });
+    }
+
+    pub fn open_ingested(self, info: RecordingInfo) {
+        self.refresh();
+        let editing = self
+            .flow
+            .with_untracked(|flow| flow.frame().is_some() || flow.mode() != ReviewMode::Browse);
+        if !editing && self.quick.recording.with_untracked(Option::is_none) {
+            self.open(info.id);
+        }
+        self.status
+            .set(format!("{} · 녹음 보관함에 저장했습니다.", info.name));
     }
 
     pub fn transcribe(self) {
@@ -198,6 +268,42 @@ impl Workspace {
         self.error.set(String::new());
     }
 
+    pub fn quick_recording(self) -> Option<RecordingInfo> {
+        let id = self.recording.get();
+        self.library.with(|page| {
+            page.as_ref()?
+                .recordings
+                .iter()
+                .find(|r| Some(&r.id) == id.as_ref() && r.engine != "아직 받아쓰지 않음")
+                .cloned()
+        })
+    }
+
+    pub fn start_quick(self) {
+        if !self.busy.get_untracked()
+            && let Some(recording) = untrack(|| self.quick_recording())
+        {
+            self.exit();
+            self.quick.start(recording);
+        }
+    }
+
+    pub fn confirm_quick(self) {
+        self.quick
+            .confirm(Callback::new(move |()| self.refresh_quick_results()));
+    }
+
+    pub fn leave_quick(self) {
+        if self.quick.saving.get_untracked() {
+            return;
+        }
+        self.quick.exit();
+        if let Some(id) = self.recording.get_untracked() {
+            self.open(id);
+            self.refresh();
+        }
+    }
+
     pub fn current(self) -> Option<ReviewSegment> {
         let frame = self.flow.get().frame()?.clone();
         self.segments
@@ -245,8 +351,10 @@ impl Workspace {
 
     pub fn ended(self, playback: Playback) {
         // The DOM audio node captures its own ticket, including session and revision.
-        let flow = self.flow.get_untracked();
-        if flow.frame() != Some(&playback.ticket.frame) || !flow.busy() {
+        if !self
+            .flow
+            .with_untracked(|flow| flow.playing(&playback.ticket))
+        {
             return;
         }
         spawn_local(async move {
@@ -276,31 +384,35 @@ impl Workspace {
     }
 
     pub fn save(self, action: ReviewAction) {
-        if let ReviewAction::CorrectAndConfirm { text } = &action
-            && self
-                .current()
-                .is_none_or(|s| s.rejected_text_unchanged(text))
-        {
+        let Some(segment) = untrack(|| self.current()) else {
             return;
+        };
+        match &action {
+            ReviewAction::CorrectAndConfirm { text } if !segment.can_confirm_correction(text) => {
+                return;
+            }
+            // A saved-revision confirmation also requires an unchanged editor.
+            ReviewAction::ConfirmCorrection
+                if segment.text != self.draft.get_untracked()
+                    || !segment.can_confirm_correction(&segment.text) =>
+            {
+                return;
+            }
+            _ => {}
         }
         let reset_rejected = matches!(action, ReviewAction::Invalidate)
-            && self
-                .current()
-                .is_some_and(|s| s.rejected_text_unchanged(&s.text));
+            && segment.rejected_text_unchanged(&segment.text);
+        let dismiss_mark = matches!(action, ReviewAction::DismissErrorMark);
+        let confirms_correction = matches!(
+            action,
+            ReviewAction::ConfirmCorrection | ReviewAction::CorrectAndConfirm { .. }
+        );
         let requires_listening = matches!(
             action,
             ReviewAction::Judge { .. }
                 | ReviewAction::ConfirmCorrection
                 | ReviewAction::CorrectAndConfirm { .. }
         );
-        // Confirming a saved revision is impossible while the editor has unsaved changes.
-        if matches!(action, ReviewAction::ConfirmCorrection)
-            && self
-                .current()
-                .is_none_or(|s| s.text != self.draft.get_untracked())
-        {
-            return;
-        }
         let mut ticket = None;
         self.flow
             .update(|flow| ticket = flow.submit(requires_listening));
@@ -328,8 +440,12 @@ impl Workspace {
             match result {
                 Ok(saved) => {
                     let mut active = false;
-                    self.flow
-                        .update(|flow| active = flow.saved(&ticket, &saved, advance));
+                    self.flow.update(|flow| {
+                        let removed_from_queue = dismiss_mark
+                            && flow.mode() == ReviewMode::Correction
+                            && !saved.needs_review();
+                        active = flow.saved(&ticket, &saved, advance || removed_from_queue);
+                    });
                     self.segments.update(|segments| {
                         if let Some(segment) = segments
                             .iter_mut()
@@ -342,11 +458,19 @@ impl Workspace {
                     if active {
                         self.proof.set(None);
                         self.sync_draft();
-                        if reset_rejected {
+                        if reset_rejected && !saved.needs_review() {
                             self.start(ReviewMode::Binary, std::slice::from_ref(&saved));
                         }
-                        self.refresh();
-                        self.status.set("기기에 저장했습니다.".into());
+                        self.status.set(
+                            if dismiss_mark {
+                                "이 조각의 오류 판정을 해제했습니다."
+                            } else if confirms_correction {
+                                "교정을 확정했습니다."
+                            } else {
+                                "기기에 저장했습니다."
+                            }
+                            .into(),
+                        );
                     }
                 }
                 Err(e) => {
@@ -385,5 +509,25 @@ impl Workspace {
                 Err(e) => self.error.set(e),
             }
         });
+    }
+}
+
+async fn load_marks(recording: &str) -> Result<Vec<ErrorMark>, String> {
+    let mut offset = 0;
+    let mut marks = Vec::new();
+    loop {
+        let page = api::call::<ErrorMarkPage>(
+            "get_error_marks",
+            json!({"recordingId":recording,"offset":offset}),
+        )
+        .await?;
+        marks.extend(page.marks);
+        let Some(next) = page.next_offset else {
+            return Ok(marks);
+        };
+        if next <= offset {
+            return Err("오류 구간 목록 위치가 잘못됐습니다.".into());
+        }
+        offset = next;
     }
 }

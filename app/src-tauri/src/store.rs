@@ -1,9 +1,11 @@
 //! A single versioned database owns edits, verification snapshots and the durable work queue.
-use crate::audio::AudioLibrary;
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use crate::audio::{AudioLibrary, StagedAudio};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use seamone_asr::Transcriber;
+use seamone_core::error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage, overlaps};
 use seamone_core::review::{
-    EligibleExample, LibraryPage, RecordingInfo, ReviewRequest, ReviewSegment, SampleRange,
+    EligibleExample, LibraryPage, RecordingInfo, ReviewError, ReviewRequest, ReviewSegment,
+    SampleRange,
 };
 use std::{fs, path::Path, time::Duration};
 use uuid::Uuid;
@@ -30,7 +32,7 @@ impl Store {
         let version: u32 = tx
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .map_err(|e| e.to_string())?;
-        if version > 2 {
+        if version > 4 {
             return Err("이 앱보다 새 version의 보관함입니다. 앱을 업데이트하세요.".into());
         }
         if version == 0 {
@@ -39,6 +41,14 @@ impl Store {
         }
         if version < 2 {
             tx.execute_batch(include_str!("schema-v2.sql"))
+                .map_err(|e| e.to_string())?;
+        }
+        if version < 3 {
+            tx.execute_batch(include_str!("schema-v3.sql"))
+                .map_err(|e| e.to_string())?;
+        }
+        if version < 4 {
+            tx.execute_batch(include_str!("schema-v4.sql"))
                 .map_err(|e| e.to_string())?;
         }
         tx.commit().map_err(|e| e.to_string())?;
@@ -101,26 +111,40 @@ impl Store {
     }
 
     pub fn import(&mut self, source: &Path) -> Result<RecordingInfo, String> {
-        let id = Uuid::new_v4().to_string();
-        let (samples, hash) = self.audio.import(&id, source)?;
+        let input = self.audio.open_source(source)?;
+        let mut audio = crate::audio_ingest::decode(&self.audio, input)?;
+        self.save_audio(
+            crate::audio_ingest::display_name(source),
+            &mut audio,
+            || true,
+        )
+    }
+
+    pub(crate) fn save_audio(
+        &self,
+        name: String,
+        audio: &mut StagedAudio,
+        can_commit: impl Fn() -> bool,
+    ) -> Result<RecordingInfo, String> {
         let info = RecordingInfo {
-            id,
-            name: source.file_name().map_or_else(
-                || "녹음.wav".into(),
-                |n| n.to_string_lossy().chars().take(200).collect(),
-            ),
-            samples,
+            id: Uuid::new_v4().to_string(),
+            name,
+            samples: audio.samples,
             revision: 1,
             engine: "아직 받아쓰지 않음".into(),
             model: String::new(),
         };
-        let result = self
-            .db
-            .execute(
-                "INSERT INTO recordings(id,revision,samples,sha256,info) VALUES (?1,?2,?3,?4,?5)",
-                params![info.id, info.revision, info.samples, hash, encode(&info)?],
-            )
-            .map_err(|e| e.to_string());
+        let encoded = encode(&info)?;
+        let hash = self.audio.publish(&info.id, audio)?;
+        let result = if can_commit() {
+            self.db.execute(
+                    "INSERT INTO recordings(id,revision,samples,sha256,info) VALUES (?1,?2,?3,?4,?5)",
+                    params![info.id, info.revision, info.samples, hash, encoded],
+                )
+                .map_err(|e| e.to_string())
+        } else {
+            Err("창이 닫혀 음성을 저장하지 않았습니다.".into())
+        };
         if let Err(error) = result {
             let _ = fs::remove_file(self.audio.path(&info.id)?);
             return Err(error);
@@ -192,17 +216,23 @@ impl Store {
                     return Err("받아쓰기 엔진이 잘못된 조각을 돌려줬습니다.".into());
                 }
                 previous_start = s.start_ms;
+                let range = SampleRange::from_millis(s.start_ms, s.end_ms, info.samples)
+                    .map_err(|e| e.to_string())?;
+                let machine_timing = s
+                    .timing
+                    .filter(|timing| seamone_core::valid_alignment(timing, &s.text, range));
                 Ok(ReviewSegment {
                     id: Uuid::new_v4().to_string(),
                     recording_id: info.id.clone(),
                     recording_revision: info.revision,
                     revision: 1,
-                    range: SampleRange::from_millis(s.start_ms, s.end_ms, info.samples)
-                        .map_err(|e| e.to_string())?,
+                    range,
+                    machine_timing,
                     machine_text: s.text.clone(),
                     text: s.text,
                     verdict: None,
                     needs_correction: false,
+                    error_marked_text: None,
                     verified: None,
                 })
             })
@@ -274,6 +304,161 @@ impl Store {
             segments,
             next_offset,
         })
+    }
+
+    pub fn error_mark_page(&self, recording: &str, offset: u32) -> Result<ErrorMarkPage, String> {
+        let mut stmt = self
+            .db
+            .prepare(
+                "SELECT id,recording_id,recording_revision,start_sample,end_sample
+                FROM error_marks WHERE recording_id=?1 ORDER BY rowid LIMIT 33 OFFSET ?2",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![recording, offset], read_error_mark)
+            .map_err(|e| e.to_string())?;
+        let mut marks = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        let next_offset = if marks.len() > 32 {
+            marks.pop();
+            offset.checked_add(32)
+        } else {
+            None
+        };
+        Ok(ErrorMarkPage { marks, next_offset })
+    }
+
+    pub fn save_error_mark(&mut self, mark: &ErrorMark) -> Result<(), String> {
+        if mark.id.is_empty() || mark.id.len() > 128 {
+            return Err("요청 ID가 잘못됐습니다.".into());
+        }
+        let tx = self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|e| e.to_string())?;
+        let existing = tx
+            .query_row(
+                "SELECT id,recording_id,recording_revision,start_sample,end_sample
+                FROM error_marks WHERE id=?1",
+                [&mark.id],
+                read_error_mark,
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if let Some(existing) = existing {
+            return if existing == *mark {
+                Ok(())
+            } else {
+                Err("같은 요청 ID에 다른 내용이 들어왔습니다.".into())
+            };
+        }
+        validate_error_ranges(
+            &tx,
+            &mark.recording_id,
+            mark.recording_revision,
+            &[mark.range],
+        )?;
+        flag_overlapping_segments(
+            &tx,
+            &mark.recording_id,
+            mark.recording_revision,
+            &[mark.range],
+        )?;
+        insert_error_mark(&tx, mark)?;
+        tx.commit().map_err(|e| e.to_string())
+    }
+
+    pub fn save_error_marks(&mut self, batch: &ErrorMarkBatch) -> Result<(), String> {
+        if batch.id.is_empty() || batch.id.len() > 128 || !(1..=256).contains(&batch.ranges.len()) {
+            return Err("오류 구간 요청이 잘못됐습니다.".into());
+        }
+        let mut request = batch.clone();
+        request
+            .ranges
+            .sort_unstable_by_key(|range| (range.start, range.end));
+        request.ranges.dedup();
+        let encoded = encode(&request)?;
+        let tx = self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|e| e.to_string())?;
+        let previous: Option<String> = tx
+            .query_row(
+                "SELECT request FROM error_mark_batches WHERE id=?1",
+                [&batch.id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if let Some(previous) = previous {
+            return if previous == encoded {
+                Ok(())
+            } else {
+                Err("같은 요청 ID에 다른 내용이 들어왔습니다.".into())
+            };
+        }
+        validate_error_ranges(
+            &tx,
+            &batch.recording_id,
+            batch.recording_revision,
+            &request.ranges,
+        )?;
+        let covered = {
+            let mut query = tx.prepare(
+                "SELECT start_sample,end_sample FROM error_marks
+                 WHERE recording_id=?1 AND recording_revision=?2 AND end_sample>?3 AND start_sample<?4
+                 ORDER BY start_sample,end_sample",
+            ).map_err(|e| e.to_string())?;
+            let end = request
+                .ranges
+                .iter()
+                .map(|range| range.end)
+                .max()
+                .unwrap_or_default();
+            let rows = query
+                .query_map(
+                    params![
+                        batch.recording_id,
+                        batch.recording_revision,
+                        request.ranges[0].start,
+                        end
+                    ],
+                    |row| {
+                        Ok(SampleRange {
+                            start: row.get(0)?,
+                            end: row.get(1)?,
+                        })
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?
+        };
+        let ranges = uncovered_ranges(&request.ranges, &covered);
+        flag_overlapping_segments(
+            &tx,
+            &batch.recording_id,
+            batch.recording_revision,
+            &request.ranges,
+        )?;
+        for range in ranges {
+            insert_error_mark(
+                &tx,
+                &ErrorMark {
+                    id: Uuid::new_v4().to_string(),
+                    recording_id: batch.recording_id.clone(),
+                    recording_revision: batch.recording_revision,
+                    range,
+                },
+            )?;
+        }
+        tx.execute(
+            "INSERT INTO error_mark_batches(id,request) VALUES (?1,?2)",
+            params![batch.id, encoded],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())
     }
 
     pub fn replay(&self, request: &ReviewRequest) -> Result<Option<ReviewSegment>, String> {
@@ -510,6 +695,150 @@ impl Store {
             .collect::<Vec<_>>()
             .join("\n"))
     }
+}
+
+fn validate_error_ranges(
+    tx: &Transaction<'_>,
+    recording_id: &str,
+    revision: u64,
+    ranges: &[SampleRange],
+) -> Result<(), String> {
+    let (samples, current, complete): (u64, u64, bool) = tx
+        .query_row(
+            "SELECT samples,revision,transcription_state='complete' FROM recordings WHERE id=?1",
+            [recording_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    if revision != current {
+        return Err(ReviewError::StaleRevision.to_string());
+    }
+    if !complete {
+        return Err("받아쓰기를 마친 뒤 오류를 표시하세요.".into());
+    }
+    for range in ranges {
+        range.validate(samples).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn uncovered_ranges(ranges: &[SampleRange], covered: &[SampleRange]) -> Vec<SampleRange> {
+    let mut requested: Vec<SampleRange> = Vec::new();
+    for range in ranges.iter().copied() {
+        if let Some(previous) = requested.last_mut()
+            && previous.start < range.end
+            && range.start < previous.end
+            && previous.end.max(range.end) - previous.start
+                <= seamone_core::review::MAX_PLAYBACK_SAMPLES
+        {
+            previous.end = previous.end.max(range.end);
+        } else {
+            let start = requested
+                .last()
+                .map_or(range.start, |previous| range.start.max(previous.end));
+            if start < range.end {
+                requested.push(SampleRange {
+                    start,
+                    end: range.end,
+                });
+            }
+        }
+    }
+    let mut result = Vec::new();
+    for range in requested {
+        let mut start = range.start;
+        for old in covered
+            .iter()
+            .skip_while(|old| old.end <= range.start)
+            .take_while(|old| old.start < range.end)
+        {
+            if start < old.start {
+                result.push(SampleRange {
+                    start,
+                    end: old.start,
+                });
+            }
+            start = start.max(old.end);
+        }
+        if start < range.end {
+            result.push(SampleRange {
+                start,
+                end: range.end,
+            });
+        }
+    }
+    result
+}
+
+fn flag_overlapping_segments(
+    tx: &Transaction<'_>,
+    recording_id: &str,
+    revision: u64,
+    ranges: &[SampleRange],
+) -> Result<(), String> {
+    let mut stmt = tx
+        .prepare("SELECT body FROM segments WHERE recording_id=?1 ORDER BY rowid")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([recording_id], |r| r.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    let mut affected = Vec::new();
+    for row in rows {
+        let segment: ReviewSegment = decode(&row.map_err(|e| e.to_string())?)?;
+        if segment.recording_revision == revision
+            && ranges.iter().any(|&range| overlaps(segment.range, range))
+        {
+            affected.push(segment);
+        }
+    }
+    drop(stmt);
+    for mut segment in affected {
+        segment.revision = segment
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| ReviewError::StaleRevision.to_string())?;
+        segment.verified = None;
+        segment.error_marked_text = Some(segment.text.clone());
+        tx.execute(
+            "UPDATE segments SET revision=?1,body=?2 WHERE id=?3",
+            params![segment.revision, encode(&segment)?, segment.id],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM training_queue WHERE segment_id=?1",
+            [&segment.id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn insert_error_mark(tx: &Transaction<'_>, mark: &ErrorMark) -> Result<(), String> {
+    tx.execute(
+        "INSERT INTO error_marks(id,recording_id,recording_revision,start_sample,end_sample)
+         VALUES (?1,?2,?3,?4,?5)",
+        params![
+            mark.id,
+            mark.recording_id,
+            mark.recording_revision,
+            mark.range.start,
+            mark.range.end
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn read_error_mark(row: &rusqlite::Row<'_>) -> rusqlite::Result<ErrorMark> {
+    Ok(ErrorMark {
+        id: row.get(0)?,
+        recording_id: row.get(1)?,
+        recording_revision: row.get(2)?,
+        range: SampleRange {
+            start: row.get(3)?,
+            end: row.get(4)?,
+        },
+    })
 }
 
 fn encode<T: serde::Serialize>(value: &T) -> Result<String, String> {
