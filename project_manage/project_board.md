@@ -23,10 +23,11 @@
 
 ## 3. 운영 방침
 - 2026-11-20 밤샘 실행: 오전 7시 한국 시간까지 60분마다 점검한다. 계획 검토자는 Claude Opus 5.5 max, 구현 worker는 Codex Sol high 한 명, 구현 검토자는 Claude Sonnet max다
-- 현재 우선순위: 녹음·받아쓰기·수정 화면 이슈의 WAV 검수 경로, 사람 확인 학습 입력과 앱 첫 안내. 구현 worktree는 `/Users/min-jo/orca/workspaces/seamone/5-verified-transcript`다. 사용자 기준은 사람 확인 전사로 기기에서 자동 학습하는 결정(PD13)에 있다
+- 현재 우선순위: 데스크톱 녹음과 파일 가져오기, 기기 안 받아쓰기, 빠른 검수를 잇는 앱 경로다. 구현 작업 사본은 `/Users/min-jo/orca/workspaces/seamone/5-verified-transcript`다. 학습 입력은 사람이 확인한 전사를 쓰는 결정(PD13)을 따른다
 - 원문: "opus 5.5 max 한테 검토 받고 받아들여야 할것만 걸러서 받아들인 후에 바로 구현 시작해 goal 로 잡아서 내일 아침 7시까지 돌아"
 - 위임 범위: 별도 worktree에서 구현, 프로젝트의 make target으로 시험, 필요 시 작업 브랜치의 GitHub Actions로 설치 파일을 확인한다. 실제 연합학습 서버와 생산 모델 배포는 이후 작업이다
 - 물을 것: 없음
+- 2026-11-21 Stitch 시안 반영은 이슈의 [Stitch 시안 반영 지시](0005-2026_11_19-record_transcribe_edit/issue_board.md#2026-11-21-stitch-시안-반영-지시)를 따른다
 - 아래 값은 2026-11-19 밤샘 실행 기록이다
 - 우선순위 문서: 이 board 5절
 - 동시 worker 수와 모델: Sonnet max 2개(2026-11-19 밤샘 실행), 한도가 끝나면 Gemini 3.8 Flash high(기본값)
@@ -41,7 +42,7 @@
 
 ## 4. 이슈
 ### #1 앱 뼈대(Tauri 2 + Leptos)를 세우고 다섯 플랫폼 설치 파일을 CI 로 만든다 (빈 앱으로 다섯 플랫폼 묶기를 먼저 확인한다)
-- 상태: merge 됨(PR https://github.com/guny524/seamone/pull/6, merge 커밋 8f7e917, 2026-11-19 08:36), 사람 시험 대기라 이슈는 열려 있다
+- 상태: 앱 뼈대는 [PR #6](https://github.com/guny524/seamone/pull/6)으로 병합됐다(현재 main 이력의 `8f7e917`). 이슈는 설치 파일 실행 시험이 남아 열려 있다
 - 폴더: `project_manage/0001-2026_11_19-app_skeleton_ci` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0001-2026_11_19-app_skeleton_ci`)
 - 작업: 브랜치 `guny524/1-app-skeleton-ci`, worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`, worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 세션 `2e24423d-9a31-4d8f-8f08-04d4faaad311`, 이어하기 `claude --resume 2e24423d-9a31-4d8f-8f08-04d4faaad311 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 06:12(CI 로그를 읽고 고치기), 받은 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-1.md`, 다음 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-2.md`, 검토자 Codex Sol high 읽기 전용(Orca 터미널 `term_2f4338a7-15ec-4163-90c5-7a5141a627c8`, 세션 `01a1f08d-4843-7021-a551-da6656dd58f7`, 2026-11-19 06:25 시작, 결과 `.tmp/review/codex-1.md`, 끝남 표시 `.tmp/review/codex-1.err` 의 DONE)
 - 선행: 없음, 후속: #3 받아쓰기 엔진 interface 와 속도 측정, #5 녹음과 받아쓰기와 수정 화면
@@ -49,7 +50,7 @@
 - 다음 행동: 사람 시험(Windows, Linux, Android 에서 설치 파일을 실행해 첫 화면 확인, macOS 는 worker 가 CI 앱으로 확인했다고 보고), 끝나면 이슈 마무리 코멘트와 끝내기 승인 뒤 폴더를 `_done_` 으로 옮긴다, worktree 는 받아쓰기 엔진 이슈가 이어 써서 남겼다(10-5)
 
 ### #2 시작 모델 후보의 한국어 오류율을 같은 잣대로 잰다 (출발점 모델을 고를 근거의 절반)
-- 상태: 끝남(PR https://github.com/guny524/seamone/pull/7 merge 커밋 7d069d4, 2026-11-19 08:52, GitHub 이슈 닫음, 이슈 board 10-6 게시와 10-7 기록)
+- 상태: 시작 모델 후보의 오류율 측정은 [PR #7](https://github.com/guny524/seamone/pull/7)로 병합됐다(현재 main 이력의 `7d069d4`). GitHub 이슈는 닫혔다
 - 폴더: `project_manage/_done_0002-2026_11_19-start_model_cer` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/_done_0002-2026_11_19-start_model_cer`)
 - 작업: 브랜치 `guny524/2-start-model-cer`, worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`, worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56(다음 일로 라벨 없는 FL 모의실험), 받은 보고 `project_manage/0002-2026_11_19-start_model_cer/.tmp/report-1.md`, 검토자 Codex Sol high 읽기 전용(Orca 터미널 `term_6321555b-e1cf-4596-a9e7-2f1acd2961d1`, 07:55 시작, 결과 `.tmp/review/codex-2.md`)
 - 선행: 없음, 후속: #4 라벨 없는 FL 모의실험, PD9 시작 모델 결정
@@ -60,7 +61,7 @@
 - 상태: 앞 절반 끝(interface, 가짜 엔진, 순수 함수, 엔진 후보 조사), 커밋 e763890 를 브랜치 `guny524/3-asr-engine-speed` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/8 을 열었다, 뒤 절반(엔진 구현과 모델 내려받기와 속도 측정)은 남음
 - 폴더: `project_manage/0003-2026_11_19-asr_engine_speed`
 - 작업: 앞 뼈대 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`(새 파일은 메인이 경로로 골라 별도 브랜치 `guny524/3-asr-engine-speed` 로 커밋한다), worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 마지막 지시 2026-11-19 08:00, 보고 `project_manage/0003-2026_11_19-asr_engine_speed/.tmp/report-1.md`
-- 선행: #1 앱 뼈대(재검토 중, 코드는 같은 worktree 에 있다), 후속: #5 녹음과 받아쓰기와 수정 화면, PD9 시작 모델 결정
+- 선행: #1 앱 뼈대 코드가 main에 병합됐다. 후속은 #5 받아쓰기 화면과 제품의 시작 모델 결정이다
 - 막힌 이유: 속도 측정(뒤 절반)은 모델 내려받기와 C++ 빌드가 무거워 노트북이 한가할 때 한다
 - 다음 행동: 앞 절반(draft PR 8)은 코드 검토를 아직 받지 않았다, 검토 뒤 merge, 이어서 엔진 후보를 feature 뒤에 넣어 CI 와 노트북에서 빌드되는지부터 본다(whisper-rs 와 qwen-asr 가 잠정 선택, 이슈 board 5-9), 모델 내려받기와 측정은 노트북이 한가할 때
 
@@ -68,21 +69,24 @@
 - 상태: 작은 규모 실행 끝(기기 8, 기기마다 발화 6, 라운드 2, 파이프라인은 끝까지 돌고 효과는 판정하지 못함), 커밋 0d93e7c 을 브랜치 `guny524/4-unlabeled-fl-sim` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/9 을 열었다, 코드 검토는 아직 받지 않았다
 - 폴더: `project_manage/0004-2026_11_19-unlabeled_fl_sim`
 - 작업: 시작 모델 오류율 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`(새 파일은 메인이 경로로 골라 커밋하고 별도 브랜치 `guny524/4-unlabeled-fl-sim` 으로 push 한다), worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56, 보고 `project_manage/0004-2026_11_19-unlabeled_fl_sim/.tmp/report-1.md`
-- 선행: 시작 모델 오류율 이슈(검토 중, 평가 코드와 데이터를 쓴다), 후속: 뒤의 학습 엔진 이슈
+- 선행: #2 시작 모델 오류율 측정의 평가 코드와 데이터를 쓴다. 후속은 사람 확인 전사를 쓰는 실험과 뒤의 기기 학습 엔진이다
 - 막힌 이유: 없음(앞 이슈의 코드는 같은 worktree 에 있다)
 - 다음 행동: 기존 소규모 실행 결과를 연구 기록으로 보존한다. 다음 LoRA 학습 실험의 입력은 현재 정책에 따라 사람이 확인한 전사로 준비한다
 
 ### #5 녹음, 기기 안 받아쓰기, 수정 화면을 만든다 (앱의 첫 쓸모)
-- 상태: 데스크톱 WAV 검수 경로와 학습 준비를 작업 브랜치 `guny524/5-verified-transcript`(14b610c)에서 검증했다. 5개 플랫폼 설치 파일과 CI가 통과했다
+- 상태: 데스크톱 마이크 녹음과 WAV·MP3·AAC-LC M4A 가져오기를 작업 브랜치 `guny524/5-verified-transcript`에 연결했다. 빠른 검수는 같은 전사 줄의 오류 여러 곳을 보관하고, 전사와 스펙토그램을 같은 시간축에 표시한다
 - 폴더: `project_manage/0005-2026_11_19-record_transcribe_edit`
-- 작업: `/Users/min-jo/orca/workspaces/seamone/5-verified-transcript`에서 구현. 두 단계 검수, 로컬 학습 대기열, 앱 첫 실행 안내 및 PyTorch 연구 증명
+- 작업: `/Users/min-jo/orca/workspaces/seamone/5-verified-transcript` 작업 사본을 사용한다. [같은 줄의 여러 오류를 남기는 빠른 검수 설계](0005-2026_11_19-record_transcribe_edit/quick_review_design.md)에 키 배치와 시간축 예시를 적었다
 - 선행: #3 받아쓰기 엔진 interface(대기), 후속: 뒤의 학습 엔진 이슈
 - 선행 코드: 받아쓰기 엔진 초안의 `Transcriber` interface와 검증용 Whisper small을 작업 브랜치에 연결했다
-- 다음 행동: 설치 파일을 실기기에서 확인한다. 마이크 녹음과 앱 안에서 실제 학습한 가중치를 추론에 반영하는 경로를 이어 간다
+- 다음 행동: 실제 마이크로 녹음해서 저장하고, 받아쓰기와 검수를 거쳐 앱을 다시 열어 확인한다. 기기 학습 엔진에서 대기열의 전사를 받아 모델을 갱신하는 일은 후속 작업이다
+
+- 외부 agent가 이어갈 때는 GitHub의 검증된 기준 커밋과 아래 이슈별 체크리스트를 사용한다. 최근 검수·교정·모바일 변경은 로컬 작업 사본에 있다. 공통 기준 커밋을 갱신하기 전에는 기존 변경과 겹치는 구현을 원격에서 시작하지 않는다
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
-- #1 과 #2, 이유: 둘 다 선행이 없고 뒤의 모든 이슈가 이 둘에 기댄다, #1 은 Rust 갈래, #2 는 PyTorch 갈래라 파일이 겹치지 않는다
+- 앱은 [녹음, 받아쓰기, 수정 화면 이슈 #5](https://github.com/guny524/seamone/issues/5)의 첫 녹음·파일 가져오기에서 첫 전사까지를 이어 간다. 먼저 최신 로컬 구현을 기준으로 고정하고, 모델 선택과 처리 중 표시, 결과 화면, 실패 후 복구, 실제 설치 파일 시험을 순서대로 확인한다
+- [앱 뼈대 이슈 #1](https://github.com/guny524/seamone/issues/1)은 설치 실행 확인이 남았다. [받아쓰기 엔진 속도 이슈 #3](https://github.com/guny524/seamone/issues/3)은 초안 검토와 실측이 남았다. [연합학습 모의실험 이슈 #4](https://github.com/guny524/seamone/issues/4)는 소규모 실행의 검토와 사람 확인 전사를 쓰는 다음 실험 계획이 남았다
 ### 5-2. merge 순서와 얽힘
 - 두 갈래가 함께 고치는 파일은 맨 위 `Makefile`, `.gitignore`, `README.md`, `.github/workflows/` 다, #1 이 맨 위 `Makefile` 과 CI 를 만들고 #2 는 `research/Makefile` 만 만든다, 맨 위 `Makefile` 에 research target 을 잇는 일은 먼저 merge 된 쪽 위에서 나중 쪽이 한다
 ### 5-3. 자리가 나면 띄울 순서
@@ -112,7 +116,7 @@
 - PD7: 속도 기준 숫자(데스크톱은 가속기로 실시간의 3배와 CPU 만으로 실시간, 폰은 가속기로 실시간)
 - PD8: 라벨 없이 키우는 방향 여섯 가지와 안전장치
 ### 6-2. 아직 정하지 않은 것 (기다리는 것)
-- main 이력의 작성자 메일: 첫 두 커밋(158c9d3, 3169495)의 작성자 메일이 회사 메일이라 공개 레포에 드러나 있다, 06:09 부터 이 레포의 새 커밋은 GitHub noreply 주소를 쓴다, 이미 push 한 이력을 고치려면 main 에 force push 가 필요해 사용자 승인이 필요하다, 추천: 레포가 새것이라 지금 고치는 것이 가장 싸다(그래도 GitHub 에 이미 남은 사본은 지워지지 않을 수 있다), 답이 없으면 그대로 둔다
+- 원격 인계 기준: #5의 최신 검수·교정·모바일 소스를 기존 작업 브랜치에 올리고 draft PR로 묶을지 확인 대기. GitHub의 현재 기준은 `14b610c`이고, 그 커밋보다 뒤의 변경과 외부 agent의 작업이 겹칠 수 있다
 - 큰 학습에 쓸 GPU: 집 서버를 써도 되는지와 클라우드 예산, 2026-11-19 에 물었고 답을 받지 못했다, 오늘 밤은 노트북만 쓴다, 직접 설계한 모델의 증류는 이 답 뒤에 한다
 - PD9: 시작 모델, #2 와 #3 의 측정을 기다린다
 - 서명: iOS 실기기 설치와 앱 장터 배포에는 사용자의 Apple 개발자 계정이 필요하다
