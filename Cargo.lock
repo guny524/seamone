@@ -3390,6 +3390,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "seamone-asr"
+version = "0.1.0"
+dependencies = [
+ "seamone-core",
+]
+
+[[package]]
 name = "seamone-core"
 version = "0.1.0"
 dependencies = [

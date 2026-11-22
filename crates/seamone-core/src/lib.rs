@@ -4,6 +4,10 @@
 //! WASM 으로도 컴파일되므로 파일, 소켓, 스레드처럼 브라우저에 없는 것에 기대지 않는다.
 #![forbid(unsafe_code)]
 
+mod transcript;
+
+pub use transcript::TranscriptSegment;
+
 use serde::{Deserialize, Serialize};
 
 /// 앱 이름
