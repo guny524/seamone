@@ -1,5 +1,5 @@
 # 받아쓰기 엔진 interface 를 세우고 기기별 속도를 잰다
-(이 파일: 기준 브랜치 main 의 `project_manage/0003-2026_11_19-asr_engine_speed/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
+(이 파일: 기준 브랜치 develop 의 `project_manage/0003-2026_11_19-asr_engine_speed/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
 - 이슈: https://github.com/guny524/seamone/issues/3, 유형: impl(범위가 정해진 구현)
 - 운영 상태(상태, 브랜치, worktree, worker, 세션, 선행과 후속): 프로젝트 `project_manage/project_board.md` 4절(이슈) #3
 
@@ -141,7 +141,7 @@
 같은 한국어 음성으로 데스크톱 받아쓰기 엔진의 CPU·Apple GPU 속도를 비교하고, #2의 문자 오류율(CER)과 합쳐 시작 모델을 추천한다. 앱 연동은 #5에서 진행한다. 모바일 속도는 기기와 엔진이 준비된 뒤 측정한다.
 
 - [x] 공통 `Transcriber` interface, 가짜 엔진과 실시간 배수 계산을 초안에 넣고 CI를 통과시킨다. [엔진 interface 초안 PR #8](https://github.com/guny524/seamone/pull/8), [CI](https://github.com/guny524/seamone/actions/runs/44428752393)
-- [ ] 초안 PR의 interface를 검토하고 #5 호출부와 타입을 대조해 두 이슈가 쓸 기준 브랜치를 정리한다
+- [ ] `develop`에 들어간 `Transcriber` interface와 앱 호출부의 타입을 대조한다. 초안의 공통 타입과 가짜 엔진은 녹음·빠른 검수 병합에 포함됐다. [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 PR (#10)](https://github.com/guny524/seamone/pull/10)
 - [ ] Whisper.cpp 계열과 순수 Rust 엔진을 Cargo feature 뒤에 연결한다. 같은 한국어 WAV를 두 엔진에 넣어 전사와 구간 시간이 반환되는지 확인한다
 - [ ] 고정한 한국어 샘플과 모델 목록으로 속도 측정 명령을 만든다. 실시간 배수 계산을 단위 시험으로 확인하고 가짜 엔진으로 측정 명령을 끝까지 실행한다
 - [ ] M1에서 같은 입력으로 CPU와 지원되는 Apple GPU의 속도를 잰다. 모델, 양자화 방식, 엔진 버전, 스레드 수, 음성 길이, 실행 시간과 실시간 배수를 기록한다. 가속기를 쓸 수 없는 조합은 이유를 적는다
@@ -149,7 +149,7 @@
 - [ ] `make lint`, `make test` 결과와 측정 재현 명령, 결과 문서, PR 링크를 이슈에 남긴다
 
 #### 작업 위치와 선행 조건
-`guny524/3-asr-engine-speed`의 `crates/seamone-asr/`에서 시작한다. #1의 앱 뼈대는 main에 병합됐고, #2의 오류율 결과는 `research/results/`에 있다. 모델 파일과 샘플 원본은 Git에 추가하지 않는다.
+`develop`의 `crates/seamone-asr/`에서 시작한다. #1의 앱 뼈대는 main에 병합됐고, #2의 오류율 결과는 `research/results/`에 있다. 모델 파일과 샘플 원본은 Git에 추가하지 않는다.
 
 ## 8. 수정 요약
 (7-1, 7-2 의 조사, 7-3 의 순수 함수까지의 파일이다, 이 worktree 는 앱 뼈대 브랜치 위라 아래 파일을 stage 하지 않았고 메인이 경로로 골라 별도 브랜치로 커밋한다)
@@ -163,7 +163,7 @@
 - `Cargo.lock`(고침): 새 crate 한 묶음, 외부 crate 는 늘지 않았다
 
 ## 9. 지금 상태
-- #1의 앱 뼈대는 main에 병합됐다. engine interface, 가짜 엔진과 속도 계산은 초안 PR #8에 있고, 기준 커밋의 CI가 통과했다
+- 공통 interface, 가짜 엔진과 속도 계산 커밋 `e763890`은 녹음·빠른 검수 병합을 통해 `develop`에 포함됐다
 - 남은 것: 초안 검토, 실제 엔진 연결, M1 속도 측정, 시작 모델 추천. 순서와 완료 증거는 7-7절을 따른다
 
 ## 10. Closing
@@ -176,7 +176,7 @@
 ### 10-4. 사람 시험
 - 해당 없음: 측정과 시험은 명령으로 확인한다
 ### 10-5. 자원
-- TODO
+- 공통 interface 작업 사본과 로컬 브랜치를 정리했다. 실제 엔진과 측정은 `develop`에서 시작한다
 ### 10-6. 이슈 마무리 코멘트
 - 상태: TODO
 ### 10-7. 끝내기 승인

@@ -1,5 +1,5 @@
 # 라벨 없는 FL 모의실험으로 오류율을 낮추는 방법을 고른다
-(이 파일: 기준 브랜치 main 의 `project_manage/0004-2026_11_19-unlabeled_fl_sim/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
+(이 파일: 기준 브랜치 develop 의 `project_manage/0004-2026_11_19-unlabeled_fl_sim/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
 - 이슈: https://github.com/guny524/seamone/issues/4, 유형: research(조사)
 - 운영 상태(상태, 브랜치, worktree, worker, 세션, 선행과 후속): 프로젝트 `project_manage/project_board.md` 4절(이슈) #4
 

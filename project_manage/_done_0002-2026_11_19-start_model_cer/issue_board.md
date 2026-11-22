@@ -1,5 +1,5 @@
 # 시작 모델 후보의 한국어 오류율을 같은 잣대로 잰다
-(이 파일: 기준 브랜치 main 의 `project_manage/0002-2026_11_19-start_model_cer/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
+(이 파일: 기준 브랜치 develop 의 `project_manage/0002-2026_11_19-start_model_cer/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
 - 이슈: https://github.com/guny524/seamone/issues/2, 유형: research(조사)
 - 운영 상태(상태, 브랜치, worktree, worker, 세션, 선행과 후속): 프로젝트 `project_manage/project_board.md` 4절(이슈) #2
 

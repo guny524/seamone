@@ -1,13 +1,13 @@
 # seamone 프로젝트 board
-(이 파일: 기준 브랜치 main 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-19 08:58
+(이 파일: 기준 브랜치 develop 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
+- 마지막 갱신: 2026-11-22 21:55 KST
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
 - seamone 은 사용자 개인 프로젝트다, 기기 안에서 음성을 받아쓰고 음성과 글을 밖으로 보내지 않은 채 FL 로 받아쓰기 모델을 키우는 앱을 만든다
 - 출발 메모(사용자 개인 노트 "local stt + fl", 2026-09-21): "내 목소리 다른 사람 목소리 녹음 한거 local 에서 stt 할 수 있는 앱 / 사람이 결과 보고 수동으로 고쳐서 라벨링할 수 있다 / fl 로 연결해서 데이터는 안보내고 모델 업데이트만 한다"
 - 사용자가 ChatGPT 에 물은 글(2026-11-19 사용자가 붙여 줌): "나는 fl 로 학습시키기 가장 좋은 소재가 stt 인거 같거든 특히 한국어 stt? 근데 여러 다자 회의 내용 그대로 전사 하는 거랑 요약 하는게 제일 쓸모가 많다고 생각하고 이거 그냥 데스크탑 앱 핸드폰 앱으로 빨리 만들어서 배포하고 사람들이 많이 쓰면 쓸수록 fl이니까 성능이 올라갈거잖아 근데 문제가 이거 정답 라벨링을 어떻게 할까? pretrain 다음 단어 맞추는 거처럼 어떻게 라벨링 없이 stt 성능을 높힐지 아이디어를 내봐 아니면 gan 처럼 뭔가 적대적으로 stt 를 시킬 수 있나?"
-- 레포: https://github.com/guny524/seamone (공개, Apache-2.0), 트래커는 GitHub 이슈, 기준 브랜치 main
+- 레포: https://github.com/guny524/seamone (공개, Apache-2.0), 트래커는 GitHub 이슈, 작업과 기록의 기준 브랜치는 `develop`
 - 큰 그림의 결정은 `project_decision.md` PD1~PD12
 
 ## 2. 사용자 지시 원문
@@ -23,7 +23,7 @@
 
 ## 3. 운영 방침
 - 2026-11-20 밤샘 실행: 오전 7시 한국 시간까지 60분마다 점검한다. 계획 검토자는 Claude Opus 5.5 max, 구현 worker는 Codex Sol high 한 명, 구현 검토자는 Claude Sonnet max다
-- 현재 우선순위: 데스크톱 녹음과 파일 가져오기, 기기 안 받아쓰기, 빠른 검수를 잇는 앱 경로다. 구현 작업 사본은 `/Users/min-jo/orca/workspaces/seamone/5-verified-transcript`다. 학습 입력은 사람이 확인한 전사를 쓰는 결정(PD13)을 따른다
+- 현재 우선순위는 데스크톱 녹음·파일 가져오기부터 첫 전사와 오류 복구까지 잇는 일이다. 후속 작업은 `develop`에서 시작한다. 학습 입력은 사람이 확인한 전사를 쓴다(PD13)
 - 원문: "opus 5.5 max 한테 검토 받고 받아들여야 할것만 걸러서 받아들인 후에 바로 구현 시작해 goal 로 잡아서 내일 아침 7시까지 돌아"
 - 위임 범위: 별도 worktree에서 구현, 프로젝트의 make target으로 시험, 필요 시 작업 브랜치의 GitHub Actions로 설치 파일을 확인한다. 실제 연합학습 서버와 생산 모델 배포는 이후 작업이다
 - 물을 것: 없음
@@ -44,54 +44,53 @@
 ### #1 앱 뼈대(Tauri 2 + Leptos)를 세우고 다섯 플랫폼 설치 파일을 CI 로 만든다 (빈 앱으로 다섯 플랫폼 묶기를 먼저 확인한다)
 - 상태: 앱 뼈대는 [PR #6](https://github.com/guny524/seamone/pull/6)으로 병합됐다(현재 main 이력의 `8f7e917`). 이슈는 설치 파일 실행 시험이 남아 열려 있다
 - 폴더: `project_manage/0001-2026_11_19-app_skeleton_ci` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0001-2026_11_19-app_skeleton_ci`)
-- 작업: 브랜치 `guny524/1-app-skeleton-ci`, worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`, worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 세션 `2e24423d-9a31-4d8f-8f08-04d4faaad311`, 이어하기 `claude --resume 2e24423d-9a31-4d8f-8f08-04d4faaad311 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 06:12(CI 로그를 읽고 고치기), 받은 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-1.md`, 다음 보고 `project_manage/0001-2026_11_19-app_skeleton_ci/.tmp/report-2.md`, 검토자 Codex Sol high 읽기 전용(Orca 터미널 `term_2f4338a7-15ec-4163-90c5-7a5141a627c8`, 세션 `01a1f08d-4843-7021-a551-da6656dd58f7`, 2026-11-19 06:25 시작, 결과 `.tmp/review/codex-1.md`, 끝남 표시 `.tmp/review/codex-1.err` 의 DONE)
+- 작업: 기존 작업 사본과 로컬 브랜치를 정리했다
 - 선행: 없음, 후속: #3 받아쓰기 엔진 interface 와 속도 측정, #5 녹음과 받아쓰기와 수정 화면
 - 막힌 이유: 없음
-- 다음 행동: 사람 시험(Windows, Linux, Android 에서 설치 파일을 실행해 첫 화면 확인, macOS 는 worker 가 CI 앱으로 확인했다고 보고), 끝나면 이슈 마무리 코멘트와 끝내기 승인 뒤 폴더를 `_done_` 으로 옮긴다, worktree 는 받아쓰기 엔진 이슈가 이어 써서 남겼다(10-5)
+- 다음 행동: Windows, Linux, Android에서 설치본 첫 화면을 확인한다. macOS는 worker가 확인했다고 보고했다. 사람 시험과 마무리 뒤 이슈를 닫는다
 
 ### #2 시작 모델 후보의 한국어 오류율을 같은 잣대로 잰다 (출발점 모델을 고를 근거의 절반)
 - 상태: 시작 모델 후보의 오류율 측정은 [PR #7](https://github.com/guny524/seamone/pull/7)로 병합됐다(현재 main 이력의 `7d069d4`). GitHub 이슈는 닫혔다
 - 폴더: `project_manage/_done_0002-2026_11_19-start_model_cer` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/_done_0002-2026_11_19-start_model_cer`)
-- 작업: 브랜치 `guny524/2-start-model-cer`, worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`, worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56(다음 일로 라벨 없는 FL 모의실험), 받은 보고 `project_manage/0002-2026_11_19-start_model_cer/.tmp/report-1.md`, 검토자 Codex Sol high 읽기 전용(Orca 터미널 `term_6321555b-e1cf-4596-a9e7-2f1acd2961d1`, 07:55 시작, 결과 `.tmp/review/codex-2.md`)
+- 작업: 시작 모델 측정의 로컬 브랜치를 정리했다. 같은 경로에서 계속 쓰는 작업 사본은 연합학습 모의실험 이슈 항목에 있다
 - 선행: 없음, 후속: #4 라벨 없는 FL 모의실험, PD9 시작 모델 결정
 - 막힌 이유: 없음
 - 다음 행동: 없음(끝남), 남은 일은 whisper-large-v3 측정과 표본 늘리기(다음에 부하가 낮을 때), 맨 위 `ci.yml` 에 research 의 lint 와 test 를 돌리는 job 을 더하는 일은 프로젝트 board 5-4 새 이슈 후보
 
 ### #3 받아쓰기 엔진 interface 를 세우고 기기별 속도를 잰다 (출발점 모델을 고를 근거의 나머지 절반)
-- 상태: 앞 절반 끝(interface, 가짜 엔진, 순수 함수, 엔진 후보 조사), 커밋 e763890 를 브랜치 `guny524/3-asr-engine-speed` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/8 을 열었다, 뒤 절반(엔진 구현과 모델 내려받기와 속도 측정)은 남음
+- 상태: 공통 interface, 가짜 엔진과 속도 계산(`e763890`)이 녹음·빠른 검수 병합을 통해 `develop`에 포함됐다. 실제 엔진과 모델별 실측은 남았다
 - 폴더: `project_manage/0003-2026_11_19-asr_engine_speed`
-- 작업: 앞 뼈대 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci`(새 파일은 메인이 경로로 골라 별도 브랜치 `guny524/3-asr-engine-speed` 로 커밋한다), worker app(Sonnet max), 터미널 `term_b522cdf5-deb1-4bf0-a0ca-285d2f4bc264`, 마지막 지시 2026-11-19 08:00, 보고 `project_manage/0003-2026_11_19-asr_engine_speed/.tmp/report-1.md`
-- 선행: #1 앱 뼈대 코드가 main에 병합됐다. 후속은 #5 받아쓰기 화면과 제품의 시작 모델 결정이다
+- 작업: 공통 interface의 작업 사본과 로컬 브랜치를 정리했다. 다음 작업은 `develop`에서 새 브랜치를 만들어 시작한다
+- 선행: 앱 뼈대와 공통 interface는 `develop`에 있다. 후속은 실제 엔진 연결과 속도 실측, 시작 모델 결정이다
 - 막힌 이유: 속도 측정(뒤 절반)은 모델 내려받기와 C++ 빌드가 무거워 노트북이 한가할 때 한다
-- 다음 행동: 앞 절반(draft PR 8)은 코드 검토를 아직 받지 않았다, 검토 뒤 merge, 이어서 엔진 후보를 feature 뒤에 넣어 CI 와 노트북에서 빌드되는지부터 본다(whisper-rs 와 qwen-asr 가 잠정 선택, 이슈 board 5-9), 모델 내려받기와 측정은 노트북이 한가할 때
+- 다음 행동: `develop`의 앱 호출부와 엔진 interface를 대조하고, 엔진 비교와 M1 속도 측정을 진행한다
 
 ### #4 라벨 없는 FL 모의실험으로 오류율을 낮추는 방법을 고른다 (이 프로젝트의 핵심 물음)
 - 상태: 작은 규모 실행 끝(기기 8, 기기마다 발화 6, 라운드 2, 파이프라인은 끝까지 돌고 효과는 판정하지 못함), 커밋 0d93e7c 을 브랜치 `guny524/4-unlabeled-fl-sim` 에 push 하고 draft PR https://github.com/guny524/seamone/pull/9 을 열었다, 코드 검토는 아직 받지 않았다
 - 폴더: `project_manage/0004-2026_11_19-unlabeled_fl_sim`
-- 작업: 시작 모델 오류율 이슈와 같은 worktree `/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`(새 파일은 메인이 경로로 골라 커밋하고 별도 브랜치 `guny524/4-unlabeled-fl-sim` 으로 push 한다), worker research(Sonnet max), 터미널 `term_f05b49b0-2a37-4baf-95d0-b68df26ce2b7`, 세션 `0ee282a2-407f-4aab-8af7-8d53d330a854`, 이어하기 `claude --resume 0ee282a2-407f-4aab-8af7-8d53d330a854 --model sonnet --effort max --permission-mode bypassPermissions`, 마지막 지시 2026-11-19 07:56, 보고 `project_manage/0004-2026_11_19-unlabeled_fl_sim/.tmp/report-1.md`
+- 작업: Orca의 `4-unlabeled-fl-sim` 작업 사본(`/Users/min-jo/orca/workspaces/seamone/2-start-model-cer`)을 보존했다. 모의실험 이슈와 초안 PR을 연결했고 검토 상태로 표시했다
 - 선행: #2 시작 모델 오류율 측정의 평가 코드와 데이터를 쓴다. 후속은 사람 확인 전사를 쓰는 실험과 뒤의 기기 학습 엔진이다
-- 막힌 이유: 없음(앞 이슈의 코드는 같은 worktree 에 있다)
+- 막힌 이유: 없음. 소규모 실험의 초안 검토가 남았다
 - 다음 행동: 기존 소규모 실행 결과를 연구 기록으로 보존한다. 다음 LoRA 학습 실험의 입력은 현재 정책에 따라 사람이 확인한 전사로 준비한다
 
 ### #5 녹음, 기기 안 받아쓰기, 수정 화면을 만든다 (앱의 첫 쓸모)
-- 상태: 데스크톱 마이크 녹음과 WAV·MP3·AAC-LC M4A 가져오기를 작업 브랜치 `guny524/5-verified-transcript`에 연결했다. 빠른 검수는 같은 전사 줄의 오류 여러 곳을 보관하고, 전사와 스펙토그램을 같은 시간축에 표시한다
+- 상태: 데스크톱 녹음, WAV·MP3·AAC-LC M4A 가져오기, 빠른 검수·별도 교정·모바일 화면을 `develop`에 병합했다. 첫 전사 흐름과 실기기 시험은 남았다
 - 폴더: `project_manage/0005-2026_11_19-record_transcribe_edit`
-- 작업: `/Users/min-jo/orca/workspaces/seamone/5-verified-transcript` 작업 사본을 사용한다. [같은 줄의 여러 오류를 남기는 빠른 검수 설계](0005-2026_11_19-record_transcribe_edit/quick_review_design.md)에 키 배치와 시간축 예시를 적었다
-- 선행: #3 받아쓰기 엔진 interface(대기), 후속: 뒤의 학습 엔진 이슈
-- 선행 코드: 받아쓰기 엔진 초안의 `Transcriber` interface와 검증용 Whisper small을 작업 브랜치에 연결했다
-- 인계 기준: 작업 브랜치의 `73d85d7`에 최근 검수·교정·모바일 변경이 포함됐다. [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 초안 PR (#10)](https://github.com/guny524/seamone/pull/10)
+- 작업: 병합한 Orca 작업 사본과 로컬 브랜치를 정리했다. [빠른 검수 설계와 예시](0005-2026_11_19-record_transcribe_edit/quick_review_design.md)에 키 배치와 시간축 예시가 있다
+- 선행: 받아쓰기 엔진의 공통 interface가 `develop`에 있고 제품 시작 모델은 속도 실측 뒤 정한다. 학습 엔진은 후속 작업이다
+- 인계 기준: `develop`의 병합 커밋 `3ba1047`이 작업분을 포함한다. [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 PR (#10)](https://github.com/guny524/seamone/pull/10)
 - 다음 행동: 모델 선택, 처리 중 표시와 실패 복구를 첫 전사 흐름에 연결하고, 실제 설치 파일에서 녹음과 파일 가져오기로 확인한다. 기기 학습 엔진은 후속 작업이다
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
-- 앱은 [녹음·받아쓰기·수정 화면 이슈 (#5)](https://github.com/guny524/seamone/issues/5)의 첫 녹음·파일 가져오기에서 첫 전사까지를 이어 간다. 초안 PR의 기준 커밋에서 모델 선택, 처리 중 표시, 결과 화면, 실패 후 복구와 실제 설치 파일 시험을 순서대로 확인한다
+- 앱은 [녹음·받아쓰기·수정 화면 이슈 (#5)](https://github.com/guny524/seamone/issues/5)의 첫 녹음·파일 가져오기에서 첫 전사까지를 이어 간다. `develop`에서 새 작업 브랜치를 만들어 모델 선택, 처리 중 표시, 결과 화면, 실패 후 복구와 실제 설치 파일 시험을 순서대로 확인한다
 - [앱 뼈대 이슈 #1](https://github.com/guny524/seamone/issues/1)은 설치 실행 확인이 남았다. [받아쓰기 엔진 속도 이슈 #3](https://github.com/guny524/seamone/issues/3)은 초안 검토와 실측이 남았다. [연합학습 모의실험 이슈 #4](https://github.com/guny524/seamone/issues/4)는 소규모 실행의 검토와 사람 확인 전사를 쓰는 다음 실험 계획이 남았다
 ### 5-2. merge 순서와 얽힘
 - 두 갈래가 함께 고치는 파일은 맨 위 `Makefile`, `.gitignore`, `README.md`, `.github/workflows/` 다, #1 이 맨 위 `Makefile` 과 CI 를 만들고 #2 는 `research/Makefile` 만 만든다, 맨 위 `Makefile` 에 research target 을 잇는 일은 먼저 merge 된 쪽 위에서 나중 쪽이 한다
 ### 5-3. 자리가 나면 띄울 순서
 1. #3 받아쓰기 엔진 interface 와 속도 측정, #1 merge 뒤 app worker 자리
 2. #4 라벨 없는 FL 모의실험, #2 merge 뒤 research worker 자리
-3. #5 녹음과 받아쓰기와 수정 화면, #3 merge 뒤 app worker 자리
+3. #5 녹음과 받아쓰기와 수정 화면, `develop`에서 첫 전사 흐름을 잇는다
 ### 5-4. 새 이슈 후보
 - research 의 lint 와 test 를 CI 에서 돌린다: 새 시험 129개가 지금 CI 에서 돌지 않는다(rule change.md 6절), torch 설치가 무거워 CPU 용으로 줄이는 방법을 본다, 나온 곳 시작 모델 오류율 이슈의 merge
 - action 의 commit SHA 와 `scripts/install-tools.sh` 의 `expected_sha256` 을 갱신하는 절차(Dependabot 의 github-actions 갱신 등): 고정한 값은 시간이 지나면 낡는다, 나온 곳 앞 이슈 검토와 worker 보고

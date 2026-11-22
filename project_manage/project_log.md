@@ -213,3 +213,9 @@
 - 사용자 승인 원문: “네, 올리고 초안 PR 만들기”
 - 기존 작업 브랜치 `guny524/5-verified-transcript`의 `73d85d7`을 인계 기준으로 올리고 [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 초안 PR (#10)](https://github.com/guny524/seamone/pull/10)을 열었다. 최신 main을 합치며 README 충돌을 해결했다
 - `make lint`, `make test`, Chrome 화면 시험 18개와 macOS 실제 Whisper 전사 시험을 확인했다. 패키지 빌드와 실제 설치 파일 조작은 [녹음·받아쓰기·수정 화면 이슈 (#5)](https://github.com/guny524/seamone/issues/5)에 남겼다
+
+## 2026-11-22 21:55 작업분 develop 병합과 Orca 정리
+- 당시 `main`에서 `develop`을 만들고 [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 PR (#10)](https://github.com/guny524/seamone/pull/10)을 병합했다(`3ba1047`). 다섯 플랫폼 빌드를 통과한 PR의 앱 코드와 병합 결과가 같다
+- 위 병합 커밋에서 lint, Rust·연구 회귀 시험, 데스크톱 엔진 시험과 Chrome 화면 시험이 통과했다. [develop 병합 커밋 CI](https://github.com/guny524/seamone/actions/runs/45024381990)
+- 로컬 기준 작업 사본과 Orca의 새 worktree 기준을 `develop`으로 맞췄다. 병합된 녹음·교정과 엔진 interface 작업 사본, 종료한 탭 3개, 병합된 로컬 작업 브랜치 4개를 정리했다
+- 병합 전인 연합학습 모의실험의 작업 사본은 보존했다. Orca 표시 이름을 `4-unlabeled-fl-sim`으로 바꾸고 [연합학습 모의실험 이슈 (#4)](https://github.com/guny524/seamone/issues/4)와 [소규모 실험 초안 PR (#9)](https://github.com/guny524/seamone/pull/9)을 연결했다

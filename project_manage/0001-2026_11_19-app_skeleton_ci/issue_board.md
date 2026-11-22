@@ -1,5 +1,5 @@
 # 앱 뼈대(Tauri 2 + Leptos)를 세우고 다섯 플랫폼 설치 파일을 CI 로 만든다
-(이 파일: 기준 브랜치 main 의 `project_manage/0001-2026_11_19-app_skeleton_ci/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
+(이 파일: 기준 브랜치 develop 의 `project_manage/0001-2026_11_19-app_skeleton_ci/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
 - 이슈: https://github.com/guny524/seamone/issues/1, 유형: impl(범위가 정해진 구현)
 - 운영 상태(상태, 브랜치, worktree, worker, 세션, 선행과 후속): 프로젝트 `project_manage/project_board.md` 4절(이슈) #1
 
@@ -237,7 +237,7 @@ main의 `Makefile`, `app/src-tauri/`, `app/ui/`, `.github/workflows/{ci,build}.y
 ### 10-4. 사람 시험
 - 설치 파일을 받아 실행하면 첫 화면이 뜨는지: macOS 는 worker 가 CI 앱을 실행해 확인했다고 보고했다(메인 미확인), Windows, Linux, Android 는 대기, 방법은 README 3-3과 3-4
 ### 10-5. 자원
-- 받은 CI artifact 사본은 지웠다(`.tmp/ci-artifacts`, `.tmp/seed`), worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci` 와 `target/` 4.7GB 는 받아쓰기 엔진 이슈의 브랜치 `guny524/3-asr-engine-speed` 가 같은 worktree 를 이어 쓰므로 남겼다, 지울 조건은 그 이슈를 merge 한 뒤이고 정리는 `dispatch-worker` skill 6절, 이슈 폴더 `.tmp/` 의 확인 도구와 캡처는 이슈를 닫을 때 지운다
+- 받은 CI 설치 파일 사본을 지웠다. 이 경로를 이어 쓴 받아쓰기 엔진 공통 코드가 `develop`에 들어간 뒤 2026-11-22에 Orca 작업 사본을 정리했다. 이슈 폴더 `.tmp/`의 확인 도구와 캡처는 설치 시험 뒤 이슈를 닫을 때 지운다
 ### 10-6. 이슈 마무리 코멘트
 - 상태: 사람 시험 뒤에 쓴다(진행 요약은 이슈에 올렸다)
 - 관련 MR: https://github.com/guny524/seamone/pull/6 (merge 됨)
