@@ -171,6 +171,23 @@
   - 근거: (1) 같은 코드의 debug 와 release 화면 산출물을 WKWebView 로 열면 http 와 `tauri://` 흉내(Tauri 의 응답 헤더 `Content-Type`, `Access-Control-Allow-Origin` 과 같게, `window.__TAURI__` 는 흉내) 모두 `seamone` 과 `seamone 0.1.0` 을 그린다(release wasm 140,942바이트), (2) 내가 띄운 보이는 창(맨 앞으로 올림)의 캡처에는 글씨가 담긴다, (3) 이 세션은 사용자 입력이 3시간 넘게(HID 대기 11,799초) 없었고 `UserIsActive 0` 이라, `open -n` 만으로 띄운 창은 가려진 것으로 취급됐다고 추측한다(화면 잠금인지는 확인하지 못했다)
   - 고칠 것: 없다, 사람 시험에서 창이 비어 보이면 창을 한 번 눌러 맨 앞으로 올린다
 
+### 7-17. GitHub 이슈에서 이어서 할 작업
+- 게시본: [GitHub 이슈 #1](https://github.com/guny524/seamone/issues/1)
+
+#### 목표와 범위
+Tauri 2와 Leptos 앱의 첫 화면을 띄우고 macOS, Windows, Linux, Android 설치 파일과 iOS 시뮬레이터용 앱을 GitHub Actions에서 만든다. 녹음·받아쓰기는 #5에서 다룬다. 출시용 서명과 앱 장터 배포는 별도 작업이다.
+
+- [x] Rust workspace, Tauri 2 앱, Leptos 첫 화면과 Tauri command 연결을 main에 병합한다. [앱 뼈대 PR #6](https://github.com/guny524/seamone/pull/6)
+- [x] GitHub Actions에서 `make lint`와 `make test`를 통과시킨다. [main CI](https://github.com/guny524/seamone/actions/runs/44428897396)
+- [x] macOS Intel·Apple Silicon, Windows, Linux, Android debug, iOS 시뮬레이터 빌드를 통과시키고 아티팩트 목록을 확인한다. [main 설치 파일 빌드](https://github.com/guny524/seamone/actions/runs/44428897129)
+- [ ] macOS에서 DMG로 설치하고 첫 화면에 앱 이름과 버전이 표시되는지 확인한다
+- [ ] Windows에서 EXE 또는 MSI로 설치하고 첫 화면을 확인한다. Linux에서도 배포판에 맞는 DEB 또는 AppImage로 같은 동작을 확인한다
+- [ ] Android 기기에 debug APK를 설치해 첫 화면을 확인한다. iOS 시뮬레이터용 앱은 시뮬레이터에서 첫 화면을 확인한다
+- [ ] 플랫폼별 OS 버전, 설치 파일·빌드 링크, 실행 결과를 이슈에 남긴다. 실행 환경이 없으면 해당 플랫폼의 체크박스를 열어 둔다
+
+#### 작업 위치와 검증
+main의 `Makefile`, `app/src-tauri/`, `app/ui/`, `.github/workflows/{ci,build}.yml`을 사용한다. 앱을 묶는 검증은 GitHub Actions에서 한다. 설치 파일 보관 기간이 지났으면 같은 커밋의 빌드 실행을 다시 확보한다. #5의 실제 녹음·전사 검증은 별도로 기록한다.
+
 ## 8. 수정 요약
 (7-9 까지의 파일 목록이다, 7-10 에서 CI 를 고치면 이 목록을 다시 맞춘다)
 - `rust-toolchain.toml`(새 파일): Rust 1.99.1, clippy, rustfmt, wasm32 타깃을 고정

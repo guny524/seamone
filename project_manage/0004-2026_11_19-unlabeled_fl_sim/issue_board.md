@@ -117,6 +117,22 @@
 - [x] 7-7. 결과 문서 `research/results/2026_11_19_unlabeled_fl_sim.md` 를 쓰고 이 board 4절과 5절을 채운다, 표를 쓰지 않고 목록으로 쓴다, 한계(낭독 음성, 화자 12명, 작은 규모, 학생이 Whisper small)를 적고, 다음 단계 추천(앱의 학습 엔진이 처음 구현할 방법, 서버 검증 관문의 기준)을 적는다 / 결과: `research/results/2026_11_19_unlabeled_fl_sim.md`(한계 1절, 결론과 추천 2절, 조건 3절, 결과 4절, 판정 5절, 다음 단계 6절, 다시 돌리는 법 7절)를 썼고 이 board 4절과 5절을 채웠다, 표를 쓰지 않았다
 - [x] 7-8. 정리: `.tmp/research/` 의 중간 출력과 다음에 쓰지 않는 가중치, 데이터를 지우고 지운 것과 남긴 것의 크기를 적는다, 8절 수정 요약과 보고를 쓴다 / 결과: `.tmp/research/` 1.3MB(방법별 가설 글 `hyp/fl-*` 포함 `hyp/` 796KB, `fl_sim/` 24KB, `pseudo/` 8KB)와 `.tmp/hf/seamone_fl` 12MB(기기 wav 48개)를 남겼다(메인이 다시 계산하고 다음 큰 규모 실행이 쓴다), 가중치 whisper-small 926MB 와 whisper-large-v3-turbo 1.5GB 는 다음 큰 규모 실행이 쓰므로 남겼고 Qwen3-ASR-1.7B 4.4GB 는 이 이슈가 쓰지 않았다(지울지는 메인이 정한다, 속도 이슈가 쓰는지 모른다), `research/.venv` 1.3GB, 디스크 여유 19.99GiB(`df -k`, 08:33), 8절과 보고를 썼다
 
+### 7-9. GitHub 이슈에서 이어서 할 작업
+- 게시본: [GitHub 이슈 #4](https://github.com/guny524/seamone/issues/4)
+
+#### 목표와 범위
+공개 음성을 화자별 기기로 나눠 연합학습(FL)을 모의실험하고 학습 전후의 한국어·영어 문자 오류율(CER), 학습 시간, 업데이트 크기를 비교한다. 자동 전사를 사용한 소규모 실행은 연구 기록으로 남긴다. 제품에서는 사람이 발화 그대로라고 확인한 구간과 버전만 지도 학습에 쓴다.
+
+- [x] 공개 한국어 음성의 화자 분할과 고정 seed, 가중 평균(FedAvg), 학습·평가 명령을 초안으로 확보한다. [FL 모의실험 초안 PR #9](https://github.com/guny524/seamone/pull/9)
+- [x] 기기 8개, 기기당 발화 6개, 2라운드로 소규모 실행을 끝내고 CER와 업데이트 크기를 기록한다. [소규모 실행 결과](https://github.com/guny524/seamone/blob/0d93e7c147b28b1df1334ccb43f8f3a973035534/research/results/2026_11_19_unlabeled_fl_sim.md)
+- [ ] 초안 PR에서 학습·평가 화자가 겹치지 않는지, 각 방법이 같은 평가 발화를 쓰는지, 결과 문서의 명령으로 재현할 수 있는지 검토한다
+- [ ] 결과 문서의 학습 없음, 공개 정답 전사, 자동 전사 연구 조건별 실측 범위를 확인한다. 실행하지 않은 상위층 학습 비교와 이 표본으로 개선 여부를 판정할 수 없는 이유를 적는다
+- [ ] 효과를 판정하는 다음 실험은 사람이 확인한 전사를 학습 입력으로 준비한다. 같은 평가 발화에서 한국어·영어 CER, 발화당 학습 시간, 업데이트 크기와 표본 규모를 비교할 수 있도록 실행 계획을 남긴다
+- [ ] `make -C research test` 결과와 재현 명령, 결과 파일, 초안 PR 검토 상태를 이슈에 남긴다
+
+#### 작업 위치와 선행 조건
+`guny524/4-unlabeled-fl-sim`의 `research/Makefile`, `research/seamone_research/{fl_data,fedavg,fl_train,fl_sim}.py`, `research/results/`에서 시작한다. #2의 공개 평가 세트를 재사용한다. 실제 사용자 데이터로 학습하는 앱 기능과 서버 통신은 후속 작업이다.
+
 ## 8. 수정 요약
 - `research/seamone_research/fl_data.py`: 새 파일, 기기 데이터(Zeroth-Korean train 조각 하나에서 시험 세트 화자를 뺀 화자를 기기로 뽑고 wav 를 꺼낸다, 전용 cache 에 받고 그 폴더만 지운다)
 - `research/seamone_research/fedavg.py`: 새 파일, FedAvg(발화 수 가중 평균), 라운드마다 기기 뽑기, 업데이트 크기
@@ -133,10 +149,8 @@
 - 지운 것: 만든 직후 지운 Zeroth-Korean train 조각 약 500MB(전용 cache `.tmp/hf/fl-raw`), `.tmp/research/` 의 이어 돌리기 script 와 임시 log 와 보고 초안
 
 ## 9. 지금 상태
-- 메인이 직접 확인한 것: 없음
-- worker 주장(아직 확인 전): 없음
-- 남은 것: 7절 전부, #2 가 merge 된 뒤 시작한다
-- 판단거리: 없음
+- #2의 오류율 측정은 main에 병합됐다. 초안 PR #9에 기기 8개, 기기당 6발화, 2라운드의 소규모 결과가 있다. 이 규모에서는 효과를 판정할 수 없다
+- 남은 것: 초안 검토, 결과와 재현 명령 확인, 사람이 확인한 전사를 쓰는 다음 실험 계획. 작업 순서와 완료 증거는 7-9절을 따른다
 
 ## 10. Closing
 ### 10-1. 검토
