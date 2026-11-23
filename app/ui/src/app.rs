@@ -3,7 +3,7 @@ use crate::{
     onboarding::PrivacyInfo,
     quick_review::{QuickReviewPanel, range_label},
     timeline::CorrectionTimeline,
-    workspace::{Playback, Workspace},
+    workspace::{LibraryState, Playback, TranscriptionState, Workspace},
 };
 use leptos::{ev, prelude::*};
 use seamone_core::{
@@ -31,9 +31,13 @@ pub fn App() -> impl IntoView {
     let inference_available = Signal::derive(move || {
         workspace
             .library
-            .with(|page| page.as_ref().is_some_and(|page| page.inference_available))
+            .with(|page| page.as_ref().map(|page| page.inference_available))
     });
-    let microphone = Microphone::new(workspace.busy, workspace.error, workspace.status);
+    let microphone = Microphone::new(
+        workspace.busy,
+        workspace.error,
+        RwSignal::new(String::new()),
+    );
     let correcting = move || {
         workspace
             .flow
@@ -62,8 +66,9 @@ pub fn App() -> impl IntoView {
                 <main class="editor-pane">
                     <p class="error" role="alert">{move || workspace.error.get()}</p>
                     <Show when=move || workspace.quick.recording.with(Option::is_none)>
-                        <p class="status" role="status">{move || workspace.status.get()}</p>
+                        <p class="status" role="status" aria-label="작업 안내">{move || workspace.status.get()}</p>
                     </Show>
+                    <SavedRecordingNotice workspace can_open=show_capture_start/>
                     <Show when=move || workspace.quick.recording.with(Option::is_some) fallback=move || view! {
                         <Show when=move || browsing.get()
                             fallback=move || view! { <ReviewPanel workspace/> }><SavedTranscript workspace/></Show>
@@ -202,20 +207,25 @@ fn Library(workspace: Workspace, browsing: Signal<bool>) -> impl IntoView {
     view! {
         <section class="library" aria-labelledby="library-heading">
             <h2 id="library-heading">"녹음 보관함"</h2>
+            <LibraryLoadNotice workspace/>
             <Show when=move || !locked()>
               <div class="library-actions">
                 <button disabled=move || workspace.busy.get() on:click=move |_| workspace.import()>"음성 파일 가져오기"</button>
                 <details>
                     <summary>"보관함 설정"</summary>
-                    <button disabled=move || workspace.busy.get() on:click=move |_| workspace.select_model()>"Whisper 모델 선택"</button>
-                    <button disabled=move || workspace.busy.get() on:click=move |_| workspace.refresh()>"보관함 새로 불러오기"</button>
+                    <button disabled=move || workspace.busy.get() || !workspace.inference_available() on:click=move |_| workspace.select_model()>"Whisper 모델 선택"</button>
+                    <button disabled=move || workspace.busy.get() || workspace.library_state.with(|state| matches!(state, LibraryState::Loading)) on:click=move |_| workspace.refresh()>"보관함 새로 불러오기"</button>
                     <p>"WAV, MP3, AAC-LC M4A · 최대 30분, 512MiB"</p>
                     <p>{move || workspace.library.get().map(|page| format!("로컬 학습 대기 {}개 (원본 확인 재시도 {}개), 앱 내부 학습 엔진 준비 전",page.pending_training,page.retry_training))}</p>
                 </details>
+                <p class="input-help">"읽을 수 없는 음성은 WAV, MP3, AAC-LC M4A 파일을 다시 선택하세요. 선택을 취소하면 기존 녹음은 그대로 남습니다."</p>
               </div>
             </Show>
+            <Show when=move || workspace.library.with(|page| page.as_ref().is_some_and(|p| p.recordings.is_empty()))>
+                <p>"아직 저장한 녹음이 없습니다."</p>
+            </Show>
             <ul class="recordings">
-                <For each=move || workspace.library.get().map_or_else(Vec::new,|p| p.recordings) key=|r| r.id.clone()
+                <For each=move || workspace.library.get().map_or_else(Vec::new,|p| p.recordings) key=|r| (r.id.clone(),r.revision,r.engine.clone())
                     children=move |r| {
                         let id = r.id.clone();
                         view! { <li><button class="recording-button" aria-label=r.name.clone()
@@ -231,30 +241,103 @@ fn Library(workspace: Workspace, browsing: Signal<bool>) -> impl IntoView {
 }
 
 #[component]
+fn LibraryLoadNotice(workspace: Workspace) -> impl IntoView {
+    view! {
+        <Show when=move || workspace.library.with(Option::is_none) && workspace.library_state.with(|state| matches!(state, LibraryState::Loading))>
+            <p role="status" aria-label="보관함 조회 안내">"보관함을 불러오는 중입니다."</p>
+        </Show>
+        <Show when=move || workspace.library_state.with(|state| matches!(state, LibraryState::Failed(_)))>
+            <p class="error" role="alert" aria-label="보관함 조회 오류">{move || match workspace.library_state.get() {
+                LibraryState::Failed(error) => error,
+                _ => String::new(),
+            }}</p>
+            <p>"보관함을 다시 불러오세요. 저장한 녹음과 전사는 지우지 않습니다."</p>
+            <Show when=move || workspace.library.with(Option::is_some)>
+                <p>"기존 보관함 목록은 그대로 표시합니다."</p>
+            </Show>
+            <button on:click=move |_| workspace.refresh()>"보관함 다시 불러오기"</button>
+        </Show>
+    }
+}
+
+#[component]
+fn SavedRecordingNotice(workspace: Workspace, can_open: Signal<bool>) -> impl IntoView {
+    let needs_open = move || {
+        workspace.saved_recording.with(|saved| {
+            saved.as_ref().is_some_and(|saved| {
+                workspace
+                    .recording
+                    .with(|selected| selected.as_ref() != Some(&saved.id))
+            })
+        })
+    };
+    view! {
+        <Show when=move || workspace.saved_recording.with(Option::is_some)>
+            <div class="saved-recording-notice">
+                <p class="status" role="status" aria-label="녹음 저장 안내">{move || workspace.saved_recording.get()
+                    .map(|recording| format!("{} · 녹음 보관함에 저장했습니다.{}", recording.name,
+                        if needs_open() { " 저장한 녹음 열기로 확인하세요." } else { "" }))}</p>
+                <div class="toolbar">
+                    <Show when=needs_open>
+                    <button disabled=move || workspace.busy.get() || !can_open.get() on:click=move |_| {
+                        if let Some(recording) = workspace.saved_recording.get_untracked() {
+                            workspace.open(recording.id);
+                        }
+                    }>"저장한 녹음 열기"</button>
+                    </Show>
+                    <button on:click=move |_| workspace.saved_recording.set(None)>"저장 안내 닫기"</button>
+                </div>
+            </div>
+        </Show>
+    }
+}
+
+#[component]
 fn SavedTranscript(workspace: Workspace) -> impl IntoView {
     view! {
         <Show when=move || workspace.recording.with(Option::is_none)>
             <section class="empty-editor">
-                <h2>"녹음을 열어 시작하세요"</h2>
-                <p>"보관함에서 녹음을 선택하거나 새로 녹음하고 음성 파일을 가져올 수 있습니다."</p>
+                <h2>{move || match workspace.library.get() {
+                    None => workspace.library_state.with(|state| if matches!(state, LibraryState::Failed(_)) {
+                        "보관함을 불러오지 못했습니다"
+                    } else {
+                        "보관함을 불러오는 중입니다."
+                    }),
+                    Some(page) if page.recordings.is_empty() => "첫 녹음을 추가하세요",
+                    Some(_) => "녹음을 열어 시작하세요",
+                }}</h2>
+                <p>"음성 파일 가져오기에서 WAV, MP3, AAC-LC M4A를 고르세요. 마이크 녹음을 지원하는 기기에서는 녹음 시작 후 멈추고 저장을 누르세요."</p>
+                <p>"녹음과 전사는 이 기기에 저장합니다."</p>
+                <p>"저장한 녹음을 열면 그 녹음에서 바로 받아쓰기를 시작할 수 있습니다."</p>
             </section>
         </Show>
         <Show when=move || workspace.recording.get().is_some()>
-            <section aria-labelledby="transcript-heading">
+            <section aria-labelledby="transcript-heading"
+                aria-busy=move || if workspace.busy.get() { "true" } else { "false" }>
                 <h2 id="transcript-heading">"저장한 글"</h2>
+                <p class="selected-recording">{move || workspace.selected_recording().map(|r| format!("선택한 녹음: {}", r.name))}</p>
+                <Show when=move || !workspace.has_transcription()>
+                    <TranscriptionPreparation workspace/>
+                </Show>
                 <div class="toolbar">
-                    <button disabled=move || workspace.busy.get() on:click=move |_| workspace.transcribe()>"기기 안에서 받아쓰기"</button>
-                    <button on:click=move |_| workspace.export(true)>"저장한 글 복사"</button>
-                    <button on:click=move |_| workspace.export(false)>"텍스트 파일로 저장"</button>
-                    <button disabled=move || workspace.busy.get() on:click=move |_| { if let Some(id) = workspace.recording.get_untracked() { workspace.open(id); } }>"수정본 새로 불러오기"</button>
+                    <button class="primary" disabled=move || !workspace.can_transcribe() on:click=move |_| workspace.transcribe()>
+                        {move || match workspace.transcription.get() {
+                            TranscriptionState::Running => "기기 안에서 받아쓰는 중",
+                            TranscriptionState::Failed => "같은 녹음 다시 받아쓰기",
+                            _ => "기기 안에서 받아쓰기",
+                        }}
+                    </button>
+                    <button disabled=move || workspace.busy.get() || workspace.segments.with(Vec::is_empty) on:click=move |_| workspace.export(true)>"저장한 글 복사"</button>
+                    <button disabled=move || workspace.busy.get() || workspace.segments.with(Vec::is_empty) on:click=move |_| workspace.export(false)>"텍스트 파일로 저장"</button>
+                    <button disabled=move || workspace.busy.get() on:click=move |_| { workspace.refresh(); if let Some(id) = workspace.recording.get_untracked() { workspace.open(id); } }>"수정본 새로 불러오기"</button>
                 </div>
                 <div class="toolbar">
-                    <button class="primary" disabled=move || workspace.busy.get() || workspace.quick_recording().is_none() on:click=move |_| workspace.start_quick()>"빠른 검수 시작"</button>
-                    <button disabled=move || workspace.busy.get() on:click=move |_| workspace.start(ReviewMode::Correction,&workspace.segments.get_untracked())>"오류와 수정본 교정 목록"</button>
+                    <button class="primary" disabled=move || workspace.busy.get() || workspace.segments.with(Vec::is_empty) || workspace.quick_recording().is_none() on:click=move |_| workspace.start_quick()>"빠른 검수 시작"</button>
+                    <button disabled=move || workspace.busy.get() || workspace.segments.with(Vec::is_empty) on:click=move |_| workspace.start(ReviewMode::Correction,&workspace.segments.get_untracked())>"오류와 수정본 교정 목록"</button>
                 </div>
                 <details>
                     <summary>"조각별 검증"</summary>
-                    <button disabled=move || workspace.busy.get() on:click=move |_| workspace.start(ReviewMode::Binary,&workspace.segments.get_untracked())>"자동 전사문 Yes/No 검증"</button>
+                    <button disabled=move || workspace.busy.get() || workspace.segments.with(Vec::is_empty) on:click=move |_| workspace.start(ReviewMode::Binary,&workspace.segments.get_untracked())>"자동 전사문 Yes/No 검증"</button>
                 </details>
                 <Show when=move || workspace.marks.with(|marks| !marks.is_empty())>
                     <h3>"표시한 오류 구간"</h3>
@@ -269,17 +352,59 @@ fn SavedTranscript(workspace: Workspace) -> impl IntoView {
                     </ul>
                 </Show>
                 <p>"검증을 건너뛰어도 복사와 내보내기를 쓸 수 있습니다. 편집은 초안으로 저장되며 별도 확인 전에는 학습 정답이 아닙니다."</p>
+                <Show when=move || !workspace.busy.get() && workspace.review_loaded.get() && workspace.has_transcription() && workspace.segments.with(Vec::is_empty)>
+                    <p>"받아쓰기를 마쳤지만 인식된 글이 없습니다."</p>
+                    <p>"음성이 담긴 다른 파일을 가져오거나 새로 녹음하세요. 이 녹음은 보관함에 남습니다."</p>
+                </Show>
+                <Show when=move || !workspace.segments.with(Vec::is_empty)>
+                    <p>"조각별로 듣고 편집하거나 빠른 검수에서 오류를 표시하세요. 저장한 글은 검수 전에도 내보낼 수 있습니다."</p>
+                </Show>
                 <ol class="segments">
                     <For each=move || workspace.segments.get() key=|s| (s.id.clone(),s.revision)
                         children=move |s| {
                             let text = s.text.clone();
                             let state = if s.verified.is_some() { "사람이 확인한 정답" } else if s.needs_review() { "수정본 확인 필요" } else { "미검증" };
                             let verdict = match s.verdict { Some(Verdict::Yes) => "자동 전사문 판정: Yes", Some(Verdict::No) => "자동 전사문 판정: No", None => "자동 전사문 판정 없음" };
-                            view! { <li><p class="transcript">{text}</p><p>{state}" / "{verdict}</p><button on:click=move |_| workspace.start(ReviewMode::Browse,std::slice::from_ref(&s))>"이 조각 재생, 편집"</button></li> }
+                            view! { <li><p class="transcript">{text}</p><p>{state}" / "{verdict}</p><button disabled=move || workspace.busy.get() on:click=move |_| workspace.start(ReviewMode::Browse,std::slice::from_ref(&s))>"이 조각 재생, 편집"</button></li> }
                         }/>
                 </ol>
             </section>
         </Show>
+    }
+}
+
+#[component]
+fn TranscriptionPreparation(workspace: Workspace) -> impl IntoView {
+    view! {
+        <section class="transcription-preparation" aria-labelledby="preparation-heading">
+            <h3 id="preparation-heading">"받아쓰기 준비"</h3>
+            <Show when=move || workspace.library.with(Option::is_some) fallback=move || view! {
+                <p>{move || workspace.library_state.with(|state| match state {
+                    LibraryState::Loading => "보관함을 불러온 뒤 엔진 지원 여부를 확인합니다.",
+                    LibraryState::Failed(_) => "보관함 조회에 실패해 엔진 지원 여부를 확인하지 못했습니다. 녹음 보관함의 보관함 다시 불러오기를 누르세요.",
+                    LibraryState::Ready => "보관함 정보를 다시 불러와 엔진 지원 여부를 확인하세요.",
+                })}</p>
+            }>
+            <Show when=move || workspace.inference_available() fallback=|| view! {
+                <p>"새 받아쓰기는 Whisper 엔진이 포함된 데스크톱 설치본에서 사용할 수 있습니다. 이 설치본에서는 저장한 녹음과 기존 전사를 열 수 있습니다."</p>
+            }>
+                <p>"Whisper small 검증용 모델 ggml-small.bin을 직접 준비한 뒤 파일을 선택하세요. 이미 선택한 모델이 있으면 바로 받아쓰기를 시작하세요."</p>
+                <button disabled=move || workspace.busy.get() on:click=move |_| workspace.select_model()>
+                    {move || if workspace.transcription.get() == TranscriptionState::SelectingModel {
+                        "모델 파일 확인 중"
+                    } else {
+                        "Whisper 모델 선택"
+                    }}
+                </button>
+                <details>
+                    <summary>"모델 파일 수동 준비 방법"</summary>
+                    <p>"브라우저에서 아래 공식 모델 주소를 열어 파일을 준비하세요. 앱은 모델을 자동으로 내려받지 않습니다."</p>
+                    <code class="model-source">"https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-small.bin"</code>
+                    <p>"파일 선택 시 무결성을 확인합니다. 파일이 없거나 손상됐으면 정상 파일을 다시 선택하세요. 모델을 바꿔도 녹음과 기존 전사는 이 기기에 남습니다."</p>
+                </details>
+            </Show>
+            </Show>
+        </section>
     }
 }
 

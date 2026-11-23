@@ -47,12 +47,12 @@ async function captureReview(page, state) {
     await page.screenshot({ path:resolve(process.env.SEAMONE_UI_SCREENSHOTS,`seamone-${state}.png`) });
   }
 }
-async function fixture({ infoSeen = true, invalidFirst = false, quick = false, long = false, branch = false, microphone = false, phone = false, openRecording = true } = {}) {
-  const page = await browser.newPage(phone ? {viewport:{width:390,height:844},hasTouch:true,isMobile:true} : {});
+async function fixture({ infoSeen = true, invalidFirst = false, quick = false, long = false, branch = false, microphone = false, phone = false, openRecording = true, firstTranscription = false, emptyLibrary = false, inferenceAvailable = false, failInitialLibrary = false, holdInitialLibrary = false } = {}) {
+  const page = await browser.newPage(phone ? {viewport:{width:390,height:844},hasTouch:true,isMobile:true} : firstTranscription ? {viewport:{width:800,height:600}} : {});
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type()==='error') errors.push(message.text()); });
-  await page.addInitScript(({ wav, infoSeen, invalidFirst, quick, long, branch, microphone }) => {
+  await page.addInitScript(({ wav, infoSeen, invalidFirst, quick, long, branch, microphone, firstTranscription, emptyLibrary, inferenceAvailable, failInitialLibrary, holdInitialLibrary }) => {
     const recording = { id: 'r', name: '시험 녹음.wav', samples: long ? 512000 : quick ? 102400 : 19200, revision: 1, engine: 'test', model: 'fixture' };
     const segments = ['첫 번째 자동 전사문', '두 번째 자동 전사문', '세 번째 자동 전사문'].map((text, i) => ({
       id: `s${i + 1}`, recording_id: 'r', recording_revision: 1, revision: 1, range: { start: i * 6400, end: (i + 1) * 6400 },
@@ -78,12 +78,31 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
         { text:segments[0].machine_text, range:{start:1600,end:23000} },
       ];
     }
+    if (firstTranscription) {
+      recording.engine = '아직 받아쓰지 않음'; recording.model = '';
+      segments.splice(0);
+    }
+    const restored = firstTranscription && sessionStorage.getItem('first-transcription');
+    if (restored) {
+      const saved = JSON.parse(restored);
+      Object.assign(recording, saved.recording);
+      segments.splice(0, segments.length, ...saved.segments);
+    }
     const proofs = new Map(); const events = new Map(); const batches = new Map();
-    const state = { segments, recordings: [recording], saves: 0, delayNextSave: 0, failNextSave: false, infoSeen, exports: 0,
+    const state = { segments, recordings: emptyLibrary && !restored ? [] : [recording], saves: 0, delayNextSave: 0, failNextSave: false, infoSeen, exports: 0,
       microphone: { state: microphone ? 'idle' : 'unavailable' }, finishCalls: [], failMicSave: false, nextImport: null,
+      inferenceAvailable, modelReady: false, nextModel: 'cancel', modelCalls: 0, transcribeCalls: [],
+      holdTranscription: false, failTranscription: null, failImport: null,
+      failLibrary: failInitialLibrary ? '보관함 초기 조회 실패' : null, holdLibrary: holdInitialLibrary,
       marks: [], markCalls: [], rangeCalls: [], reviewCalls: 0, endedCalls: 0, holdNextRange: false, failNextMark: false, lostMarkReply: false };
     window.__REVIEW_TEST__ = state;
     const copy = value => JSON.parse(JSON.stringify(value));
+    const persist = () => {
+      if (firstTranscription) sessionStorage.setItem('first-transcription', JSON.stringify({
+        recording: state.recordings.find(r => r.id === segments[0]?.recording_id) || state.recordings[0],
+        segments,
+      }));
+    };
     const rangeWav = range => {
       const wave = new Uint8Array(44 + (range.end - range.start) * 2);
       wave.set(Uint8Array.from(atob(wav.slice(0,60)).slice(0,44), char => char.charCodeAt(0)));
@@ -101,8 +120,15 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
     };
     window.__TAURI__ = { core: { invoke: async (command, args) => {
       if (args instanceof Map) throw 'IPC arguments must be plain JSON objects';
-      if (command === 'get_library') return { recordings: copy(state.recordings), info_seen: state.infoSeen, pending_training: segments.filter(s => s.verified).length, retry_training:0, inference_available: false };
-      if (command === 'get_segments') return { segments: args.recordingId === 'r' ? copy(segments) : [], next_offset: null };
+      if (command === 'get_library') {
+        if (state.holdLibrary) await new Promise(resolve => { state.releaseLibrary = resolve; });
+        if (state.failLibrary) { const error=state.failLibrary; state.failLibrary=null; throw error; }
+        return { recordings: copy(state.recordings), info_seen: state.infoSeen, pending_training: segments.filter(s => s.verified).length, retry_training:0, inference_available: state.inferenceAvailable };
+      }
+      if (command === 'get_segments') {
+        if (state.failSegments) { const error=state.failSegments; state.failSegments=null; throw error; }
+        return { segments: copy(segments.filter(s => s.recording_id === args.recordingId)), next_offset: null };
+      }
       if (command === 'get_capture_status') return copy(state.microphone);
       if (command === 'start_recording') {
         if (Object.keys(args).length) throw 'start takes no arguments';
@@ -120,20 +146,51 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
         }
         state.microphone = { state: 'idle' };
         if (!args.save) return null;
-        const saved = { ...recording, id: 'captured', name: '마이크 녹음.wav' };
+        const saved = { ...recording, id: 'captured', name: '마이크 녹음.wav', engine: '아직 받아쓰지 않음', model: '' };
         state.recordings.unshift(saved);
         return saved;
       }
       if (command === 'import_audio') {
         if (Object.keys(args).length) throw 'import takes no path or audio payload';
+        if (state.failImport) { const error = state.failImport; state.failImport = null; throw error; }
         const filename = state.nextImport;
         state.nextImport = null;
         if (!filename) return null;
-        const saved = { ...recording, id: 'imported', name: filename };
+        const saved = { ...recording, id: 'imported', name: filename, engine: '아직 받아쓰지 않음', model: '' };
         state.recordings.unshift(saved);
         return saved;
       }
-      if (command === 'get_error_marks') return { marks: copy(state.marks), next_offset: null };
+      if (command === 'select_model') {
+        state.modelCalls++;
+        if (state.holdModel) await new Promise(resolve => { state.releaseModel = resolve; });
+        if (Object.keys(args).length) throw 'model selection takes no path or payload';
+        if (state.nextModel === 'cancel') return false;
+        if (state.nextModel === 'invalid') throw 'Whisper small 모델의 SHA-256이 맞지 않습니다.';
+        state.modelReady = true;
+        return true;
+      }
+      if (command === 'transcribe_recording') {
+        state.transcribeCalls.push(copy(args));
+        if (!state.inferenceAvailable) throw '이 설치본에는 Whisper 엔진이 없습니다.';
+        if (!state.modelReady) throw "먼저 'Whisper 모델 선택'에서 공식 ggml-small.bin을 고르세요. 앱은 모델을 내려받지 않습니다.";
+        const selected = state.recordings.find(r => r.id === args.recordingId);
+        if (!selected || selected.engine !== '아직 받아쓰지 않음') throw '이미 받아쓴 녹음입니다. 기존 수정본을 그대로 사용하세요.';
+        if (state.holdTranscription) await new Promise(resolve => { state.releaseTranscription = resolve; });
+        if (state.failTranscription) { const error = state.failTranscription; state.failTranscription = null; throw error; }
+        const result = state.emptyTranscription ? [] : ['첫 번째 자동 전사문', '두 번째 자동 전사문', '세 번째 자동 전사문'].map((text, i) => ({
+          id: `s${i + 1}`, recording_id: args.recordingId, recording_revision: selected.revision,
+          revision: 1, range: {start:i * 6400, end:(i + 1) * 6400},
+          machine_text:text, text, verdict:null, needs_correction:false, verified:null,
+        }));
+        segments.splice(0, segments.length, ...result);
+        selected.engine = 'whisper-rs 0.16'; selected.model = 'fixture';
+        persist();
+        return copy(result);
+      }
+      if (command === 'get_error_marks') {
+        if (state.failMarks) { const error=state.failMarks; state.failMarks=null; throw error; }
+        return { marks: copy(state.marks), next_offset: null };
+      }
       if (command === 'get_recording_playback') {
         state.rangeCalls.push(copy(args.range));
         if (state.holdNextRange) {
@@ -204,11 +261,11 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
         else if (req.action.kind === 'confirm_correction') s.verified = { revision:s.revision,text:s.text,source:'corrected' };
         else if (req.action.kind === 'dismiss_error_mark') delete s.error_marked_text;
         else if (req.action.kind === 'invalidate') { const unchanged=s.verdict==='no' && s.text.trim()===s.machine_text.trim(); s.verdict=null; if (unchanged) { s.text=s.machine_text; s.needs_correction=false; } else s.needs_correction ||= s.text !== s.machine_text; }
-        state.saves++; events.set(req.event_id,{ canonical,saved:copy(s) }); return copy(s);
+        persist(); state.saves++; events.set(req.event_id,{ canonical,saved:copy(s) }); return copy(s);
       }
       throw `Unexpected test command: ${command}`;
     } } };
-  }, { wav: wav.toString('base64'), infoSeen, invalidFirst, quick, long, branch, microphone });
+  }, { wav: wav.toString('base64'), infoSeen, invalidFirst, quick, long, branch, microphone, firstTranscription, emptyLibrary, inferenceAvailable, failInitialLibrary, holdInitialLibrary });
   await page.goto(url);
   if (!openRecording) return { page, errors };
   try { await page.getByRole('button', { name: '시험 녹음.wav', exact: true }).click({timeout:10000}); }
@@ -236,6 +293,266 @@ async function seekAndPause(page, seconds) {
   await audio.evaluate((node, at) => { node.pause(); node.currentTime = at; },seconds);
 }
 try {
+  for (const inferenceAvailable of [true,false]) {
+    const {page, errors} = await fixture({firstTranscription:true,emptyLibrary:true,openRecording:false,inferenceAvailable,failInitialLibrary:true,holdInitialLibrary:true});
+    await expect(page.getByRole('heading',{name:'보관함을 불러오는 중입니다.',exact:true})).toBeVisible();
+    await expect.poll(() => page.evaluate(() => typeof window.__REVIEW_TEST__.releaseLibrary)).toBe('function');
+    await page.evaluate(() => { const s=window.__REVIEW_TEST__; s.holdLibrary=false; s.releaseLibrary(); });
+    await expect(page.getByRole('heading',{name:'보관함을 불러오지 못했습니다',exact:true})).toBeVisible();
+    const libraryError=page.getByRole('alert',{name:'보관함 조회 오류',exact:true});
+    await expect(libraryError).toContainText('보관함 초기 조회 실패');
+    await page.getByRole('button',{name:'개인정보와 학습 안내',exact:true}).click();
+    await expect(page.getByText(/보관함 정보를 확인한 뒤 이 기기의 받아쓰기 지원 여부/)).toBeVisible();
+    await expect(page.getByText(/새 받아쓰기는 Whisper 엔진이 포함된 데스크톱/)).toHaveCount(0);
+    await page.getByRole('button',{name:'안내 닫기',exact:true}).click();
+    await page.evaluate(() => { const s=window.__REVIEW_TEST__; s.nextImport='초기 조회 뒤 가져온 음성.wav'; s.failLibrary='가져온 뒤 보관함 조회 실패'; });
+    await page.getByRole('button',{name:'음성 파일 가져오기',exact:true}).click();
+    await expect(libraryError).toContainText('가져온 뒤 보관함 조회 실패');
+    const prepare=page.getByRole('region',{name:'받아쓰기 준비',exact:true});
+    await expect(prepare.getByText(/엔진 지원 여부를 확인하지 못했습니다/)).toBeVisible();
+    await expect(page.getByText(/새 받아쓰기는 Whisper 엔진이 포함된 데스크톱/)).toHaveCount(0);
+    await expect(page.getByText('선택한 녹음: 초기 조회 뒤 가져온 음성.wav',{exact:true})).toBeVisible();
+    await expect(page.getByRole('status',{name:'녹음 저장 안내',exact:true})).toHaveText('초기 조회 뒤 가져온 음성.wav · 녹음 보관함에 저장했습니다.');
+    await expect(page.getByRole('button',{name:'저장한 녹음 열기',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true})).toBeDisabled();
+    await page.evaluate(() => { window.__REVIEW_TEST__.holdLibrary=true; });
+    await page.getByRole('button',{name:'보관함 다시 불러오기',exact:true}).click();
+    await expect(page.getByRole('status',{name:'보관함 조회 안내',exact:true})).toContainText('불러오는 중');
+    await expect(libraryError).toHaveCount(0);
+    await expect(prepare.getByText(/보관함을 불러온 뒤 엔진 지원 여부/)).toBeVisible();
+    await page.evaluate(() => { const s=window.__REVIEW_TEST__; s.holdLibrary=false; s.releaseLibrary(); });
+    await expect(page.getByRole('status',{name:'보관함 조회 안내',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'초기 조회 뒤 가져온 음성.wav',exact:true})).toHaveAttribute('aria-pressed','true');
+    if (inferenceAvailable) {
+      await expect(page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true})).toBeEnabled();
+      await expect(prepare.getByRole('button',{name:'Whisper 모델 선택',exact:true})).toBeEnabled();
+      await expect(page.getByText(/새 받아쓰기는 Whisper 엔진이 포함된 데스크톱/)).toHaveCount(0);
+    } else {
+      await expect(page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true})).toBeDisabled();
+      await expect(prepare.getByText(/새 받아쓰기는 Whisper 엔진이 포함된 데스크톱 설치본/)).toBeVisible();
+    }
+    await finish(page,errors,`initial library failure, import with unknown capability and explicit recovery: engine=${inferenceAvailable}`);
+  }
+  for (const failure of ['failSegments','failMarks']) {
+    const {page, errors} = await fixture({openRecording:false,inferenceAvailable:true});
+    await page.evaluate(key => { window.__REVIEW_TEST__[key] = '저장한 전사를 불러오지 못했습니다.'; },failure);
+    await page.getByRole('button',{name:'시험 녹음.wav',exact:true}).click();
+    await expect(page.getByRole('alert')).toHaveText('저장한 전사를 불러오지 못했습니다.');
+    await expect(page.getByText('받아쓰기를 마쳤지만 인식된 글이 없습니다.',{exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true})).toBeDisabled();
+    await page.getByRole('button',{name:'수정본 새로 불러오기',exact:true}).click();
+    await expect(page.getByText('첫 번째 자동 전사문',{exact:true})).toBeVisible();
+    await expect(page.getByRole('alert')).toBeEmpty();
+    await finish(page,errors,`saved transcript load failure recovers without presenting an empty result: ${failure}`);
+  }
+  for (const failed of [false,true]) {
+    const {page, errors} = await fixture({firstTranscription:true,inferenceAvailable:true,microphone:true,openRecording:false});
+    await page.getByRole('button',{name:'시험 녹음.wav',exact:true}).click();
+    await page.evaluate(() => { window.__REVIEW_TEST__.nextModel='valid'; });
+    await page.getByRole('region',{name:'받아쓰기 준비',exact:true}).getByRole('button',{name:'Whisper 모델 선택',exact:true}).click();
+    await page.getByRole('button',{name:'녹음 시작',exact:true}).click();
+    await page.evaluate(failed => { const s=window.__REVIEW_TEST__; s.microphone={state:'recording',session_id:'microphone-session',elapsed_seconds:1}; s.holdTranscription=true; if (failed) s.failTranscription='시험 전사 실패'; },failed);
+    await page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true}).click();
+    await page.getByRole('button',{name:'멈추고 저장',exact:true}).click();
+    await page.evaluate(() => window.__REVIEW_TEST__.releaseMicFinish());
+    await expect(page.getByRole('status',{name:'작업 안내',exact:true})).toContainText('기기 안에서 받아쓰는 중');
+    await expect(page.getByRole('status',{name:'녹음 저장 안내',exact:true})).toContainText('마이크 녹음.wav · 녹음 보관함에 저장했습니다.');
+    await expect(page.getByRole('button',{name:'시험 녹음.wav',exact:true})).toHaveAttribute('aria-pressed','true');
+    await expect(page.getByRole('button',{name:'마이크 녹음.wav',exact:true})).toHaveAttribute('aria-pressed','false');
+    await page.evaluate(() => window.__REVIEW_TEST__.releaseTranscription());
+    if (failed) {
+      await expect(page.getByRole('alert')).toHaveText('시험 전사 실패');
+      await expect(page.getByRole('status',{name:'작업 안내',exact:true})).toContainText('오류 안내를 확인하세요');
+    } else {
+      await expect(page.getByText('첫 번째 자동 전사문',{exact:true})).toBeVisible();
+      await expect(page.getByRole('status',{name:'작업 안내',exact:true})).toContainText('받아쓰기를 마쳤습니다.');
+    }
+    await expect(page.getByRole('status').filter({hasText:'마이크 녹음.wav · 녹음 보관함에 저장했습니다.'})).toBeVisible();
+    await page.getByRole('button',{name:'저장한 녹음 열기',exact:true}).click();
+    await expect(page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true})).toBeEnabled();
+    await finish(page,errors,`saved microphone notice survives the transcription result and opens the saved recording: failed=${failed}`);
+  }
+  for (const outcome of ['valid','cancel','invalid']) {
+    const {page, errors} = await fixture({firstTranscription:true,inferenceAvailable:true,microphone:true,openRecording:false});
+    await page.getByRole('button',{name:'시험 녹음.wav',exact:true}).click();
+    await page.getByRole('button',{name:'녹음 시작',exact:true}).click();
+    await page.evaluate(outcome => {
+      const s=window.__REVIEW_TEST__;
+      s.microphone={state:'recording',session_id:'microphone-session',elapsed_seconds:1};
+      s.holdModel=true; s.nextModel=outcome;
+    },outcome);
+    await page.getByRole('region',{name:'받아쓰기 준비',exact:true}).getByRole('button',{name:'Whisper 모델 선택',exact:true}).click();
+    const operation=page.getByRole('status',{name:'작업 안내',exact:true});
+    await expect(operation).toHaveText('모델 파일을 확인하는 중입니다.');
+    await page.getByRole('button',{name:'멈추고 저장',exact:true}).click();
+    await page.evaluate(() => window.__REVIEW_TEST__.releaseMicFinish());
+    const saved=page.getByRole('status',{name:'녹음 저장 안내',exact:true});
+    await expect(saved).toContainText('마이크 녹음.wav · 녹음 보관함에 저장했습니다.');
+    const openSaved=page.getByRole('button',{name:'저장한 녹음 열기',exact:true});
+    await expect(openSaved).toBeDisabled();
+    await expect(operation).toHaveText('모델 파일을 확인하는 중입니다.');
+    await page.evaluate(() => window.__REVIEW_TEST__.releaseModel());
+    if (outcome==='valid') await expect(operation).toContainText('무결성을 확인했습니다.');
+    else if (outcome==='cancel') await expect(operation).toContainText('모델 파일 선택을 취소했습니다.');
+    else await expect(page.getByRole('alert')).toContainText('SHA-256');
+    await expect(saved).toContainText('마이크 녹음.wav');
+    await expect(openSaved).toBeEnabled();
+    await expect(page.getByRole('button',{name:'시험 녹음.wav',exact:true})).toHaveAttribute('aria-pressed','true');
+    await openSaved.click();
+    await expect(page.getByRole('button',{name:'마이크 녹음.wav',exact:true})).toHaveAttribute('aria-pressed','true');
+    await expect(saved).toHaveText('마이크 녹음.wav · 녹음 보관함에 저장했습니다.');
+    await expect(openSaved).toHaveCount(0);
+    await page.getByRole('button',{name:'시험 녹음.wav',exact:true}).click();
+    await expect(openSaved).toBeEnabled();
+    await expect(saved).toContainText('저장한 녹음 열기로 확인하세요.');
+    await page.getByRole('button',{name:'저장 안내 닫기',exact:true}).click();
+    await expect(saved).toHaveCount(0);
+    await finish(page,errors,`saved microphone notice survives the model picker result: ${outcome}`);
+  }
+  for (const emptyResult of [false,true]) {
+    const {page, errors} = await fixture({firstTranscription:true,inferenceAvailable:true,openRecording:false});
+    await page.evaluate(empty => { window.__REVIEW_TEST__.emptyTranscription=empty; window.__REVIEW_TEST__.nextImport='목록 갱신 시험.wav'; },emptyResult);
+    await page.getByRole('button',{name:'음성 파일 가져오기',exact:true}).click();
+    const imported=page.getByRole('button',{name:'목록 갱신 시험.wav',exact:true});
+    await expect(imported).toHaveAttribute('aria-pressed','true');
+    await page.evaluate(() => { window.__REVIEW_TEST__.nextModel='valid'; });
+    await page.getByRole('region',{name:'받아쓰기 준비',exact:true}).getByRole('button',{name:'Whisper 모델 선택',exact:true}).click();
+    await page.evaluate(() => { window.__REVIEW_TEST__.failLibrary='보관함 목록을 불러오지 못했습니다.'; });
+    await page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true}).click();
+    await expect(page.getByRole('alert',{name:'보관함 조회 오류',exact:true})).toHaveText('보관함 목록을 불러오지 못했습니다.');
+    await expect(page.getByText('기존 보관함 목록은 그대로 표시합니다.',{exact:true})).toBeVisible();
+    await expect(imported).toHaveAttribute('aria-pressed','true');
+    await page.getByRole('button',{name:'시험 녹음.wav',exact:true}).click();
+    await expect(page.getByRole('region',{name:'받아쓰기 준비',exact:true}).getByRole('button',{name:'Whisper 모델 선택',exact:true})).toBeEnabled();
+    await imported.click();
+    await expect(page.getByText(emptyResult ? '받아쓰기를 마쳤지만 인식된 글이 없습니다.' : '첫 번째 자동 전사문',{exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true})).toBeDisabled();
+    if (emptyResult) await expect(page.getByRole('button',{name:'빠른 검수 시작',exact:true})).toBeDisabled();
+    else await expect(page.getByRole('button',{name:'빠른 검수 시작',exact:true})).toBeEnabled();
+    await finish(page,errors,`completed recording survives a failed library refresh and navigating away: empty=${emptyResult}`);
+  }
+  {
+    const {page, errors} = await fixture({firstTranscription:true,emptyLibrary:true,inferenceAvailable:true,openRecording:false});
+    await expect(page.getByRole('heading',{name:'첫 녹음을 추가하세요',exact:true})).toBeVisible();
+    await expect(page.getByText('녹음과 전사는 이 기기에 저장합니다.',{exact:true})).toBeVisible();
+    const importAudio = page.getByRole('button',{name:'음성 파일 가져오기',exact:true});
+    await page.evaluate(() => { window.__REVIEW_TEST__.failImport = '음성 파일을 읽지 못했습니다.'; });
+    await importAudio.click();
+    await expect(page.getByRole('alert')).toHaveText('음성 파일을 읽지 못했습니다.');
+    await expect(page.getByText(/WAV, MP3, AAC-LC M4A 파일을 다시 선택/)).toBeVisible();
+    await importAudio.click(); // Native picker cancelled.
+    await expect(page.getByRole('heading',{name:'첫 녹음을 추가하세요',exact:true})).toBeVisible();
+    await page.evaluate(() => { window.__REVIEW_TEST__.nextImport = '첫 파일.wav'; });
+    await importAudio.click();
+    const recording = page.getByRole('button',{name:'첫 파일.wav',exact:true});
+    await expect(recording).toHaveAttribute('aria-pressed','true');
+    const prepare = page.getByRole('region',{name:'받아쓰기 준비',exact:true});
+    await expect(prepare.getByText(/Whisper small 검증용 모델 ggml-small.bin/)).toBeVisible();
+    const transcribe = page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true});
+    await transcribe.click();
+    await expect(page.getByRole('alert')).toContainText('먼저');
+    await expect(recording).toHaveAttribute('aria-pressed','true');
+    const choose = prepare.getByRole('button',{name:'Whisper 모델 선택',exact:true});
+    await page.evaluate(() => { window.__REVIEW_TEST__.nextModel = 'invalid'; });
+    await choose.click();
+    await expect(page.getByRole('alert')).toContainText('SHA-256');
+    await expect(recording).toHaveAttribute('aria-pressed','true');
+    await page.evaluate(() => { window.__REVIEW_TEST__.nextModel = 'cancel'; });
+    await choose.click();
+    await expect(choose).toBeEnabled();
+    expect(await readState(page,'transcribeCalls')).toEqual([{recordingId:'imported'}]);
+    await page.evaluate(() => { window.__REVIEW_TEST__.nextModel = 'valid'; });
+    await choose.click();
+    await expect(page.getByRole('status',{name:'작업 안내',exact:true})).toHaveText(/무결성/);
+    await expect(page.getByRole('alert')).toBeEmpty();
+    await expect(recording).toHaveAttribute('aria-pressed','true');
+    await page.evaluate(() => { window.__REVIEW_TEST__.holdTranscription = true; });
+    const retry = page.getByRole('button',{name:'같은 녹음 다시 받아쓰기',exact:true});
+    await retry.click();
+    const pending = page.getByRole('button',{name:'기기 안에서 받아쓰는 중',exact:true});
+    await expect(pending).toBeDisabled();
+    await expect(page.getByRole('region',{name:'저장한 글',exact:true})).toHaveAttribute('aria-busy','true');
+    await expect(page.getByRole('status',{name:'작업 안내',exact:true})).toContainText('기기 안에서 받아쓰는 중');
+    await expect(page.getByRole('status',{name:'작업 안내',exact:true})).not.toContainText('%');
+    await expect(recording).toBeDisabled();
+    await expect(choose).toBeDisabled();
+    await pending.dispatchEvent('click'); await pending.dispatchEvent('click');
+    expect(await readState(page,'transcribeCalls')).toEqual([{recordingId:'imported'},{recordingId:'imported'}]);
+    await captureReview(page,'first-transcription-pending');
+    await page.evaluate(() => window.__REVIEW_TEST__.releaseTranscription());
+    await expect(page.getByText('첫 번째 자동 전사문',{exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'빠른 검수 시작',exact:true})).toBeEnabled();
+    await expect(page.getByRole('button',{name:'오류와 수정본 교정 목록',exact:true})).toBeEnabled();
+    await expect(recording.getByText(/whisper-rs 0.16/)).toBeVisible();
+    await captureReview(page,'first-transcription-result');
+    await page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true}).dispatchEvent('click');
+    expect(await readState(page,'transcribeCalls')).toEqual([{recordingId:'imported'},{recordingId:'imported'}]);
+    await startQuick(page);
+    await expect(quickAudio(page)).toBeAttached();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('첫 번째 자동 전사문',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'텍스트 파일로 저장',exact:true}).click();
+    expect(await readState(page,'exports')).toBe(1);
+    await page.getByRole('button',{name:'이 조각 재생, 편집',exact:true}).first().click();
+    await page.getByRole('button',{name:'구간 재생 (Space)',exact:true}).click();
+    await expect(page.getByText('이 수정본의 음성을 끝까지 들었습니다.',{exact:true})).toBeVisible();
+    await page.getByLabel('수정 초안').fill('첫 전사를 고친 초안');
+    await page.evaluate(() => { const s=window.__REVIEW_TEST__; s.holdLibrary=true; s.releaseLibrary=null; });
+    await page.getByRole('button',{name:'초안 저장',exact:true}).click();
+    await expect.poll(async () => (await readState(page,'segments'))[0].text).toBe('첫 전사를 고친 초안');
+    await expect.poll(() => page.evaluate(() => typeof window.__REVIEW_TEST__.releaseLibrary)).toBe('function');
+    await expect(page.getByRole('status',{name:'보관함 조회 안내',exact:true})).toHaveCount(0);
+    await expect(recording).toBeVisible();
+    await expect(page.getByLabel('수정 초안')).toHaveValue('첫 전사를 고친 초안');
+    await page.evaluate(() => { const s=window.__REVIEW_TEST__; s.holdLibrary=false; s.releaseLibrary(); });
+    expect((await readState(page,'segments'))[0].verified).toBeNull();
+    await page.reload();
+    await page.getByRole('button',{name:'첫 파일.wav',exact:true}).click();
+    await expect(page.getByText('첫 전사를 고친 초안',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'오류와 수정본 교정 목록',exact:true}).click();
+    await expect(page.getByText('첫 번째 자동 전사문',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('수정 초안')).toHaveValue('첫 전사를 고친 초안');
+    expect((await readState(page,'segments'))[0].verified).toBeNull();
+    await finish(page,errors,'first import, missing/corrupt/cancelled model selection, duplicate guard, result and reopened draft');
+  }
+  {
+    const {page, errors} = await fixture({firstTranscription:true,emptyLibrary:true,inferenceAvailable:true,microphone:true,openRecording:false});
+    await page.getByRole('button',{name:'녹음 시작',exact:true}).click();
+    await page.evaluate(() => { window.__REVIEW_TEST__.microphone = {state:'recording',session_id:'microphone-session',elapsed_seconds:1}; });
+    await page.getByRole('button',{name:'멈추고 저장',exact:true}).click();
+    await page.evaluate(() => window.__REVIEW_TEST__.releaseMicFinish());
+    const saved = page.getByRole('button',{name:'마이크 녹음.wav',exact:true});
+    await expect(saved).toHaveAttribute('aria-pressed','true');
+    await page.evaluate(() => { const s = window.__REVIEW_TEST__; s.nextModel = 'valid'; s.holdTranscription = true; s.failTranscription = '엔진이 받아쓰기를 마치지 못했습니다.'; });
+    await page.getByRole('region',{name:'받아쓰기 준비',exact:true}).getByRole('button',{name:'Whisper 모델 선택',exact:true}).click();
+    await page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true}).click();
+    await expect(page.getByRole('button',{name:'기기 안에서 받아쓰는 중',exact:true})).toBeDisabled();
+    await page.evaluate(() => window.__REVIEW_TEST__.releaseTranscription());
+    await expect(page.getByRole('alert')).toHaveText('엔진이 받아쓰기를 마치지 못했습니다.');
+    await expect(saved).toHaveAttribute('aria-pressed','true');
+    await page.evaluate(() => { window.__REVIEW_TEST__.holdTranscription = false; });
+    await page.getByRole('button',{name:'같은 녹음 다시 받아쓰기',exact:true}).click();
+    await expect(page.getByRole('alert')).toBeEmpty();
+    await expect(page.getByText('첫 번째 자동 전사문',{exact:true})).toBeVisible();
+    expect(await readState(page,'transcribeCalls')).toEqual([{recordingId:'captured'},{recordingId:'captured'}]);
+    expect(await readState(page,'finishCalls')).toEqual([{sessionId:'microphone-session',save:true}]);
+    await finish(page,errors,'saved microphone recording survives engine failure and retries without recording again');
+  }
+  {
+    const {page, errors} = await fixture({firstTranscription:true,inferenceAvailable:true,openRecording:false});
+    await page.getByRole('button',{name:'시험 녹음.wav',exact:true}).click();
+    await page.evaluate(() => { const s=window.__REVIEW_TEST__; s.nextModel='valid'; s.emptyTranscription=true; });
+    await page.getByRole('region',{name:'받아쓰기 준비',exact:true}).getByRole('button',{name:'Whisper 모델 선택',exact:true}).click();
+    await page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true}).click();
+    await expect(page.getByText('받아쓰기를 마쳤지만 인식된 글이 없습니다.',{exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'기기 안에서 받아쓰기',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'빠른 검수 시작',exact:true})).toBeDisabled();
+    await page.reload();
+    await page.getByRole('button',{name:'시험 녹음.wav',exact:true}).click();
+    await expect(page.getByText('받아쓰기를 마쳤지만 인식된 글이 없습니다.',{exact:true})).toBeVisible();
+    await finish(page,errors,'completed empty transcription stays distinct from a recording waiting for its first transcription');
+  }
   {
     const {page, errors} = await fixture({microphone: true});
     const start = page.getByRole('button', {name:'녹음 시작', exact:true});
@@ -245,6 +562,7 @@ try {
     await expect(stop).toBeDisabled();
     await page.evaluate(() => { window.__REVIEW_TEST__.microphone = {state:'failed', message:'마이크 접근이 허용되지 않았습니다.'}; });
     await expect(page.getByText('마이크 접근이 허용되지 않았습니다.', {exact:true})).toBeVisible();
+    await expect(page.getByText(/마이크 권한과 연결을 확인한 뒤 녹음 시작/)).toBeVisible();
 
     await start.click();
     await cancel.click();
@@ -302,12 +620,17 @@ try {
     const {page, errors} = await fixture();
     await expect(page.getByRole('heading', {name:'마이크 녹음'})).toHaveCount(0);
     const importButton = page.getByRole('button', {name:'음성 파일 가져오기'});
+    await page.evaluate(() => { window.__REVIEW_TEST__.failImport = '음성 파일을 읽지 못했습니다.'; });
+    await importButton.click();
+    await expect(page.getByRole('alert')).toHaveText('음성 파일을 읽지 못했습니다.');
+    await expect(page.getByText('첫 번째 자동 전사문',{exact:true})).toBeVisible();
     await importButton.click();
     await expect(importButton).toBeEnabled();
     await page.evaluate(() => { window.__REVIEW_TEST__.nextImport = '선택한 음성.m4a'; });
     await importButton.click();
     await expect(page.getByRole('button', {name:'선택한 음성.m4a'})).toHaveAttribute('aria-pressed','true');
-    await expect(page.getByRole('button', {name:'기기 안에서 받아쓰기'})).toBeEnabled();
+    await expect(page.getByRole('button', {name:'기기 안에서 받아쓰기',exact:true})).toBeDisabled();
+    await expect(page.getByText(/새 받아쓰기는 Whisper 엔진이 포함된 데스크톱 설치본/)).toBeVisible();
     await finish(page,errors,'file picker cancellation and successful import with microphone unavailable');
   }
   {
