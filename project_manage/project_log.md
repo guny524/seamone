@@ -219,3 +219,8 @@
 - 위 병합 커밋에서 lint, Rust·연구 회귀 시험, 데스크톱 엔진 시험과 Chrome 화면 시험이 통과했다. [develop 병합 커밋 CI](https://github.com/guny524/seamone/actions/runs/45024381990)
 - 로컬 기준 작업 사본과 Orca의 새 worktree 기준을 `develop`으로 맞췄다. 병합된 녹음·교정과 엔진 interface 작업 사본, 종료한 탭 3개, 병합된 로컬 작업 브랜치 4개를 정리했다
 - 병합 전인 연합학습 모의실험의 작업 사본은 보존했다. Orca 표시 이름을 `4-unlabeled-fl-sim`으로 바꾸고 [연합학습 모의실험 이슈 (#4)](https://github.com/guny524/seamone/issues/4)와 [소규모 실험 초안 PR (#9)](https://github.com/guny524/seamone/pull/9)을 연결했다
+
+## 2026-11-24 01:12 야간 점검 시작
+- 01:10:12 KST에 Orca에서 현재 메인 세션을 깨우는 한 시간 간격 타이머를 시작했다. 종료 시각은 08:00 KST다. 짧은 시험에서 메인 세션이 작업 중이면 입력을 건너뛰는 것을 확인했다
+- `develop`의 `1cf5794` 기준 첫 전사 흐름 구현과 `0d93e7c` 기준 연합학습 모의실험 검토를 Codex Sol high 작업자 두 명에게 맡겼다
+- 사용자가 먼저 시작한 두 명은 일을 마치고 이후에는 작업자를 한 명으로 줄이라고 지시했다. 첫 작업이 끝나면 자리를 다시 채우지 않는다
