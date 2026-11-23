@@ -185,7 +185,7 @@
 
 첫 전사 흐름의 `7276a7b`에서 lint, Rust 시험 83개, 모의 IPC를 사용한 Chrome 화면 시험 32개를 통과했다. 실제 설치 파일과 기기 조작은 위 시험 항목에 남아 있다. [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)
 
-최신 `7276a7b`의 PR CI와 macOS·Windows·Linux·Android 기본 패키지, iOS 시뮬레이터 빌드를 확인했다. 실제 모델 선택과 전사를 시험할 데스크톱 설치본은 `desktop-whisper`를 켜서 별도로 빌드 중이다. [PR CI](https://github.com/guny524/seamone/actions/runs/45229632089) · [기본 패키지](https://github.com/guny524/seamone/actions/runs/45229632146) · [Whisper 포함 패키지](https://github.com/guny524/seamone/actions/runs/45235655790)
+최신 `7276a7b`의 PR CI, 기본 패키지, Whisper 엔진을 포함한 데스크톱 패키지 빌드가 통과했다. Apple Silicon DMG의 체크섬, arm64 앱, Whisper 심볼과 최소 macOS 11.0 설정을 확인했다. 실제 설치 파일의 모델 선택·마이크·첫 전사와 모바일 터치 시험은 남았다. [PR CI](https://github.com/guny524/seamone/actions/runs/45229632089) · [기본 패키지](https://github.com/guny524/seamone/actions/runs/45229632146) · [Whisper 포함 패키지](https://github.com/guny524/seamone/actions/runs/45235655790) · [Apple Silicon DMG](https://github.com/guny524/seamone/actions/runs/45235655790/artifacts/14848314356)
 
 ## 8. 수정 요약
 - 빠른 검수 화면은 원본 음성을 30초씩 받아 이어 재생한다. 오류 후보는 실제로 들은 최대 6초다. 좌우와 Enter로 범위를 좁히고, 위쪽 화살표로 다른 갈래에 갈 때 오류를 보관한다. Esc는 찾은 오류를 한 번에 저장한다

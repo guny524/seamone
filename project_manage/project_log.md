@@ -246,3 +246,8 @@
 ## 2026-11-24 03:11 첫 전사 PR 빌드 확인
 - `7276a7b`에서 PR CI와 macOS·Windows·Linux·Android 패키지, iOS 시뮬레이터 빌드가 모두 통과했다. 여섯 플랫폼별 아티팩트가 남아 있다. [PR CI](https://github.com/guny524/seamone/actions/runs/45229632089) · [기본 패키지](https://github.com/guny524/seamone/actions/runs/45229632146)
 - 모델 선택과 실제 전사를 시험할 수 있게 같은 커밋의 기존 수동 빌드에서 `desktop-whisper`를 켰다. 기본 빌드 통과와 수동 빌드 진행 상태를 이슈와 PR 본문에 반영하고 대조했다. [Whisper 포함 패키지](https://github.com/guny524/seamone/actions/runs/45235655790)
+
+## 2026-11-24 04:12 야간 작업 종료
+- `7276a7b`의 [Whisper 포함 수동 빌드](https://github.com/guny524/seamone/actions/runs/45235655790)에서 여섯 job이 모두 통과했다. Apple Silicon DMG 체크섬이 맞았고 arm64 실행 파일, Whisper 함수 심볼과 최소 macOS 11.0 설정을 확인했다. DMG SHA-256은 `98fdfe6a29944f0352f622c6f48259793ec1991f74ae5477d6e9990d3e2f46f5`다
+- 첫 전사 흐름 구현·자동 검증과 연합학습 모의실험 소규모 결과 검토를 마쳐 04:11:34 KST에 점검 프로세스와 Orca 타이머 탭을 종료했다. 확인용 DMG 사본은 지웠다
+- 설치 파일을 직접 실행하는 마이크·모델 선택과 모바일 터치 확인은 [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)에 남겼다. 병합 전인 앱과 모의실험 작업 사본은 후속 검증을 위해 보존했다

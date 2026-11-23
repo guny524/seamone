@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 develop 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-24 03:11 KST
+- 마지막 갱신: 2026-11-24 04:12 KST
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -24,7 +24,7 @@
 - 2026-11-19 "어쨌든 모르겠고 이제 나한테 물어보지 말고 지금 너 /conversation-rag 보면은 예전에 너 스스로 모델 바꿔서 한 거 있거든. 그러니까 지금은 페이블 5.2로 플랜 세울 때 동안 페이블 5.2 엑스트라 하이로 가고, 그 이후부터는 소넷 맥스로 너가 스스로 바꿔서 계속 진행을 해."
 
 ## 3. 운영 방침
-- 2026-11-24 야간 작업은 한국 시간 오전 8시까지 이 세션을 한 시간마다 깨워 점검한다. 맡긴 작업이 먼저 끝나면 타이머를 종료한다
+- 2026-11-24 야간 작업은 소규모 모의실험 검토, 첫 전사 흐름 초안 PR과 설치 파일 확인을 마치고 04:11 KST에 점검 타이머를 종료했다
 - 이미 시작한 작업자 2명은 하던 일을 마친다. 한 명이 끝나면 그 자리를 채우지 않고 이후 작업자를 동시에 최대 1명으로 유지한다. 기본 모델은 Codex Sol high이며 한도를 소진하면 가용한 Gemini Flash의 최고 effort로 넘긴다. 구현 검토는 Claude Opus medium, 한도 소진 시 Sonnet high다. 결함은 해당 코드를 작성한 작업자가 고친다
 - 범위: 녹음·파일 가져오기부터 첫 전사와 오류 복구까지 잇고, 별도로 연합학습 모의실험 초안의 비교 조건과 재현성을 검토한다. 실제 기기 조작이나 서명이 필요한 항목은 시험 결과가 있는 범위까지 기록한다
 - 물을 것: 없음
@@ -86,7 +86,7 @@
 - 작업: 앱 worktree `5-first-transcription`의 `7276a7b`을 `develop` 대상 [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)에 올렸다. 기존 빠른 검수 키와 시간축 예시는 [빠른 검수 설계](0005-2026_11_19-record_transcribe_edit/quick_review_design.md)에 있다
 - 선행: 받아쓰기 엔진의 공통 interface가 `develop`에 있고 제품 시작 모델은 속도 실측 뒤 정한다. 학습 엔진은 후속 작업이다
 - 인계 기준: `develop`의 병합 커밋 `3ba1047`이 작업분을 포함한다. [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 PR (#10)](https://github.com/guny524/seamone/pull/10)
-- 다음 행동: PR CI와 다섯 플랫폼 기본 빌드를 확인했다. 실제 모델 전사를 시험할 [Whisper 포함 데스크톱 빌드](https://github.com/guny524/seamone/actions/runs/45235655790)의 결과와 설치 파일을 확인한다. 실제 마이크와 모바일 터치 조작은 남았다
+- 다음 행동: [Whisper 포함 Apple Silicon 설치 파일](https://github.com/guny524/seamone/actions/runs/45235655790/artifacts/14848314356)로 실제 첫 실행, 마이크 입력, 모델 선택과 전사를 시험한다. 모바일 파일 가져오기와 터치 시험은 실제 기기에서 확인한다
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
