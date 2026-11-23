@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 develop 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-24 02:30 KST
+- 마지막 갱신: 2026-11-24 02:37 KST
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -83,10 +83,10 @@
 ### #5 녹음, 기기 안 받아쓰기, 수정 화면을 만든다 (앱의 첫 쓸모)
 - 상태: 데스크톱 녹음, WAV·MP3·AAC-LC M4A 가져오기, 빠른 검수·별도 교정·모바일 화면을 `develop`에 병합했다. 첫 전사 흐름과 실기기 시험은 남았다
 - 폴더: `project_manage/0005-2026_11_19-record_transcribe_edit`
-- 작업: `develop`의 `1cf5794`에서 시작한 앱 worktree `5-first-transcription`에서 첫 전사 흐름의 화면과 회귀 시험을 작업 중이다. 기존 빠른 검수 키와 시간축 예시는 [빠른 검수 설계](0005-2026_11_19-record_transcribe_edit/quick_review_design.md)에 있다
+- 작업: 앱 worktree `5-first-transcription`의 `7276a7b`을 `develop` 대상 [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)에 올렸다. 기존 빠른 검수 키와 시간축 예시는 [빠른 검수 설계](0005-2026_11_19-record_transcribe_edit/quick_review_design.md)에 있다
 - 선행: 받아쓰기 엔진의 공통 interface가 `develop`에 있고 제품 시작 모델은 속도 실측 뒤 정한다. 학습 엔진은 후속 작업이다
 - 인계 기준: `develop`의 병합 커밋 `3ba1047`이 작업분을 포함한다. [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 PR (#10)](https://github.com/guny524/seamone/pull/10)
-- 다음 행동: 이미 열린 녹음에 다시 열기 버튼이 표시되지 않게 하고, 기존 보관함의 백그라운드 갱신 안내를 숨긴 뒤 재검증한다. 저장 안내 유지와 첫 조회 실패 복구는 Chrome 화면 시험 32개로 확인했다. 설치 파일 실기기 시험은 남았다
+- 다음 행동: 초안 PR의 CI와 플랫폼별 패키지 빌드를 확인한다. 화면과 오류 복구는 Chrome 시나리오 32개를 통과했다. 설치 파일로 첫 실행과 실제 마이크·모바일 터치를 확인하는 시험은 남았다
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
