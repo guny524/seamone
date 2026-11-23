@@ -174,7 +174,7 @@
 - [ ] 첫 실행과 다운로드 안내에서 음성과 전사는 기기에 저장된다고 설명한다. 모델 변경분 크기 제한, 기기에서 노이즈 추가, 서버 보안 집계는 예정된 보호 방식으로 설명한다
 - [x] 받아쓰기나 모델 확인 중 마이크 녹음을 저장하면, 진행 중인 작업이 끝난 뒤에도 저장 안내와 녹음 목록을 확인할 수 있게 한다
 - [x] 첫 보관함 조회 실패와 엔진 없는 설치본을 구별한다. 실패할 때 새로 불러오기 동작을 보여 주고, 조회를 다시 시도해 전사를 시작할 수 있는지 확인한다
-- [ ] 첫 전사 정상 경로와 오류 후 재시도를 화면 시험에 넣는다. `make lint`, `make test`, `make ui-test`, 최신 커밋의 GitHub Actions 설치 파일 빌드 결과를 남긴다
+- [x] 첫 전사 정상 경로와 오류 후 재시도를 화면 시험에 넣는다. `make lint`, `make test`, `make ui-test`, 최신 커밋의 GitHub Actions 설치 파일 빌드 결과를 남긴다
 - [ ] macOS 설치 파일로 모델이 없는 첫 실행에서 실제 마이크 녹음과 새 파일 가져오기를 확인한다. 모델 선택, 전사, 검수, 교정, 재실행, 내보내기 결과를 남긴다
 - [ ] Android·iOS의 파일 가져오기와 터치 검수, Windows·Linux 패키지 설치는 직접 실행한 환경과 결과를 각각 기록한다
 
@@ -184,6 +184,8 @@
 병합한 앱 코드에서 `make lint`, `make test`, Chrome 화면 시험 18개, 공개 한국어 음성과 실제 Whisper small을 쓴 `make desktop-proof`가 통과했다. macOS·Windows·Linux·Android 패키지와 iOS 시뮬레이터 빌드를 확인했다. 실제 설치 파일에서 마이크와 모바일 터치를 확인하는 시험은 남았다. [GitHub Actions 패키지 빌드](https://github.com/guny524/seamone/actions/runs/45017542775)
 
 첫 전사 흐름의 `7276a7b`에서 lint, Rust 시험 83개, 모의 IPC를 사용한 Chrome 화면 시험 32개를 통과했다. 실제 설치 파일과 기기 조작은 위 시험 항목에 남아 있다. [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)
+
+최신 `7276a7b`의 PR CI와 macOS·Windows·Linux·Android 기본 패키지, iOS 시뮬레이터 빌드를 확인했다. 실제 모델 선택과 전사를 시험할 데스크톱 설치본은 `desktop-whisper`를 켜서 별도로 빌드 중이다. [PR CI](https://github.com/guny524/seamone/actions/runs/45229632089) · [기본 패키지](https://github.com/guny524/seamone/actions/runs/45229632146) · [Whisper 포함 패키지](https://github.com/guny524/seamone/actions/runs/45235655790)
 
 ## 8. 수정 요약
 - 빠른 검수 화면은 원본 음성을 30초씩 받아 이어 재생한다. 오류 후보는 실제로 들은 최대 6초다. 좌우와 Enter로 범위를 좁히고, 위쪽 화살표로 다른 갈래에 갈 때 오류를 보관한다. Esc는 찾은 오류를 한 번에 저장한다

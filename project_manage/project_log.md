@@ -242,3 +242,7 @@
 ## 2026-11-24 02:37 첫 전사 흐름 초안 PR
 - 중복 열기 버튼과 백그라운드 로딩 알림에 대한 수정과 시험을 코드에서 대조했다. `develop`의 `39a5c2e`를 반영한 뒤 전체 diff의 SHA-256 `94386a1e72d2ec7b5e2ca56938452b5fc3eec1cdedf4c213c02e26f572cef1a0`에 대해 메인이 lint, Rust 시험 83개와 Chrome 시험 32개를 통과시켰다
 - `7276a7b`을 [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)에 올리고 [녹음·받아쓰기·수정 화면 이슈 (#5)](https://github.com/guny524/seamone/issues/5)의 체크리스트를 대조했다. 패키지 빌드와 실기기 시험은 남았다
+
+## 2026-11-24 03:11 첫 전사 PR 빌드 확인
+- `7276a7b`에서 PR CI와 macOS·Windows·Linux·Android 패키지, iOS 시뮬레이터 빌드가 모두 통과했다. 여섯 플랫폼별 아티팩트가 남아 있다. [PR CI](https://github.com/guny524/seamone/actions/runs/45229632089) · [기본 패키지](https://github.com/guny524/seamone/actions/runs/45229632146)
+- 모델 선택과 실제 전사를 시험할 수 있게 같은 커밋의 기존 수동 빌드에서 `desktop-whisper`를 켰다. 기본 빌드 통과와 수동 빌드 진행 상태를 이슈와 PR 본문에 반영하고 대조했다. [Whisper 포함 패키지](https://github.com/guny524/seamone/actions/runs/45235655790)
