@@ -22,9 +22,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Makefile 의 TAURI_CLI_VERSION, TRUNK_VERSION 과 같은 판을 쓴다, 판을 올리면 scripts/install-tools.sh 의 sha256 도 바꾼다
-  TAURI_CLI_VERSION: "2.12.6"
-  TRUNK_VERSION: "0.22.2"
 
 jobs:
   desktop:
@@ -79,7 +76,7 @@ jobs:
 
       - name: Install tauri-cli and trunk
         shell: bash
-        run: scripts/install-tools.sh
+        run: make install-ci-tools
 
       - name: Check the tool versions
         run: |
@@ -157,7 +154,7 @@ jobs:
           fi
 
       - name: Install tauri-cli and trunk
-        run: scripts/install-tools.sh
+        run: make install-ci-tools
 
       # runner 에 깔린 Android SDK 와 NDK 를 쓴다
       - name: Point NDK_HOME at the NDK preinstalled on the runner
@@ -213,7 +210,7 @@ jobs:
           key: ios
 
       - name: Install tauri-cli and trunk
-        run: scripts/install-tools.sh
+        run: make install-ci-tools
 
       - name: Generate the Xcode project
         run: cargo tauri ios init --ci --skip-targets-install

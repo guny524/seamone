@@ -13,8 +13,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  TAURI_CLI_VERSION: "2.12.6"
-  TRUNK_VERSION: "0.22.2"
 
 jobs:
   lint-test:
@@ -47,7 +45,7 @@ jobs:
           make test CARGO_FEATURES=desktop-whisper
 
       - name: Install pinned UI build tools
-        run: scripts/install-tools.sh
+        run: make install-ci-tools
 
       - name: Install UI regression dependencies
         run: npm ci --prefix app/ui/tests --ignore-scripts --no-audit --no-fund
@@ -87,5 +85,5 @@ jobs:
       - name: Install locked research dependencies
         run: uv sync --locked --project research
 
-      - name: Research regression without model or corpus downloads
-        run: make -C research test
+      - name: Research regression in an isolated network namespace
+        run: make -C research test-offline
