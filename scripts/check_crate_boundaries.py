@@ -58,7 +58,7 @@ def violations(packages):
 def main():
     result = subprocess.run(
         ["cargo", "metadata", "--locked", "--offline", "--no-deps", "--format-version=1"],
-        check=True, stdout=subprocess.PIPE, text=True,
+        check=True, stdout=subprocess.PIPE,
     )
     metadata = json.loads(result.stdout)
     members = set(metadata["workspace_members"])
