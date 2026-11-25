@@ -251,3 +251,11 @@
 - `7276a7b`의 [Whisper 포함 수동 빌드](https://github.com/guny524/seamone/actions/runs/45235655790)에서 여섯 job이 모두 통과했다. Apple Silicon DMG 체크섬이 맞았고 arm64 실행 파일, Whisper 함수 심볼과 최소 macOS 11.0 설정을 확인했다. DMG SHA-256은 `98fdfe6a29944f0352f622c6f48259793ec1991f74ae5477d6e9990d3e2f46f5`다
 - 첫 전사 흐름 구현·자동 검증과 연합학습 모의실험 소규모 결과 검토를 마쳐 04:11:34 KST에 점검 프로세스와 Orca 타이머 탭을 종료했다. 확인용 DMG 사본은 지웠다
 - 설치 파일을 직접 실행하는 마이크·모델 선택과 모바일 터치 확인은 [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)에 남겼다. 병합 전인 앱과 모의실험 작업 사본은 후속 검증을 위해 보존했다
+
+## 2026-11-25 18:20 컴파일과 CI에서 앱 구조와 검수 계약 검사
+
+- 영상의 장면 전환을 색 히스토그램으로 찾고 4:20, 6:35, 6:45 재생 화면을 확인했다. 화면과 native가 공용 타입을 참조하는 예를 Seamone의 Rust crate와 IPC 명령에 적용했다. [영상의 의존 방향 그림](https://www.youtube.com/watch?v=nldpxmin-1M&t=405s) · [pstack의 코드 구조 개선 지침](https://github.com/cursor/plugins/blob/41e400932eca14f289e7db717a70455256b6d388/pstack/skills/correct/SKILL.md)
+- `878e9c5`로 의존 경계, IPC 명령, 검수 동작의 증거 조건, 학습 입력 타입과 lint 예외 검사를 `develop`에 병합했다. 정상 코드와 여섯 가지 위반의 거절 원인을 확인했다. 외부망을 끊은 Linux에서 연구 시험 104개가 통과했고 Chrome에서는 다른 출처로 보낸 요청이 수신 서버에 도달하지 않았다. [구조 검사 PR (#12)](https://github.com/guny524/seamone/pull/12) · [거절 진단](https://github.com/guny524/seamone/actions/runs/45583994420)
+- Windows 패키지 작업이 Cargo의 UTF-8 출력을 시스템 문자 인코딩으로 읽던 문제를 수정했다. 실제 빌드 결과와 남은 설치 시험은 [앱 뼈대 이슈의 컴파일·패키지 검사](0001-2026_11_19-app_skeleton_ci/issue_board.md#7-18-컴파일과-패키지-단계의-의존-경계)에 있다
+- `3d82dec`에서 첫 전사의 보관함 갱신과 중복 요청 처리를 유지하며 새 IPC 명령을 연결했다. 기본 Rust 시험 88개(문서 시험 포함)와 Chrome 화면 시험 33개가 통과했다. 별도 기기에서 마이크로 녹음하고 모델을 선택해 전사하는 시험을 위해 PR은 초안으로 두었다. [첫 전사 초안 PR (#11)](https://github.com/guny524/seamone/pull/11) · [통합 커밋 CI](https://github.com/guny524/seamone/actions/runs/45582919461)
+- 첫 전사 초안의 GitHub 비교 범위를 `develop`에 맞췄다. 현재 커밋 `1cb09ec`와 검증 커밋 `3d82dec`는 Git 트리 `4f04a72`가 같다. GitHub의 PR 변경 목록에서도 첫 전사 파일 여섯 개를 확인했다

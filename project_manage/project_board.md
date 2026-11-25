@@ -24,6 +24,7 @@
 - 2026-11-19 "어쨌든 모르겠고 이제 나한테 물어보지 말고 지금 너 /conversation-rag 보면은 예전에 너 스스로 모델 바꿔서 한 거 있거든. 그러니까 지금은 페이블 5.2로 플랜 세울 때 동안 페이블 5.2 엑스트라 하이로 가고, 그 이후부터는 소넷 맥스로 너가 스스로 바꿔서 계속 진행을 해."
 
 ## 3. 운영 방침
+- 2026-11-25 사용자 지시 “여기 노트북에서 깔아서 하는건 지금 load 걸리니까 하지말고”. 이번 검증은 GitHub Actions에서 컴파일·시험·패키지 검사를 실행하고 노트북에서는 앱 설치와 실행을 보류한다
 - 2026-11-24 야간 작업은 소규모 모의실험 검토, 첫 전사 흐름 초안 PR과 설치 파일 확인을 마치고 04:11 KST에 점검 타이머를 종료했다
 - 이미 시작한 작업자 2명은 하던 일을 마친다. 한 명이 끝나면 그 자리를 채우지 않고 이후 작업자를 동시에 최대 1명으로 유지한다. 기본 모델은 Codex Sol high이며 한도를 소진하면 가용한 Gemini Flash의 최고 effort로 넘긴다. 구현 검토는 Claude Opus medium, 한도 소진 시 Sonnet high다. 결함은 해당 코드를 작성한 작업자가 고친다
 - 범위: 녹음·파일 가져오기부터 첫 전사와 오류 복구까지 잇고, 별도로 연합학습 모의실험 초안의 비교 조건과 재현성을 검토한다. 실제 기기 조작이나 서명이 필요한 항목은 시험 결과가 있는 범위까지 기록한다
@@ -48,7 +49,7 @@
 
 ## 4. 이슈
 ### #1 앱 뼈대(Tauri 2 + Leptos)를 세우고 다섯 플랫폼 설치 파일을 CI 로 만든다 (빈 앱으로 다섯 플랫폼 묶기를 먼저 확인한다)
-- 상태: 앱 뼈대는 [PR #6](https://github.com/guny524/seamone/pull/6)으로 병합됐다(현재 main 이력의 `8f7e917`). 이슈는 설치 파일 실행 시험이 남아 열려 있다
+- 상태: 앱 뼈대를 병합한 뒤 의존 경계, IPC 명령, 검수 조건, 배포할 DMG 검사를 `develop`에 적용했다. 플랫폼별 설치 파일 첫 실행은 별도 시험 기기에서 확인한다. [앱 뼈대 PR (#6)](https://github.com/guny524/seamone/pull/6) · [컴파일과 CI 검사 PR (#12)](https://github.com/guny524/seamone/pull/12)
 - 폴더: `project_manage/0001-2026_11_19-app_skeleton_ci` (절대 경로 `/Users/min-jo/Documents/Developments/seamone/project_manage/0001-2026_11_19-app_skeleton_ci`)
 - 작업: 기존 작업 사본과 로컬 브랜치를 정리했다
 - 선행: 없음, 후속: #3 받아쓰기 엔진 interface 와 속도 측정, #5 녹음과 받아쓰기와 수정 화면
@@ -61,7 +62,7 @@
 - 작업: 시작 모델 측정의 로컬 브랜치를 정리했다. 같은 경로에서 계속 쓰는 작업 사본은 연합학습 모의실험 이슈 항목에 있다
 - 선행: 없음, 후속: #4 라벨 없는 FL 모의실험, PD9 시작 모델 결정
 - 막힌 이유: 없음
-- 다음 행동: 없음(끝남), 남은 일은 whisper-large-v3 측정과 표본 늘리기(다음에 부하가 낮을 때), 맨 위 `ci.yml` 에 research 의 lint 와 test 를 돌리는 job 을 더하는 일은 프로젝트 board 5-4 새 이슈 후보
+- 다음 측정은 장비에 여유가 있을 때 whisper-large-v3와 늘린 표본으로 진행한다. 연구 lint와 회귀 시험은 GitHub의 Linux 작업에서 실행한다. [연구 회귀 시험](https://github.com/guny524/seamone/actions/runs/45582899012/job/139097103107)
 
 ### #3 받아쓰기 엔진 interface 를 세우고 기기별 속도를 잰다 (출발점 모델을 고를 근거의 나머지 절반)
 - 상태: 공통 interface, 가짜 엔진과 속도 계산(`e763890`)이 녹음·빠른 검수 병합을 통해 `develop`에 포함됐다. 실제 엔진과 모델별 실측은 남았다
@@ -83,10 +84,10 @@
 ### #5 녹음, 기기 안 받아쓰기, 수정 화면을 만든다 (앱의 첫 쓸모)
 - 상태: 데스크톱 녹음, WAV·MP3·AAC-LC M4A 가져오기, 빠른 검수·별도 교정·모바일 화면을 `develop`에 병합했다. 첫 전사 흐름과 실기기 시험은 남았다
 - 폴더: `project_manage/0005-2026_11_19-record_transcribe_edit`
-- 작업: 앱 worktree `5-first-transcription`의 `7276a7b`을 `develop` 대상 [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)에 올렸다. 기존 빠른 검수 키와 시간축 예시는 [빠른 검수 설계](0005-2026_11_19-record_transcribe_edit/quick_review_design.md)에 있다
+- 작업: 첫 전사 브랜치 `1cb09ec`는 Chrome 시나리오 33개를 통과한 `3d82dec`와 소스 트리가 같다. GitHub에서 `develop`과 비교하면 첫 전사 화면·시험 파일 여섯 개가 남는다. [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11) · [빠른 검수 키와 시간축 설계](0005-2026_11_19-record_transcribe_edit/quick_review_design.md)
 - 선행: 받아쓰기 엔진의 공통 interface가 `develop`에 있고 제품 시작 모델은 속도 실측 뒤 정한다. 학습 엔진은 후속 작업이다
 - 인계 기준: `develop`의 병합 커밋 `3ba1047`이 작업분을 포함한다. [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 PR (#10)](https://github.com/guny524/seamone/pull/10)
-- 다음 행동: [Whisper 포함 Apple Silicon 설치 파일](https://github.com/guny524/seamone/actions/runs/45235655790/artifacts/14848314356)로 실제 첫 실행, 마이크 입력, 모델 선택과 전사를 시험한다. 모바일 파일 가져오기와 터치 시험은 실제 기기에서 확인한다
+- 다음 행동: 별도 시험 기기에서 첫 실행, 마이크 입력, 모델 선택과 첫 전사를 확인한다. 모바일에서도 파일 가져오기와 터치 검수를 실제 기기로 확인한다. 사용자 노트북 설치는 3절의 2026-11-25 지시를 따른다
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
@@ -99,10 +100,9 @@
 2. #4 라벨 없는 FL 모의실험, #2 merge 뒤 research worker 자리
 3. #5 녹음과 받아쓰기와 수정 화면, `develop`에서 첫 전사 흐름을 잇는다
 ### 5-4. 새 이슈 후보
-- research 의 lint 와 test 를 CI 에서 돌린다: 새 시험 129개가 지금 CI 에서 돌지 않는다(rule change.md 6절), torch 설치가 무거워 CPU 용으로 줄이는 방법을 본다, 나온 곳 시작 모델 오류율 이슈의 merge
+- [ ] 연합학습 모의실험 초안 브랜치를 통합할 때 새 연구 시험까지 외부망을 끊은 CI에서 통과하는지 확인한다. 현재 기준 코드의 연구 시험은 104개다. [모의실험 초안 PR (#9)](https://github.com/guny524/seamone/pull/9)
 - action 의 commit SHA 와 `scripts/install-tools.sh` 의 `expected_sha256` 을 갱신하는 절차(Dependabot 의 github-actions 갱신 등): 고정한 값은 시간이 지나면 낡는다, 나온 곳 앞 이슈 검토와 worker 보고
 - Windows runner 의 `choco install make` 는 판은 고정했지만 해시를 확인하지 않는 외부 설치다: `make` 를 쓰지 않고 한 줄 명령을 Makefile 과 workflow 가 같은 변수에서 읽게 하는 방법, 나온 곳 앞 이슈 worker 보고
-- 화면의 CSP(내용 보안 정책)를 `null` 에서 좁힌다: 앱 뼈대는 `null` 로 두었다, 녹음, 받아쓰기, 수정 화면을 만드는 이슈가 화면에 기능을 붙이기 전에 한다, 나온 곳 앱 뼈대 이슈 board 의 D9
 - 기기 안 학습 엔진: 얼린 몸통 위의 작은 부분만 학습하는 `Trainer`, Rust 자동 미분 엔진(Burn, Candle) 고르기, 나온 곳 PD8
 - FL 서버와 통신 규약: 업데이트 모으기, 공개 라벨 데이터 검증 관문, 나온 곳 PD8
 - 폰 가속기로 받아쓰기: Android 와 iOS 의 GPU, NPU 엔진, 나온 곳 PD7
