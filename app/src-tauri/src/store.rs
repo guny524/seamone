@@ -4,8 +4,8 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use seamone_asr::Transcriber;
 use seamone_core::error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage, overlaps};
 use seamone_core::review::{
-    EligibleExample, LibraryPage, RecordingInfo, ReviewError, ReviewRequest, ReviewSegment,
-    SampleRange,
+    EligibleExample, LibraryPage, RecordingInfo, ReviewError, ReviewEvidence, ReviewRequest,
+    ReviewSegment, SampleRange,
 };
 use std::{fs, path::Path, time::Duration};
 use uuid::Uuid;
@@ -487,14 +487,7 @@ impl Store {
     }
 
     fn review_source_matches(&self, request: &ReviewRequest) -> Result<bool, String> {
-        let needs_source = matches!(
-            request.action,
-            seamone_core::review::ReviewAction::Judge {
-                verdict: seamone_core::review::Verdict::Yes
-            } | seamone_core::review::ReviewAction::ConfirmCorrection
-                | seamone_core::review::ReviewAction::CorrectAndConfirm { .. }
-        );
-        if !needs_source {
+        if request.action.required_evidence() != ReviewEvidence::PlaybackAndMatchingSource {
             return Ok(true);
         }
         let segment = self.segment(&request.segment_id)?;

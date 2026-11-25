@@ -410,25 +410,14 @@ impl Workspace {
             action,
             ReviewAction::ConfirmCorrection | ReviewAction::CorrectAndConfirm { .. }
         );
-        let requires_listening = matches!(
-            action,
-            ReviewAction::Judge { .. }
-                | ReviewAction::ConfirmCorrection
-                | ReviewAction::CorrectAndConfirm { .. }
-        );
+        let submits_judgment = action.required_evidence().requires_playback();
         let mut ticket = None;
         self.flow
-            .update(|flow| ticket = flow.submit(requires_listening));
+            .update(|flow| ticket = flow.submit(submits_judgment));
         let Some(ticket) = ticket else {
             return;
         };
         self.playback.set(None);
-        let advance = matches!(
-            action,
-            ReviewAction::Judge { .. }
-                | ReviewAction::ConfirmCorrection
-                | ReviewAction::CorrectAndConfirm { .. }
-        );
         let request = ReviewRequest {
             event_id: api::event_id(),
             segment_id: ticket.frame.id.clone(),
@@ -449,7 +438,8 @@ impl Workspace {
                         let removed_from_queue = dismiss_mark
                             && flow.mode() == ReviewMode::Correction
                             && !saved.needs_review();
-                        active = flow.saved(&ticket, &saved, advance || removed_from_queue);
+                        active =
+                            flow.saved(&ticket, &saved, submits_judgment || removed_from_queue);
                     });
                     self.segments.update(|segments| {
                         if let Some(segment) = segments

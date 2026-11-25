@@ -89,6 +89,42 @@ pub enum ReviewAction {
     Invalidate,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewEvidence {
+    None,
+    Playback,
+    PlaybackAndMatchingSource,
+}
+
+impl ReviewEvidence {
+    #[must_use]
+    pub const fn requires_playback(self) -> bool {
+        match self {
+            Self::None => false,
+            Self::Playback | Self::PlaybackAndMatchingSource => true,
+        }
+    }
+}
+
+impl ReviewAction {
+    #[must_use]
+    pub const fn required_evidence(&self) -> ReviewEvidence {
+        match self {
+            Self::Judge {
+                verdict: Verdict::Yes,
+            }
+            | Self::CorrectAndConfirm { .. }
+            | Self::ConfirmCorrection => ReviewEvidence::PlaybackAndMatchingSource,
+            Self::Judge {
+                verdict: Verdict::No,
+            } => ReviewEvidence::Playback,
+            Self::SaveDraft { .. } | Self::DismissErrorMark | Self::Invalidate => {
+                ReviewEvidence::None
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewRequest {
     pub event_id: String,

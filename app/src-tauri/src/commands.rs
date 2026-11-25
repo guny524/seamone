@@ -9,8 +9,8 @@ use seamone_core::{
     capture::CaptureStatus,
     error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage},
     review::{
-        LibraryPage, PlaybackReply, RecordingInfo, ReviewAction, ReviewError, ReviewRequest,
-        ReviewSegment, SampleRange,
+        LibraryPage, PlaybackReply, RecordingInfo, ReviewError, ReviewRequest, ReviewSegment,
+        SampleRange,
     },
 };
 use std::{
@@ -103,12 +103,7 @@ impl AppState {
         if let Some(replayed) = store.replay(request)? {
             return Ok(replayed);
         }
-        if matches!(
-            request.action,
-            ReviewAction::Judge { .. }
-                | ReviewAction::ConfirmCorrection
-                | ReviewAction::CorrectAndConfirm { .. }
-        ) {
+        if request.action.required_evidence().requires_playback() {
             let listening = self.listening.lock().map_err(|e| e.to_string())?;
             let valid = proof.and_then(|p| listening.get(p)).is_some_and(|l| {
                 l.complete
