@@ -98,7 +98,7 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 - 모델 파일은 가져온 음성과 별도다, 이 연구의 PyTorch LoRA adapter는 GGML 엔진에서 불러오지 않는다
 
 ### 3-3. 시험 범위
-- `make check-architecture`는 앱을 빌드하지 않고 Cargo가 읽은 직접 의존성을 검사한다. 도메인은 직렬화와 시험에 필요한 의존성만 쓰고, UI와 받아쓰기 엔진은 공용 도메인을 통해 타입을 공유한다. SQLite·마이크·Tauri는 앱 껍데기, Whisper는 엔진, Leptos는 화면에서 사용한다. 새 workspace crate를 추가할 때는 `scripts/check_crate_boundaries.py`에 허용할 의존 방향을 지정한다
+- `make check-architecture`는 앱을 빌드하지 않고 Cargo가 읽은 직접 의존성을 검사한다. 도메인은 직렬화와 시험에 필요한 의존성만 쓰고, UI와 받아쓰기 엔진은 공용 도메인을 통해 타입을 공유한다. SQLite·마이크·Tauri는 앱 껍데기, Whisper는 엔진, Leptos는 화면에서 사용한다. 데스크톱·모바일 패키지 빌드도 같은 의존성 검사를 먼저 실행한다. 새 workspace crate를 추가할 때는 `scripts/check_crate_boundaries.py`에 허용할 의존 방향을 지정한다
 - `make check-domain`은 운영체제 표준 라이브러리가 없는 타깃에서 도메인 crate를 단독으로 컴파일한다. CI가 `rustup target add wasm32v1-none`으로 타깃을 준비한다
 - `make lint`는 의존 경계, Rust 서식, native·WASM Clippy, UI 시험 JavaScript의 구문을 검사한다. 특정 코드에서 lint를 면제할 때는 `#[expect(..., reason = "...")]`에 근거를 적는다. 면제할 경고가 사라져도 Clippy에서 알려 준다. macOS CI의 `make lint-native`는 마이크 권한을 요청하는 AVFoundation 코드의 unsafe 블록에도 안전 근거가 있는지 검사한다
 - UI가 호출할 Tauri 명령 이름은 `crates/seamone-core/src/ipc.rs`에 선언한다. 같은 선언이 UI 명령 타입, native 처리 함수 등록, 빌드 시 권한 이름을 만든다. 새 명령은 허용할 창과 플랫폼의 capability에도 추가해야 권한 시험을 통과한다
