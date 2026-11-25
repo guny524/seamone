@@ -262,7 +262,10 @@ fn span_style(viewport: SampleRange, span: SampleRange) -> String {
     format!("left:{left}%;width:{}%", right - left)
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "Offsets within the 30-minute recording limit fit exactly in f64."
+)]
 fn percentage(range: SampleRange, sample: u64) -> f64 {
     100.0 * (sample.clamp(range.start, range.end) - range.start) as f64
         / (range.end - range.start) as f64

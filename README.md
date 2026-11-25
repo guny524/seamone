@@ -98,7 +98,10 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 - 모델 파일은 가져온 음성과 별도다, 이 연구의 PyTorch LoRA adapter는 GGML 엔진에서 불러오지 않는다
 
 ### 3-3. 시험 범위
-- `make lint`: Rust 서식, native와 WASM clippy, UI 시험 JavaScript의 구문을 검사한다
+- `make check-architecture`는 앱을 빌드하지 않고 Cargo가 읽은 직접 의존성을 검사한다. 도메인은 직렬화와 시험에 필요한 의존성만 쓰고, UI와 받아쓰기 엔진은 공용 도메인을 통해 타입을 공유한다. SQLite·마이크·Tauri는 앱 껍데기, Whisper는 엔진, Leptos는 화면에서 사용한다. 새 workspace crate를 추가할 때는 `scripts/check_crate_boundaries.py`에 허용할 의존 방향을 지정한다
+- `make check-domain`은 운영체제 표준 라이브러리가 없는 타깃에서 도메인 crate를 단독으로 컴파일한다. CI가 `rustup target add wasm32v1-none`으로 타깃을 준비한다
+- `make lint`는 의존 경계, Rust 서식, native·WASM Clippy, UI 시험 JavaScript의 구문을 검사한다. 특정 코드에서 lint를 면제할 때는 해당 속성에 `reason`을 적는다. macOS CI의 `make lint-native`는 마이크 권한을 요청하는 AVFoundation 코드의 unsafe 블록에도 안전 근거가 있는지 검사한다
+- UI가 호출할 Tauri 명령 이름은 `crates/seamone-core/src/ipc.rs`에 선언한다. 같은 선언이 UI 명령 타입, native 처리 함수 등록, 빌드 시 권한 이름을 만든다. 새 명령은 허용할 창과 플랫폼의 capability에도 추가해야 권한 시험을 통과한다
 - `make test`: 합성 입력으로 녹음 수명과 저장 복구, 합성 WAV·MP3·M4A로 PCM 변환과 실제 SQLite 저장, Tauri mock runtime에서 등록 IPC와 창 닫기를 확인한다. MP3·M4A fixture는 440Hz 합성 음과 오디오 트랙이 없는 영상이다. 테스트는 실제 마이크나 OS 파일 선택기를 열지 않는다
 - `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치, HTML audio의 `ended` event와 별도 교정 화면을 확인한다. 앱의 IPC 서비스는 시험용이다. 다운로드 페이지의 화면과 빌드 링크도 확인한다
 - `make site-preview`: [다운로드 안내](site/index.html)를 로컬 `http://127.0.0.1:4173`에서 열어 본다. 포트가 쓰이는 중이면 `make site-preview SITE_PORT=4174`로 바꾼다

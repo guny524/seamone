@@ -1,7 +1,8 @@
 //! Human review and training eligibility, shared by native storage and the WASM UI.
 use crate::transcript::{TimedText, valid_alignment};
+use alloc::{string::String, vec::Vec};
+use core::fmt;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
 pub const SAMPLE_RATE: u64 = 16_000;
 pub const MAX_PLAYBACK_SAMPLES: u64 = SAMPLE_RATE * 60;
@@ -123,7 +124,7 @@ impl fmt::Display for ReviewError {
     }
 }
 
-impl std::error::Error for ReviewError {}
+impl core::error::Error for ReviewError {}
 
 impl ReviewSegment {
     #[must_use]

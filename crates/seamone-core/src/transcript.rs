@@ -1,6 +1,7 @@
 //! 받아쓴 글의 조각, 받아쓰기 엔진이 돌려주고 화면이 보여 주고 고친다.
 
 use crate::review::SampleRange;
+use alloc::{string::String, vec::Vec};
 use serde::{Deserialize, Serialize};
 
 /// Verbatim text sharing one model-aligned span on the recording's 16 kHz sample axis.

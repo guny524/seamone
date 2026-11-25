@@ -14,7 +14,7 @@ TAURI_BUILD_ARGS ?=
 # 앱 껍데기 crate 는 컴파일할 때 화면 산출물 폴더가 있어야 한다, lint 와 test 는 화면을 빌드하지 않으므로 빈 폴더만 만든다.
 UI_DIST = app/ui/dist
 
-.PHONY: install fmt lint test build dev clean
+.PHONY: install fmt lint lint-native check-architecture check-domain test build dev clean
 
 install:
 	rustup toolchain install
@@ -24,7 +24,18 @@ install:
 fmt:
 	cargo fmt --all
 
-lint:
+check-architecture:
+	python3 scripts/check_crate_boundaries.py
+	python3 scripts/test_crate_boundaries.py
+
+check-domain:
+	cargo check --locked -p seamone-core --lib --target wasm32v1-none
+
+lint-native:
+	mkdir -p $(UI_DIST)
+	cargo clippy --locked -p seamone --all-targets $(CARGO_FEATURE_ARGS) -- -D warnings
+
+lint: check-architecture
 	mkdir -p $(UI_DIST)
 	cargo fmt --all --check
 	node --check app/ui/tests/review.mjs

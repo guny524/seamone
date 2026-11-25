@@ -198,7 +198,14 @@ pub struct TestAudioPicker(pub Mutex<std::collections::VecDeque<Option<FilePath>
 
 fn pick_audio<R: Runtime>(
     app: &AppHandle<R>,
-    #[cfg_attr(not(desktop), allow(unused_variables))] window: &WebviewWindow<R>,
+    #[cfg_attr(
+        not(desktop),
+        expect(
+            unused_variables,
+            reason = "Only desktop dialogs take a parent window."
+        )
+    )]
+    window: &WebviewWindow<R>,
 ) -> Option<FilePath> {
     #[cfg(test)]
     if let Some(picker) = app.try_state::<TestAudioPicker>() {
@@ -216,7 +223,14 @@ fn pick_audio<R: Runtime>(
 }
 
 fn decode_selected<R: Runtime>(
-    #[cfg_attr(not(mobile), allow(unused_variables))] app: &AppHandle<R>,
+    #[cfg_attr(
+        not(mobile),
+        expect(
+            unused_variables,
+            reason = "Only mobile document URIs require the app filesystem plugin."
+        )
+    )]
+    app: &AppHandle<R>,
     library: &AudioLibrary,
     selection: FilePath,
 ) -> Result<(String, StagedAudio), String> {

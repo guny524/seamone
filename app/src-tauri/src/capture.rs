@@ -561,8 +561,9 @@ fn authorize_macos(control: &Control) -> Result<(), String> {
     if !objc2::available!(macos = 10.14) || control.discarded() {
         return Ok(());
     }
-    // AVFoundation takes a system-provided media type and a block it copies for its callback.
+    // SAFETY: AVFoundation provides this immutable framework constant on the checked macOS version.
     let media = unsafe { AVMediaTypeAudio }.ok_or(DENIED)?;
+    // SAFETY: media is the non-null AVFoundation audio media type.
     match unsafe { AVCaptureDevice::authorizationStatusForMediaType(media) } {
         AVAuthorizationStatus::Authorized => Ok(()),
         AVAuthorizationStatus::NotDetermined => {
@@ -570,6 +571,7 @@ fn authorize_macos(control: &Control) -> Result<(), String> {
             let completion = block2::RcBlock::new(move |allowed: objc2::runtime::Bool| {
                 let _ = reply.send(allowed.as_bool());
             });
+            // SAFETY: AVFoundation copies the heap block for its asynchronous callback; the block owns its sender.
             unsafe {
                 AVCaptureDevice::requestAccessForMediaType_completionHandler(media, &completion);
             };

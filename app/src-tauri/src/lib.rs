@@ -17,30 +17,16 @@ use tauri::Manager;
 
 /// 앱 껍데기가 화면에 내주는 command 를 등록한다, 실제 앱과 시험이 같은 등록을 쓴다.
 fn register_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
-    builder.invoke_handler(tauri::generate_handler![
-        commands::get_app_info,
-        commands::get_library,
-        commands::get_segments,
-        commands::import_audio,
-        commands::get_capture_status,
-        #[cfg(native_capture)]
-        commands::start_recording,
-        #[cfg(native_capture)]
-        commands::finish_recording,
-        commands::transcribe_recording,
-        commands::select_model,
-        commands::get_playback,
-        commands::get_recording_playback,
-        commands::get_error_marks,
-        commands::save_error_mark,
-        commands::save_error_marks,
-        commands::playback_ended,
-        commands::save_review,
-        commands::dismiss_info,
-        commands::export_text,
-        commands::copy_saved_text,
-        commands::save_text_file
-    ])
+    macro_rules! handlers {
+        (shared { $($_variant:ident => $handler:ident,)* }
+         desktop_capture { $($_capture_variant:ident => $capture_handler:ident,)* }) => {
+            tauri::generate_handler![
+                $(commands::$handler,)*
+                $(#[cfg(native_capture)] commands::$capture_handler,)*
+            ]
+        };
+    }
+    builder.invoke_handler(seamone_core::with_ipc_commands!(handlers))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -109,6 +95,45 @@ mod tests {
     use tauri::test::{INVOKE_KEY, get_ipc_response, mock_builder, mock_context, noop_assets};
     use tauri::webview::InvokeRequest;
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+    #[test]
+    fn main_window_capabilities_grant_the_catalog_commands_on_their_platforms() {
+        use serde_json::Value;
+        use std::collections::BTreeSet;
+
+        fn check(document: &str, commands: &[&str], platforms: Option<&[&str]>) {
+            let cap: Value = serde_json::from_str(document).unwrap();
+            assert_eq!(cap["windows"], serde_json::json!(["main"]));
+            assert!(cap["webviews"].is_null() && cap["remote"].is_null());
+            assert!(cap["local"].as_bool().unwrap_or(true));
+
+            let permissions: BTreeSet<String> =
+                serde_json::from_value(cap["permissions"].clone()).unwrap();
+            let expected = commands
+                .iter()
+                .map(|name| format!("allow-{}", name.replace('_', "-")))
+                .collect::<BTreeSet<_>>();
+            assert_eq!(permissions, expected);
+
+            let actual: Option<BTreeSet<String>> =
+                serde_json::from_value(cap["platforms"].clone()).unwrap();
+            let expected = platforms.map(|list| list.iter().map(ToString::to_string).collect());
+            assert_eq!(actual, expected);
+        }
+
+        macro_rules! check_grants {
+            (shared { $($_variant:ident => $shared:ident,)* }
+             desktop_capture { $($_capture_variant:ident => $capture:ident,)* }) => {{
+                check(include_str!("../capabilities/default.json"), &[$(stringify!($shared)),*], None);
+                check(
+                    include_str!("../capabilities/capture.json"),
+                    &[$(stringify!($capture)),*],
+                    Some(&["linux", "macOS", "windows"]),
+                );
+            }};
+        }
+        seamone_core::with_ipc_commands!(check_grants);
+    }
 
     #[test]
     fn registered_command_answers_over_ipc_with_the_core_app_info() {

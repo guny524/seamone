@@ -59,6 +59,22 @@ jobs:
           test -n "$chrome_path" || { echo "No Chrome/Chromium executable on this runner" >&2; exit 1; }
           SEAMONE_CHROME="$chrome_path" make ui-test
 
+  domain:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup target add wasm32v1-none
+      - run: make check-architecture check-domain
+
+  macos-native-lint:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: make lint-native CARGO_FEATURES=desktop-whisper
+
   research-test:
     runs-on: ubuntu-22.04
     timeout-minutes: 45

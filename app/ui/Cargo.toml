@@ -9,7 +9,7 @@ publish.workspace = true
 
 [dependencies]
 seamone-core.workspace = true
-serde.workspace = true
+serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
 web-sys = { version = "0.3", features = ["HtmlAudioElement", "HtmlMediaElement", "KeyboardEvent", "HtmlTextAreaElement", "HtmlElement", "Window", "Document", "Storage", "CanvasRenderingContext2d", "HtmlCanvasElement", "ImageData"] }
 base64 = "0.22"
