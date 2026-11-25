@@ -783,5 +783,46 @@ try {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
     await finish(page,errors,'download page loads its preview, explains current and planned privacy and links to test builds');
   }
+  {
+    const { page, errors } = await fixture({openRecording:false});
+    let requests = 0;
+    const receiver = createServer((_request, response) => {
+      requests++;
+      response.writeHead(204, { 'Access-Control-Allow-Origin': url }).end();
+    });
+    try {
+      await new Promise((done, reject) => {
+        receiver.once('error', reject);
+        receiver.listen(0, '127.0.0.1', done);
+      });
+      const target = `http://127.0.0.1:${receiver.address().port}/csp-probe`;
+      const result = await page.evaluate(async target => {
+        window.probeViolations = [];
+        document.addEventListener('securitypolicyviolation', event => {
+          if (event.effectiveDirective === 'connect-src') {
+            window.probeViolations.push({ blocked: event.blockedURI, disposition: event.disposition });
+          }
+        });
+        const options = { credentials:'omit', referrerPolicy:'no-referrer', cache:'no-store', signal:AbortSignal.timeout(3000) };
+        const local = await fetch('/favicon.ico', options);
+        try {
+          const foreign = await fetch(target, options);
+          return { local:local.status, foreign:foreign.status };
+        } catch (error) {
+          return { local:local.status, error:error.name };
+        }
+      }, target);
+      expect(result).toEqual({local:204, error:'TypeError'});
+      await expect.poll(() => page.evaluate(origin => window.probeViolations.some(event =>
+        event.disposition === 'enforce' && new URL(event.blocked).origin === origin
+      ), new URL(target).origin)).toBe(true);
+      expect(requests).toBe(0);
+      await finish(page, errors.filter(message => !message.includes(target)),
+        'app CSP permits local fetch and blocks cross-origin fetch before it reaches a server');
+    } finally {
+      if (!page.isClosed()) await page.close();
+      if (receiver.listening) await new Promise(done => receiver.close(done));
+    }
+  }
   console.log(`${completed} browser scenarios passed`);
 } finally { await browser.close(); await new Promise(done => server.close(done)); }
