@@ -160,6 +160,9 @@ jobs:
       - name: Point NDK_HOME at the NDK preinstalled on the runner
         run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
 
+      - name: Check crate imports before mobile packaging
+        run: make check-imports
+
       - name: Generate the Android project
         run: cargo tauri android init --ci --skip-targets-install
 
@@ -211,6 +214,9 @@ jobs:
 
       - name: Install tauri-cli and trunk
         run: make install-ci-tools
+
+      - name: Check crate imports before mobile packaging
+        run: make check-imports
 
       - name: Generate the Xcode project
         run: cargo tauri ios init --ci --skip-targets-install
