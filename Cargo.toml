@@ -20,6 +20,7 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 module_name_repetitions = "allow"
+allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
 undocumented_unsafe_blocks = "deny"
 

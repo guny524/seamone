@@ -58,6 +58,12 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("import tauri-plugin-fs in seamone", result.stderr)
 
+    def test_ui_cannot_substitute_the_registry_for_the_workspace_domain(self):
+        self.add("ui-layer", '[dependencies]\ndomain = {package="seamone-core", version="0.1"}\n')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("depend on the workspace copy of seamone-core", result.stderr)
+
     def test_new_workspace_crate_needs_an_explicit_boundary(self):
         self.crate("extra-layer", "bridge")
         result = self.check()

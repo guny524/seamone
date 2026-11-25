@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 # The host composes the UI and engine through IPC. Only domain types cross that boundary.
 WORKSPACE_IMPORTS = {
@@ -26,7 +27,7 @@ ADAPTER_OWNERS = {
 
 
 def violations(packages):
-    members = {package["name"] for package in packages}
+    members = {package["name"]: Path(package["manifest_path"]).parent for package in packages}
     for package in packages:
         name = package["name"]
         manifest = package["manifest_path"]
@@ -40,6 +41,8 @@ def violations(packages):
             if target in members or dep.get("path"):
                 if target not in WORKSPACE_IMPORTS[name]:
                     yield f"{context}: use the shared domain or move adapter work to its owner"
+                elif not dep.get("path") or Path(dep["path"]) != members.get(target):
+                    yield f"{context}: depend on the workspace copy of {target}"
                 continue
             if name == "seamone-core":
                 if (target, kind) not in {("serde", "normal"), ("serde_json", "dev")}:
@@ -55,7 +58,7 @@ def violations(packages):
 def main():
     result = subprocess.run(
         ["cargo", "metadata", "--locked", "--offline", "--no-deps", "--format-version=1"],
-        check=True, capture_output=True, text=True,
+        check=True, stdout=subprocess.PIPE, text=True,
     )
     metadata = json.loads(result.stdout)
     members = set(metadata["workspace_members"])
