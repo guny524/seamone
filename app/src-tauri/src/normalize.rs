@@ -19,12 +19,18 @@ pub fn finite(sample: f32) -> f32 {
     if sample.is_finite() { sample } else { 0.0 }
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "The channel mix accumulates in f64 and returns a normalized f32 sample."
+)]
 pub fn channel_average(sum: f64, channels: u16) -> f32 {
     (sum / f64::from(channels)) as f32
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "The rounded sample is clamped to the i16 range before quantization."
+)]
 fn pcm16(sample: f64) -> i16 {
     (sample * 32_768.0).round().clamp(-32_768.0, 32_767.0) as i16
 }
@@ -100,7 +106,11 @@ struct LowPass {
 }
 
 impl LowPass {
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        reason = "The validated input rate bounds the filter radius and the normalized coefficients are stored as f32."
+    )]
     fn new(rate: u32) -> Self {
         let ratio = SAMPLE_RATE as f64 / f64::from(rate);
         // Blackman-windowed sinc. Widen the kernel at higher input rates so the

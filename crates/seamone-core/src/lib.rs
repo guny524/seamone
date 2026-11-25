@@ -2,23 +2,28 @@
 //!
 //! 화면(Leptos, WASM)과 앱 껍데기(Tauri)가 주고받는 타입은 여기에 한 번만 정의하고 양쪽이 같이 쓴다.
 //! WASM 으로도 컴파일되므로 파일, 소켓, 스레드처럼 브라우저에 없는 것에 기대지 않는다.
+#![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
 
 pub mod capture;
 pub mod error_marks;
+pub mod ipc;
 pub mod review;
 pub mod review_flow;
 mod transcript;
 
 pub use transcript::{TimedText, TranscriptSegment, valid_alignment};
 
+use alloc::{borrow::ToOwned, string::String};
 use serde::{Deserialize, Serialize};
 
 /// 앱 이름
 pub const APP_NAME: &str = "seamone";
 
 /// 화면이 앱 껍데기에 앱 이름과 판 번호를 물을 때 부르는 Tauri command 의 이름, 껍데기의 함수 이름과 같다.
-pub const COMMAND_GET_APP_INFO: &str = "get_app_info";
+pub const COMMAND_GET_APP_INFO: &str = ipc::Command::GetAppInfo.name();
 
 /// 앱 이름과 판 번호, 앱 껍데기가 Tauri command 로 돌려주고 화면이 그대로 받는다.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -11,7 +11,7 @@ publish = false
 
 [workspace.dependencies]
 seamone-core = { path = "crates/seamone-core" }
-serde = { version = "1.0.229", features = ["derive"] }
+serde = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
 serde_json = "1.0.154"
 
 [workspace.lints.clippy]
@@ -20,6 +20,9 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 module_name_repetitions = "allow"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+undocumented_unsafe_blocks = "deny"
 
 # 개발 빌드가 target 폴더를 키우지 않게 디버그 정보를 줄인다, 오류의 줄 번호는 남는다.
 [profile.dev]

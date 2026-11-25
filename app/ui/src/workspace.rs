@@ -2,6 +2,7 @@ use crate::{api, quick_review::QuickReview};
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkPage},
+    ipc::Command,
     review::{
         LibraryPage, PlaybackReply, RecordingInfo, ReviewAction, ReviewRequest, ReviewSegment,
     },
@@ -62,7 +63,7 @@ async fn load_segments(recording: &str) -> Result<Vec<ReviewSegment>, String> {
     let mut segments = Vec::new();
     loop {
         let page = api::call::<seamone_core::review::SegmentPage>(
-            "get_segments",
+            Command::GetSegments,
             json!({"recordingId":recording,"offset":offset}),
         )
         .await?;
@@ -111,7 +112,7 @@ impl Workspace {
         let request = self.library_request.get_untracked();
         self.library_state.set(LibraryState::Loading);
         spawn_local(async move {
-            let result = api::call::<LibraryPage>("get_library", json!({})).await;
+            let result = api::call::<LibraryPage>(Command::GetLibrary, json!({})).await;
             if self.library_request.get_untracked() != request {
                 return;
             }
@@ -132,7 +133,7 @@ impl Workspace {
         self.info_dismissed.set(true);
         self.show_info.set(false);
         spawn_local(async move {
-            if let Err(error) = api::call::<()>("dismiss_info", json!({})).await {
+            if let Err(error) = api::call::<()>(Command::DismissInfo, json!({})).await {
                 self.error.set(error);
             }
         });
@@ -254,7 +255,7 @@ impl Workspace {
         self.error.set(String::new());
         self.status.set(String::new());
         spawn_local(async move {
-            let result = api::call::<Option<RecordingInfo>>("import_audio", json!({})).await;
+            let result = api::call::<Option<RecordingInfo>>(Command::ImportAudio, json!({})).await;
             self.busy.set(false);
             match result {
                 Ok(Some(info)) => {
@@ -294,9 +295,11 @@ impl Workspace {
         self.status
             .set("기기 안에서 받아쓰는 중입니다. 녹음 길이에 따라 시간이 걸릴 수 있습니다.".into());
         spawn_local(async move {
-            let result =
-                api::call::<Vec<ReviewSegment>>("transcribe_recording", json!({"recordingId":id}))
-                    .await;
+            let result = api::call::<Vec<ReviewSegment>>(
+                Command::TranscribeRecording,
+                json!({"recordingId":id}),
+            )
+            .await;
             if self.navigation.get_untracked() != navigation {
                 return;
             }
@@ -341,7 +344,7 @@ impl Workspace {
         self.error.set(String::new());
         self.status.set("모델 파일을 확인하는 중입니다.".into());
         spawn_local(async move {
-            let result = api::call::<bool>("select_model", json!({})).await;
+            let result = api::call::<bool>(Command::SelectModel, json!({})).await;
             self.busy.set(false);
             self.transcription.set(previous);
             match result {
@@ -442,7 +445,7 @@ impl Workspace {
         self.error.set(String::new());
         spawn_local(async move {
             let result = api::call::<PlaybackReply>(
-                "get_playback",
+                Command::GetPlayback,
                 json!({"segmentId":ticket.frame.id,"revision":ticket.frame.revision}),
             )
             .await;
@@ -472,7 +475,7 @@ impl Workspace {
             return;
         }
         spawn_local(async move {
-            match api::call::<()>("playback_ended", json!({"token":playback.token})).await {
+            match api::call::<()>(Command::PlaybackEnded, json!({"token":playback.token})).await {
                 Ok(()) => {
                     let mut active = false;
                     self.flow
@@ -521,25 +524,14 @@ impl Workspace {
             action,
             ReviewAction::ConfirmCorrection | ReviewAction::CorrectAndConfirm { .. }
         );
-        let requires_listening = matches!(
-            action,
-            ReviewAction::Judge { .. }
-                | ReviewAction::ConfirmCorrection
-                | ReviewAction::CorrectAndConfirm { .. }
-        );
+        let submits_judgment = action.required_evidence().requires_playback();
         let mut ticket = None;
         self.flow
-            .update(|flow| ticket = flow.submit(requires_listening));
+            .update(|flow| ticket = flow.submit(submits_judgment));
         let Some(ticket) = ticket else {
             return;
         };
         self.playback.set(None);
-        let advance = matches!(
-            action,
-            ReviewAction::Judge { .. }
-                | ReviewAction::ConfirmCorrection
-                | ReviewAction::CorrectAndConfirm { .. }
-        );
         let request = ReviewRequest {
             event_id: api::event_id(),
             segment_id: ticket.frame.id.clone(),
@@ -548,9 +540,11 @@ impl Workspace {
         };
         let proof = self.proof.get_untracked();
         spawn_local(async move {
-            let result =
-                api::call::<ReviewSegment>("save_review", json!({"request":request,"proof":proof}))
-                    .await;
+            let result = api::call::<ReviewSegment>(
+                Command::SaveReview,
+                json!({"request":request,"proof":proof}),
+            )
+            .await;
             match result {
                 Ok(saved) => {
                     let mut active = false;
@@ -558,7 +552,8 @@ impl Workspace {
                         let removed_from_queue = dismiss_mark
                             && flow.mode() == ReviewMode::Correction
                             && !saved.needs_review();
-                        active = flow.saved(&ticket, &saved, advance || removed_from_queue);
+                        active =
+                            flow.saved(&ticket, &saved, submits_judgment || removed_from_queue);
                     });
                     self.segments.update(|segments| {
                         if let Some(segment) = segments
@@ -605,9 +600,9 @@ impl Workspace {
         };
         spawn_local(async move {
             let result: Result<(), String> = if copy {
-                api::call::<()>("copy_saved_text", json!({"recordingId":id})).await
+                api::call::<()>(Command::CopySavedText, json!({"recordingId":id})).await
             } else {
-                api::call::<bool>("save_text_file", json!({"recordingId":id}))
+                api::call::<bool>(Command::SaveTextFile, json!({"recordingId":id}))
                     .await
                     .map(|_| ())
             };
@@ -631,7 +626,7 @@ async fn load_marks(recording: &str) -> Result<Vec<ErrorMark>, String> {
     let mut marks = Vec::new();
     loop {
         let page = api::call::<ErrorMarkPage>(
-            "get_error_marks",
+            Command::GetErrorMarks,
             json!({"recordingId":recording,"offset":offset}),
         )
         .await?;

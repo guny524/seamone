@@ -1,3 +1,4 @@
+use alloc::string::String;
 use serde::{Deserialize, Serialize};
 
 pub const MAX_RECORDING_SECONDS: u32 = 30 * 60;

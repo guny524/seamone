@@ -7,6 +7,25 @@ use std::sync::{
     mpsc,
 };
 
+/// 학습 엔진은 저장소에서 원본과 확인된 수정본을 대조한 뒤 넘겨주는 예시를 받는다.
+///
+/// ```
+/// use seamone_core::review::EligibleExample;
+/// use seamone_lib::training::LocalTrainer;
+///
+/// fn train(trainer: &mut dyn LocalTrainer, example: &EligibleExample, audio: &[f32]) {
+///     let _ = trainer.train(example, audio);
+/// }
+/// ```
+///
+/// ```compile_fail,E0308
+/// use seamone_core::review::ReviewSegment;
+/// use seamone_lib::training::LocalTrainer;
+///
+/// fn train(trainer: &mut dyn LocalTrainer, draft: &ReviewSegment, audio: &[f32]) {
+///     let _ = trainer.train(draft, audio);
+/// }
+/// ```
 pub trait LocalTrainer: Send {
     /// Produces a local candidate, never activates a production model or sends data.
     fn train(&mut self, example: &EligibleExample, audio: &[f32]) -> Result<String, String>;

@@ -18,12 +18,13 @@ default = []
 desktop-whisper = ["seamone-asr/whisper"]
 
 [build-dependencies]
+seamone-core.workspace = true
 tauri-build = { version = "2.7.6", features = [] }
 
 [dependencies]
 seamone-core.workspace = true
 seamone-asr = { path = "../../crates/seamone-asr" }
-serde.workspace = true
+serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
 rusqlite = { version = "0.39", features = ["bundled", "fallible_uint"] }
 hound = "3.5.1"

@@ -34,10 +34,11 @@ pub fn wav_spectrum(wav: &str, samples: u64) -> Result<Spectrum, String> {
     Ok(stft(&pcm))
 }
 
-#[allow(
+#[expect(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
-    clippy::cast_sign_loss
+    clippy::cast_sign_loss,
+    reason = "FFT indices fit in f32 and the clamped intensity maps into a single color byte."
 )]
 fn stft(samples: &[f32]) -> Spectrum {
     let columns = samples.len().div_ceil(HOP).clamp(1, MAX_COLUMNS);
@@ -71,7 +72,10 @@ fn stft(samples: &[f32]) -> Spectrum {
     Spectrum { columns, rgba }
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "Twiddle angles use indices bounded by the 512-sample FFT window."
+)]
 fn fft(bins: &mut [(f32, f32); FFT_SIZE]) {
     let shift = usize::BITS - FFT_SIZE.trailing_zeros();
     for index in 0..FFT_SIZE {

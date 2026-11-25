@@ -1,7 +1,8 @@
 //! Human review and training eligibility, shared by native storage and the WASM UI.
 use crate::transcript::{TimedText, valid_alignment};
+use alloc::{string::String, vec::Vec};
+use core::fmt;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
 pub const SAMPLE_RATE: u64 = 16_000;
 pub const MAX_PLAYBACK_SAMPLES: u64 = SAMPLE_RATE * 60;
@@ -88,6 +89,42 @@ pub enum ReviewAction {
     Invalidate,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewEvidence {
+    None,
+    Playback,
+    PlaybackAndMatchingSource,
+}
+
+impl ReviewEvidence {
+    #[must_use]
+    pub const fn requires_playback(self) -> bool {
+        match self {
+            Self::None => false,
+            Self::Playback | Self::PlaybackAndMatchingSource => true,
+        }
+    }
+}
+
+impl ReviewAction {
+    #[must_use]
+    pub const fn required_evidence(&self) -> ReviewEvidence {
+        match self {
+            Self::Judge {
+                verdict: Verdict::Yes,
+            }
+            | Self::CorrectAndConfirm { .. }
+            | Self::ConfirmCorrection => ReviewEvidence::PlaybackAndMatchingSource,
+            Self::Judge {
+                verdict: Verdict::No,
+            } => ReviewEvidence::Playback,
+            Self::SaveDraft { .. } | Self::DismissErrorMark | Self::Invalidate => {
+                ReviewEvidence::None
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewRequest {
     pub event_id: String,
@@ -123,7 +160,7 @@ impl fmt::Display for ReviewError {
     }
 }
 
-impl std::error::Error for ReviewError {}
+impl core::error::Error for ReviewError {}
 
 impl ReviewSegment {
     #[must_use]
