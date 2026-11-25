@@ -77,7 +77,10 @@ fn stereo_float_wav_downmixes_and_resamples_to_exact_pcm16_values() {
 }
 
 #[test]
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "The two fixture sample rates and frame indices fit exactly in f32."
+)]
 fn normalizer_clamps_and_rejects_aliasing_above_nyquist() {
     let mut direct = Normalizer::new(16_000, 1).unwrap();
     let mut pcm = Vec::new();

@@ -9,8 +9,8 @@ use seamone_core::{
     capture::CaptureStatus,
     error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage},
     review::{
-        LibraryPage, PlaybackReply, RecordingInfo, ReviewAction, ReviewError, ReviewRequest,
-        ReviewSegment, SampleRange,
+        LibraryPage, PlaybackReply, RecordingInfo, ReviewError, ReviewRequest, ReviewSegment,
+        SampleRange,
     },
 };
 use std::{
@@ -103,12 +103,7 @@ impl AppState {
         if let Some(replayed) = store.replay(request)? {
             return Ok(replayed);
         }
-        if matches!(
-            request.action,
-            ReviewAction::Judge { .. }
-                | ReviewAction::ConfirmCorrection
-                | ReviewAction::CorrectAndConfirm { .. }
-        ) {
+        if request.action.required_evidence().requires_playback() {
             let listening = self.listening.lock().map_err(|e| e.to_string())?;
             let valid = proof.and_then(|p| listening.get(p)).is_some_and(|l| {
                 l.complete
@@ -198,7 +193,14 @@ pub struct TestAudioPicker(pub Mutex<std::collections::VecDeque<Option<FilePath>
 
 fn pick_audio<R: Runtime>(
     app: &AppHandle<R>,
-    #[cfg_attr(not(desktop), allow(unused_variables))] window: &WebviewWindow<R>,
+    #[cfg_attr(
+        not(desktop),
+        expect(
+            unused_variables,
+            reason = "Only desktop dialogs take a parent window."
+        )
+    )]
+    window: &WebviewWindow<R>,
 ) -> Option<FilePath> {
     #[cfg(test)]
     if let Some(picker) = app.try_state::<TestAudioPicker>() {
@@ -216,7 +218,14 @@ fn pick_audio<R: Runtime>(
 }
 
 fn decode_selected<R: Runtime>(
-    #[cfg_attr(not(mobile), allow(unused_variables))] app: &AppHandle<R>,
+    #[cfg_attr(
+        not(mobile),
+        expect(
+            unused_variables,
+            reason = "Only mobile document URIs require the app filesystem plugin."
+        )
+    )]
+    app: &AppHandle<R>,
     library: &AudioLibrary,
     selection: FilePath,
 ) -> Result<(String, StagedAudio), String> {

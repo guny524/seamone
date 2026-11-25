@@ -3,6 +3,8 @@ use crate::review::ReviewSegment;
 #[cfg(test)]
 use crate::review::Verdict;
 
+use alloc::{string::String, vec::Vec};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReviewMode {
     Browse,

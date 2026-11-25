@@ -864,6 +864,86 @@ fn edited_and_invalidated_segments_remain_in_correction_workflow() {
 }
 
 #[test]
+fn after_listening_a_changed_source_can_be_rejected_but_cannot_be_accepted() {
+    let fixture = Fixture::new();
+    let (store, segment) = fixture.transcribed();
+    let path = store.audio.existing_path(&segment.recording_id).unwrap();
+    let state = crate::commands::AppState::new(store);
+    let playback = state.playback(&segment.id, segment.revision).unwrap();
+    let yes = request(
+        &segment,
+        ReviewAction::Judge {
+            verdict: Verdict::Yes,
+        },
+    );
+    let no = request(
+        &segment,
+        ReviewAction::Judge {
+            verdict: Verdict::No,
+        },
+    );
+
+    assert!(state.review(&no, Some(&playback.token)).is_err());
+    state.playback_ended(&playback.token).unwrap();
+    fs::write(path, b"changed recording").unwrap();
+
+    assert_eq!(
+        state.review(&yes, Some(&playback.token)).unwrap_err(),
+        seamone_core::review::ReviewError::MissingSource.to_string()
+    );
+    let rejected = state.review(&no, Some(&playback.token)).unwrap();
+    assert_eq!(rejected.verdict, Some(Verdict::No));
+    assert!(rejected.verified.is_none());
+    assert_eq!(state.review(&no, None).unwrap(), rejected);
+    assert_eq!(
+        state
+            .store()
+            .unwrap()
+            .library(false)
+            .unwrap()
+            .pending_training,
+        0
+    );
+}
+
+#[test]
+fn neither_correction_can_confirm_a_changed_recording_with_completed_playback() {
+    let fixture = Fixture::new();
+    let (store, segment) = fixture.transcribed();
+    let path = store.audio.existing_path(&segment.recording_id).unwrap();
+    let state = crate::commands::AppState::new(store);
+    let draft = state
+        .review(
+            &request(
+                &segment,
+                ReviewAction::SaveDraft {
+                    text: "고쳐 쓴 말".into(),
+                },
+            ),
+            None,
+        )
+        .unwrap();
+    let playback = state.playback(&draft.id, draft.revision).unwrap();
+    state.playback_ended(&playback.token).unwrap();
+    fs::write(path, b"changed recording").unwrap();
+
+    for action in [
+        ReviewAction::ConfirmCorrection,
+        ReviewAction::CorrectAndConfirm {
+            text: "다시 고친 말".into(),
+        },
+    ] {
+        assert_eq!(
+            state
+                .review(&request(&draft, action), Some(&playback.token))
+                .unwrap_err(),
+            seamone_core::review::ReviewError::MissingSource.to_string()
+        );
+    }
+    assert_eq!(state.store().unwrap().segment(&draft.id).unwrap(), draft);
+}
+
+#[test]
 fn unreadable_source_is_retryable_and_recovers_without_reconfirming() {
     let f = Fixture::new();
     let (mut store, s) = f.transcribed();

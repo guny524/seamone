@@ -2,6 +2,7 @@ use crate::{api, timeline::ReviewTimeline};
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkBatch, Half, MIN_PREVIEW_SAMPLES, Narrowing, candidate},
+    ipc::Command,
     review::{RecordingInfo, ReviewSegment, SAMPLE_RATE, SampleRange},
 };
 use serde_json::json;
@@ -121,7 +122,7 @@ impl QuickReview {
         }));
         spawn_local(async move {
             let result = api::call::<String>(
-                "get_recording_playback",
+                Command::GetRecordingPlayback,
                 json!({"recordingId":recording.id,"revision":recording.revision,"range":range}),
             )
             .await;
@@ -208,7 +209,7 @@ impl QuickReview {
         self.analysis_request.set_value(guard);
         spawn_local(async move {
             let wav = api::call::<String>(
-                "get_recording_playback",
+                Command::GetRecordingPlayback,
                 json!({"recordingId":recording.id,"revision":recording.revision,"range":range}),
             )
             .await;
@@ -347,7 +348,7 @@ impl QuickReview {
         self.stop_audio();
         self.error.set(String::new());
         spawn_local(async move {
-            let result = api::call::<()>("save_error_marks", json!({"batch":batch})).await;
+            let result = api::call::<()>(Command::SaveErrorMarks, json!({"batch":batch})).await;
             self.saving.set(false);
             match result {
                 Ok(()) => {

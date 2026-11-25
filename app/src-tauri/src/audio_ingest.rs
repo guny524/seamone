@@ -54,7 +54,10 @@ pub fn decode(library: &AudioLibrary, mut input: File) -> Result<StagedAudio, St
     output.finish()
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "The decoder normalizes integer PCM to f32 before resampling to PCM16."
+)]
 fn decode_wav(input: File, output: &mut AudioWriter) -> Result<(), String> {
     let wav_error = |error| format!("WAV가 손상됐거나 지원하지 않는 인코딩입니다. {error}");
     let mut wav = WavReader::new(BufReader::new(input)).map_err(wav_error)?;

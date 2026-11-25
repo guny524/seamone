@@ -1,4 +1,5 @@
 use crate::review::{SAMPLE_RATE, SampleRange};
+use alloc::{string::String, vec, vec::Vec};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

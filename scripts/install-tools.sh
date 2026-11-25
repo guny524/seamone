@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CI 에서 tauri-cli 와 trunk 를 공식 릴리스의 미리 빌드된 파일로 받아 설치한다.
-# 판은 환경 변수 TAURI_CLI_VERSION, TRUNK_VERSION 으로 받고(.github/workflows/build.yml 이 정한다),
+# 판은 환경 변수 TAURI_CLI_VERSION, TRUNK_VERSION 으로 받고(make install-ci-tools 가 넘긴다),
 # 설치 위치는 첫 인자다(기본 ~/.cargo/bin).
 # cargo install 은 job 마다 10분 넘게 컴파일해서 받는 쪽을 택했다.
 # 받은 압축 파일의 sha256 이 아래 expected_sha256 의 값과 다르면 설치하지 않고 1 로 끝난다.

@@ -1,12 +1,14 @@
 # seamone 맨 위 Makefile, lint, test, build 는 CI 도 같은 명령을 쓴다.
 # 처음 받았으면 `make install` 로 Rust 도구(tauri-cli, trunk)를 받는다.
 
-# build.yml 의 TAURI_CLI_VERSION, TRUNK_VERSION 과 같은 판을 쓴다.
+# 개발 설치와 CI 바이너리 설치가 같은 판을 사용한다.
 TAURI_CLI_VERSION ?= 2.12.6
 TRUNK_VERSION ?= 0.22.2
+export TAURI_CLI_VERSION TRUNK_VERSION
 
 # `make build TAURI_BUILD_ARGS="--bundles dmg"` 처럼 cargo tauri build 에 인자를 더한다.
 CARGO_FEATURES ?=
+PYTHON ?= $(if $(filter Windows_NT,$(OS)),python,python3)
 TEST_PATTERN ?=
 CARGO_FEATURE_ARGS = $(if $(CARGO_FEATURES),--features $(CARGO_FEATURES))
 TAURI_BUILD_ARGS ?=
@@ -14,17 +16,33 @@ TAURI_BUILD_ARGS ?=
 # 앱 껍데기 crate 는 컴파일할 때 화면 산출물 폴더가 있어야 한다, lint 와 test 는 화면을 빌드하지 않으므로 빈 폴더만 만든다.
 UI_DIST = app/ui/dist
 
-.PHONY: install fmt lint test build dev clean
+.PHONY: install install-ci-tools fmt lint lint-native check-imports check-architecture check-domain test build dev clean
 
 install:
 	rustup toolchain install
 	cargo install tauri-cli --version $(TAURI_CLI_VERSION) --locked
 	cargo install trunk --version $(TRUNK_VERSION) --locked
 
+install-ci-tools:
+	bash scripts/install-tools.sh
+
 fmt:
 	cargo fmt --all
 
-lint:
+check-imports:
+	$(PYTHON) scripts/check_crate_boundaries.py
+
+check-architecture: check-imports
+	$(PYTHON) scripts/test_crate_boundaries.py
+
+check-domain:
+	cargo check --locked -p seamone-core --lib --target wasm32v1-none
+
+lint-native:
+	mkdir -p $(UI_DIST)
+	cargo clippy --locked -p seamone --all-targets $(CARGO_FEATURE_ARGS) -- -D warnings
+
+lint: check-imports
 	mkdir -p $(UI_DIST)
 	cargo fmt --all --check
 	node --check app/ui/tests/review.mjs
@@ -35,7 +53,11 @@ test:
 	mkdir -p $(UI_DIST)
 	cargo test --workspace $(CARGO_FEATURE_ARGS) $(TEST_PATTERN)
 
-build:
+.PHONY: check-macos-dmg
+check-macos-dmg:
+	$(PYTHON) scripts/check_macos_dmg.py "$(DMG_DIR)" --arch "$(MACOS_ARCH)" $(if $(filter desktop-whisper,$(CARGO_FEATURES)),--whisper)
+
+build: check-imports
 	cargo tauri build $(CARGO_FEATURE_ARGS) $(TAURI_BUILD_ARGS)
 
 dev:

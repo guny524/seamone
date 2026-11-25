@@ -4,7 +4,7 @@ use crate::SAMPLE_RATE_HZ;
 
 /// 표본 수에서 음성 길이(초)를 구한다.
 #[must_use]
-#[allow(
+#[expect(
     clippy::cast_precision_loss,
     reason = "표본 수가 2^53 을 넘으려면 음성이 17만 시간을 넘어야 한다"
 )]
