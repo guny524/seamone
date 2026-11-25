@@ -105,6 +105,7 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 - `make test`: 합성 입력으로 녹음 수명과 저장 복구, 합성 WAV·MP3·M4A로 PCM 변환과 실제 SQLite 저장, Tauri mock runtime에서 등록 IPC와 창 닫기를 확인한다. MP3·M4A fixture는 440Hz 합성 음과 오디오 트랙이 없는 영상이다. 테스트는 실제 마이크나 OS 파일 선택기를 열지 않는다
 - `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치, HTML audio의 `ended` event와 별도 교정 화면을 확인한다. 앱의 IPC 서비스는 시험용이다. 다운로드 페이지의 화면과 빌드 링크도 확인한다
 - `make site-preview`: [다운로드 안내](site/index.html)를 로컬 `http://127.0.0.1:4173`에서 열어 본다. 포트가 쓰이는 중이면 `make site-preview SITE_PORT=4174`로 바꾼다
+- macOS 패키지 CI는 업로드할 DMG를 읽기 전용으로 열어 체크섬, 앱 식별자, CPU 종류와 마이크 권한 안내를 검사한다. Whisper 빌드에서는 Mach-O와 Info.plist의 최소 macOS 버전을 빌드 설정과 대조한다
 - `make desktop-proof`: 실제 Whisper small과 공개 음성 파일로 가져오기, 받아쓰기와 DTW 시간 저장, 짧은 구간 듣기, 오류 위치 저장, 전체 조각 교정 확인, 학습 자격과 다시 열기를 확인한다. 시험에서 학습은 실행하지 않는다
 - `make -C research test`: 연구 규칙과 optimizer 계산의 회귀시험, 실제 모델 optimizer 증명은 별도 `verified-step` target이다
 - `make fmt`와 `make -C research fmt`: 소스 형식을 맞춘다

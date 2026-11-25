@@ -46,6 +46,10 @@ test:
 	mkdir -p $(UI_DIST)
 	cargo test --workspace $(CARGO_FEATURE_ARGS) $(TEST_PATTERN)
 
+.PHONY: check-macos-dmg
+check-macos-dmg:
+	python3 scripts/check_macos_dmg.py "$(DMG_DIR)" --arch "$(MACOS_ARCH)" $(if $(filter desktop-whisper,$(CARGO_FEATURES)),--whisper)
+
 build:
 	cargo tauri build $(CARGO_FEATURE_ARGS) $(TAURI_BUILD_ARGS)
 

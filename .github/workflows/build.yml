@@ -96,6 +96,19 @@ jobs:
           fi
           make build TAURI_BUILD_ARGS="$build_args"
 
+      - name: Verify the app in the macOS distribution image
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+        run: |
+          case "$RUST_TARGET" in
+            aarch64-apple-darwin) arch=arm64 ;;
+            x86_64-apple-darwin) arch=x86_64 ;;
+            *) exit 1 ;;
+          esac
+          make check-macos-dmg DMG_DIR="target/$RUST_TARGET/release/bundle/dmg" MACOS_ARCH="$arch"
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: seamone-${{ matrix.name }}
