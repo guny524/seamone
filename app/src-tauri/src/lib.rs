@@ -101,8 +101,9 @@ mod tests {
         use serde_json::Value;
         use std::collections::BTreeSet;
 
-        fn check(document: &str, commands: &[&str], platforms: Option<&[&str]>) {
+        fn check(document: &str, id: &str, commands: &[&str], platforms: Option<&[&str]>) {
             let cap: Value = serde_json::from_str(document).unwrap();
+            assert_eq!(cap["identifier"], id);
             assert_eq!(cap["windows"], serde_json::json!(["main"]));
             assert!(cap["webviews"].is_null() && cap["remote"].is_null());
             assert!(cap["local"].as_bool().unwrap_or(true));
@@ -124,14 +125,22 @@ mod tests {
         macro_rules! check_grants {
             (shared { $($_variant:ident => $shared:ident,)* }
              desktop_capture { $($_capture_variant:ident => $capture:ident,)* }) => {{
-                check(include_str!("../capabilities/default.json"), &[$(stringify!($shared)),*], None);
+                check(include_str!("../capabilities/default.json"), "default", &[$(stringify!($shared)),*], None);
                 check(
                     include_str!("../capabilities/capture.json"),
+                    "capture",
                     &[$(stringify!($capture)),*],
                     Some(&["linux", "macOS", "windows"]),
                 );
             }};
         }
+        let config: Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let selected: BTreeSet<String> =
+            serde_json::from_value(config["app"]["security"]["capabilities"].clone()).unwrap();
+        assert_eq!(
+            selected,
+            BTreeSet::from(["default".into(), "capture".into()])
+        );
         seamone_core::with_ipc_commands!(check_grants);
     }
 
