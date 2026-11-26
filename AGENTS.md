@@ -8,4 +8,4 @@
 | 규칙 | 강제하는 곳 |
 | --- | --- |
 | UI·ASR·도메인·앱의 의존 방향은 우회하지 않는다. | `make check-architecture`; CI `domain` |
-| 연구 가설 JSONL에서 개행으로 완료된 깨진 행은 읽기·재개 어느 쪽에서도 버리지 않는다. | `research/seamone_research/hypotheses.py`의 공용 파서와 `research/tests/test_hypotheses.py`; CI `research-test` |
+| 연구 가설 JSONL에서 개행으로 완료된 구문 오류나, JSON으로 해석되지만 필드 형식이 틀린 행은 읽기·재개 어느 쪽에서도 버리지 않는다. | `research/seamone_research/hypotheses.py`의 공용 파서와 `research/tests/test_hypotheses.py`; CI `research-test` |
