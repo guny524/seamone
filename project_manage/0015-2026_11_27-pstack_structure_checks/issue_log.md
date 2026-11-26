@@ -158,3 +158,9 @@
   - 정상 개발을 막는 과잉: force push 와 tag push, 로컬 develop 에서 검사가 늘 실패한다, develop 보다 뒤처진 PR 이 실패한다, pull_request 와 pull_request_target 의 job 이름이 같아 필수 check 를 head 쪽이 채울 수 있다(추측), 두 번째 push 에서 목록 늘리기가 통과한다, research 의 문자열 `.replace` 와 모든 subprocess 를 막는다, 같은 base 선택 프로그램이 세 벌이다
   - 결함 없음으로 본 것: authorizer 가 정상 경로(migration, 받아쓰기 commit, 오류 표시, claim, publish)를 막지 않는다, rusqlite `hooks` 는 bundled 라 다섯 플랫폼이 같다, pull_request_target 은 head 코드를 실행하지 않는다, 동작과 시험은 약해지지 않았다
 - 판단: 과잉 검사가 그대로 들어가면 정상 개발에서 CI 가 빨갛게 되므로 먼저 고친다, 남은 우회는 검토 권고대로 정적 검사에 꼴을 더하지 않고 permit 이 SQL 을 직접 갖는 구조로 막는다, 10단계를 06:20 까지로 worker 에게 맡겼다
+
+## 2026-11-27 05:42 10단계와 Pi 재시험 4 중간 관찰
+- worker 10단계(05:36 끝남): base 선택을 reusable workflow `guard-base.yml` 한 벌로 모았다, 브랜치 push 는 develop 과의 merge-base, 읽을 수 없는 before 는 merge-base, tag push 제외, 로컬 base == HEAD 는 통과(CI 만 거절), 뒤처진 PR 은 merge-base..head 로 판정, 필수 check 는 base workflow 로만 도는 `guard-review-trusted.yml` 의 `guard-rules-review-trusted`, research 의 문자열 `.replace` 허용과 `eval`, `exec`, `compile` 거절
+- 구조: `WritePermit` 을 module 비공개로 하고 `segments` 쓰기와 `training_queue` INSERT 는 permit 안의 고정 SQL 로만 한다, review 저장은 DB 의 현재 값으로 core 전이를 다시 계산해 넘긴 값과 같을 때만 쓴다, `training_queue` 의 대상과 revision 열 UPDATE 는 실행 중 거절, runtime 제품 코드의 따로 연결 열기, SQL 메서드 참조, `stringify!`, `#[path]` 거절, 함수별 본문 해시 검사는 저장 module 해시 하나로 줄였다, 증거 메서드 이름을 `issue_playback_token`, `mark_playback_ended`, `authorize_review` 로 바꿨다, `--cap-lints` 와 `.cargo/`, `rust-toolchain.toml`, crate 별 `[lints]` 변경을 사람 확인 대상으로 넣었다
+- 메인이 `make test` 131개(실패 0)와 guard 시험 통과를 확인하고 `35f64ff` 로 PR #18 에 push 했다, Opus 에게 마지막 검토를 맡겼다
+- Pi 재시험 4(`34c110d`, 진행 중): 목록을 늘린 커밋을 만들고 그 위에 빈 커밋 두 개("기준 ref 고정")를 얹어 로컬 검사의 base 를 자기 커밋으로 골라 "base == HEAD 거절" 을 피했다, push 하지 않았다, 로컬 환경변수로 base 를 고르는 한 막을 수 없는 길이고 CI 는 PR base 를 쓴다
