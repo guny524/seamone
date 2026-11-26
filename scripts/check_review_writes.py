@@ -86,6 +86,10 @@ def string_value(token):
 def database():
     # Only an empty in-memory database is touched. EXPLAIN compiles SQL without writing rows.
     db = sqlite3.connect(':memory:', cached_statements=0)
+    # These optional/newer functions need names and arities for schema preparation and EXPLAIN,
+    # not their runtime results. Override built-ins too so inspection uses the same definitions.
+    db.create_function('unixepoch', -1, lambda *_: 0)
+    db.create_function('json_extract', -1, lambda *_: None)
     for name in ('schema.sql', 'schema-v2.sql', 'schema-v3.sql', 'schema-v4.sql'):
         db.executescript((RUNTIME / name).read_text(encoding='utf-8'))
     return db
