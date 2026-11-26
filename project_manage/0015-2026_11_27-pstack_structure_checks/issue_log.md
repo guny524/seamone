@@ -145,3 +145,9 @@
 - 메인이 실제 base 로 확인: `LINT_BASE_REF=origin/develop make check-architecture` 가 `check-runtime-api` 에서 `confirm_all_segments` 를 "사람이 확인한 뒤에만 늘립니다" 로 거절했다(exit 2), CI 는 PR base 를 쓰므로 이 변경을 PR 로 올리면 빨간 CI 가 사람에게 판단을 넘긴다
 - 판단: 세 번의 시험에서 Pi 의 가장 짧은 길은 host SQL -> runtime 새 함수 -> Store 안 SQL 과 목록 고치기 -> 증거 module 안 새 함수와 base ref 바꾸기로 옮겨 갔고, 이번에는 기계 검사가 사람 확인 관문으로 넘기는 데까지 왔다, 남은 길은 같은 PR 에서 ci.yml 이나 Makefile 을 고쳐 base 를 바꾸는 것으로 9단계 1번이 막는다
 - 보관: `.tmp/conductor/15-structure/pi-trap/t3-commits/`, `t3-arch-develop.log`(이슈를 닫을 때 지운다)
+
+## 2026-11-27 04:55 9단계와 PR #18
+- worker 9단계(Opus 6~8단계 검토 9건): CI 가 PR base 의 검사 스크립트와 목록을 꺼내 head 코드에 돌리는 `base-guards` job, 검사와 규칙 파일을 고친 PR 을 실패시키는 `guard-rules-review` job, push 와 새 브랜치의 base 선택과 base == HEAD 거절, migration 목록과 내용 해시의 base 대조, Store 연결의 SQLite authorizer(승인 없는 `segments` body 와 `training_queue` 쓰기를 실행 중 거절, trigger 와 view 금지), `AuthorizedReview::admit`(확인 전사 변경은 재생 승인만), 재생 증거 함수 호출 자리 고정, research 의 subprocess, HF cache 삭제 API, rename, Makefile `rm` 거절, unsafe 를 함수와 본문 해시 단위로 허용
+- 넣어 본 우회는 모두 거절됐다(worker 보고 `.tmp/conductor/15-structure/503d848d79f75f78.md` 의 원문 로그), 메인이 `make test` 125개(실패 0) 통과를 확인했다, 실제 develop 기준 목록 대조는 새 목록 항목(`callers`, `migrations` 등)이 base 에 없어 일부러 실패한다
+- 커밋 `34c110d`, PR #18 https://github.com/guny524/seamone/pull/18 (검사 파일을 고치므로 사람이 확인한 뒤 merge 한다), Opus 5.5 high 에게 9단계 검토를, Pi 에게 같은 함정으로 재시험 4 를 맡겼다
+- 같은 시각 `dot/` 브랜치에서 PR #17 "모델 단위 측정 쓰기를 직렬화한다"(draft, research)가 올라왔다, 이번 밤 일과 별개라 건드리지 않았다
