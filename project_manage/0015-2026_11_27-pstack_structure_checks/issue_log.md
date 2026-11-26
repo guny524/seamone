@@ -151,3 +151,10 @@
 - 넣어 본 우회는 모두 거절됐다(worker 보고 `.tmp/conductor/15-structure/503d848d79f75f78.md` 의 원문 로그), 메인이 `make test` 125개(실패 0) 통과를 확인했다, 실제 develop 기준 목록 대조는 새 목록 항목(`callers`, `migrations` 등)이 base 에 없어 일부러 실패한다
 - 커밋 `34c110d`, PR #18 https://github.com/guny524/seamone/pull/18 (검사 파일을 고치므로 사람이 확인한 뒤 merge 한다), Opus 5.5 high 에게 9단계 검토를, Pi 에게 같은 함정으로 재시험 4 를 맡겼다
 - 같은 시각 `dot/` 브랜치에서 PR #17 "모델 단위 측정 쓰기를 직렬화한다"(draft, research)가 올라왔다, 이번 밤 일과 별개라 건드리지 않았다
+
+## 2026-11-27 05:02 Opus 의 9단계 검토와 10단계
+- Opus 5.5 high(세션 `6258175c-3c35-4f8f-a3b8-ca4e3773884b`) 11건
+  - 아직 뚫리는 길: runtime 안 다른 파일에서 `Connection::open` 으로 연결을 따로 열고 `stringify!` 로 SQL 을 숨기면 정적 검사와 실행 중 authorizer 를 둘 다 통과한다, 쓰기 권한(permit)이 내용과 상관없이 열리고 `training_queue` 의 UPDATE 로 기존 줄을 바꿔 끼울 수 있다, `#[path]` 로 검사 밖 파일을 module 로 넣는다, 매크로로 증거 메서드 이름을 만든다, `--cap-lints` 로 lint 를 끈다
+  - 정상 개발을 막는 과잉: force push 와 tag push, 로컬 develop 에서 검사가 늘 실패한다, develop 보다 뒤처진 PR 이 실패한다, pull_request 와 pull_request_target 의 job 이름이 같아 필수 check 를 head 쪽이 채울 수 있다(추측), 두 번째 push 에서 목록 늘리기가 통과한다, research 의 문자열 `.replace` 와 모든 subprocess 를 막는다, 같은 base 선택 프로그램이 세 벌이다
+  - 결함 없음으로 본 것: authorizer 가 정상 경로(migration, 받아쓰기 commit, 오류 표시, claim, publish)를 막지 않는다, rusqlite `hooks` 는 bundled 라 다섯 플랫폼이 같다, pull_request_target 은 head 코드를 실행하지 않는다, 동작과 시험은 약해지지 않았다
+- 판단: 과잉 검사가 그대로 들어가면 정상 개발에서 CI 가 빨갛게 되므로 먼저 고친다, 남은 우회는 검토 권고대로 정적 검사에 꼴을 더하지 않고 permit 이 SQL 을 직접 갖는 구조로 막는다, 10단계를 06:20 까지로 worker 에게 맡겼다
