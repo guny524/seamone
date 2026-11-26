@@ -101,3 +101,10 @@
 - `Playbacks::issue` 하나가 조각과 revision 확인, 구간 음성(`range_wav`) 준비, token 발급을 함께 한다, `begin` 과 `Default` 는 증거 module 밖에서 쓸 수 없다, Opus 가 적은 우회 네 줄은 E0599(`default` 없음), E0624(`begin` 비공개)로 컴파일되지 않는다(worker)
 - compile_fail doctest 11개에 금지 줄 하나만 다른 통과 짝을 두었다, 증거 module 의 노출 선언을 `scripts/playback_api.json` 과 대조한다, unsafe 는 `crates/seamone-runtime/src/capture.rs` 에만 둘 수 있고 허용 파일을 늘리면 base 대조로 거절한다
 - 메인이 `LINT_BASE_REF=origin/develop` 으로 검사, lint, 시험 119개(실패 0) 통과를 확인했다, 커밋 `d0a3d95`, 8단계(Pi 재시험 2 의 Store 안 SQL 우회와 목록 고치기)를 worker 에게 보냈다
+
+## 2026-11-27 03:58 8단계 커밋, develop 기준 목록, Pi 재시험 3 시작
+- 8단계: `VerifiedText` 필드를 비공개로 하고 getter 로 읽게 했다(JSON 모양 그대로, 직렬화 시험으로 확인), `segments` 와 `training_queue` 를 쓰는 SQL 은 `AuthorizedReview` 를 받는 `Store::mutate` 안에서만 쓸 수 있다는 검사(`scripts/check_review_writes.py`, 빈 메모리 SQLite 로 SQL 을 해석)를 더했다, 기준 목록 네 개(`runtime_api.json`, `playback_api.json`, `review_writes.json`, `unsafe_files.json`)가 PR base 보다 늘면 "사람이 확인한 뒤에만 늘립니다" 로 실패한다
+- Pi 재시험 2 의 patch 는 E0451(`VerifiedText` 비공개 필드), `check-review-writes`(함수 밖 `segments`, `training_queue` 쓰기), 목록 base 대조(`confirm_all_segments` 추가) 세 곳에서 각각 거절됐다, 재시험 1 의 patch 는 E0308 로 거절됐다(worker)
+- 메인이 기준 목록 네 개의 내용(unsafe 허용 파일은 `capture.rs` 하나, 쓰기 허용 함수는 `Store::mutate`, 미검증 쓰기 허용은 `Store::commit_transcription` 과 `flag_overlapping_segments`, 공개 API 38개)을 보고 develop 에 `fdf16ac` 로 넣었다, 밤에는 메인이 고정했으므로 사람 확인을 물을 것에 올렸다
+- 메인이 실제 develop 기준으로 검사, lint, 시험 122개(실패 0) 통과를 확인했다, 8단계를 커밋하고 develop 위로 rebase 했다(중간 커밋의 기준 목록 add/add 충돌은 커밋 쪽 내용으로 풀었고 rebase 전후 코드 diff 0), PR HEAD `967c9c8`, merge 가능
+- Pi 재시험 3 을 `967c9c8` 에서 새 세션으로 시작했다, Opus 5.5 high 에게 6~8단계 검토를 맡겼다
