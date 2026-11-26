@@ -1,0 +1,5 @@
+# Research model revision boundary
+
+Owner: dot. Scope: `research/seamone_research/models.py` and synthetic revision tests. Make it impossible to instantiate a research model spec with an unpinned or malformed revision through the normal constructor. No actual model download, app, CI, or training change.
+
+Before: floating branch/tag, empty, short, uppercase, non-hex and trailing-newline values and a dataclass replacement all succeeded; eight negative assertions failed. After: the frozen spec uses one initialization boundary, all negatives are rejected, a full pin reaches the snapshot adapter byte-for-byte, and all six existing candidate specs still import. Local `unittest`: all three tests passed (including seven constructor subcases); the snapshot function was a stub, not network or model validation. Python compile passed. Full research lint, locked-dependency and network-namespace tests are left to the unchanged GitHub research job; local environment lacks those dependencies. No changes to application or training behavior or other PRs.

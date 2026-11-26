@@ -4,6 +4,7 @@ device 와 dtype 은 M1(16GB) 기준이다, bf16 은 쓰지 않는다.
 묶음 크기는 4 다(노트북의 메모리가 모자라 메인이 1~4 로 정했다, 2026-11-19).
 """
 
+import re
 from dataclasses import dataclass
 
 from huggingface_hub import snapshot_download
@@ -20,6 +21,12 @@ class ModelSpec:
     dtype: str = "float16"
     # CPU 에서 학습 시험을 할 때의 dtype(float16 은 CPU 의 역전파에 맞지 않는다)
     cpu_train_dtype: str = "float32"
+
+    def __post_init__(self) -> None:
+        revision = self.revision
+        if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
+            message = "model revision must be a full lowercase 40-character commit SHA"
+            raise ValueError(message)
 
 
 MODEL_SPECS: dict[str, ModelSpec] = {
