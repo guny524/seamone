@@ -75,3 +75,11 @@
 - PR #16 을 develop 위로 rebase 했다, 기준 목록 add/add 충돌은 커밋 쪽 내용으로 풀었고 rebase 전후 코드 트리가 같음(`project_manage` 를 빼고 diff 0)을 확인했다, `--force-with-lease` 로 push 했다, 새 HEAD 는 `b1b729c`, `1cb6afc`, `4946387`, `e0b68d3`, PR 이 다시 merge 가능해졌고 PR CI 와 패키지 빌드가 돈다
 - Pi 재시험 2: 같은 함정 작업을 새 Pi 세션에 `e0b68d3` 에서 맡겼다, cargo target 은 worker 것을 APFS 로 복제해 따로 쓴다
 - Opus 5.5 high 에게 5단계 커밋만 다시 검토하게 했다, worker 에게 6단계(research 의 직접 삭제 호출을 한 입구로 모으는 AST lint)를 맡겼다
+
+## 2026-11-27 03:00 Opus 의 5단계 검토
+- Opus 5.5 high(세션 `3da87e20-8953-415a-96b9-a881fd74ba73`) 결함 3건
+  - 높음: `crates/seamone-runtime/src/playback_evidence.rs:38` 의 `Default` 와 `begin`, `ended`, `authorize` 가 crate 전체에 보여, runtime 안 새 함수가 `Playbacks::default()` -> `begin` -> `ended` -> `authorize` -> `mutate` 네 줄로 재생 없이 증거를 만들 수 있다, 통과 doctest 와 `store_tests.rs` 도우미가 이 우회를 정상 경로로 쓴다, `e0b68d3` 커밋 메시지의 "이제 컴파일되지 않는다" 와 `AGENTS.md:5` 는 실제보다 강하다
+  - 중간: 새 compile_fail doctest 가 원하는 이유로 실패하는지 고정되지 않았다(rustdoc 은 오류 번호를 대조하지 않는다, 2단계 확인)
+  - 낮음: `unsafe` 로 승인 값을 위조하는 길이 남았다
+- 막힌 것으로 확인: struct literal 로 증거 만들기, `PlaybackNotRequired` 를 밖에서 고르기, 검사한 요청을 바꿔 붙이기, `mutate` 말고 학습 후보를 만드는 다른 쓰기, 동작 변화 없음
+- 세 건을 7단계로 worker 6단계 뒤에 맡긴다, unsafe 는 새 lint 억제 대신 unsafe 를 쓸 수 있는 파일 목록 검사로 막는다(D2)
