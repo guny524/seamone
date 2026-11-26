@@ -106,7 +106,7 @@
 ### #15 LLM 실수를 lint, build, compile 에서 거르게 폴더 구조와 검사를 바꾼다 (pstack 개념 적용)
 - 폴더: [0015-2026_11_27-pstack_structure_checks](0015-2026_11_27-pstack_structure_checks/issue_board.md), 상태: 진행, 2026-11-27 01:55 runtime crate 분리와 검사가 draft [PR #16](https://github.com/guny524/seamone/pull/16)(`b2d2990`, `ce55aac`)에 올라 CI 와 다섯 플랫폼 빌드, Opus 5.5 high 구현 검토, Pi local LLM 실수 유도 시험이 돌고 있다
 - 실행 정보: worker Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(브랜치 `guny524/15-structure-checks`), handle `term_80ba4343-14c4-40db-9a12-24b2a7b7c5d0`, 마지막 turn 01:49, 보고 `.tmp/conductor/15-structure/`, Pi 시험 worktree `/Users/min-jo/orca/workspaces/seamone/15-pi-trap`(브랜치 `guny524/15-pi-trap`, push 하지 않고 확인 뒤 지운다), handle `term_41dcdadb-78c9-48e3-bc7f-83a203b8f0d0`
-- 다음 행동: Opus 검토 지적을 worker 가 고친다, CI 와 패키지 6개 통과를 확인한다, Pi 시험 결과로 빠진 검사를 메운 뒤 develop 에 merge 하고 PR #11, #13, #14 를 rebase 한다
+- 다음 행동(2026-11-27 02:25): Opus 구현 검토 지적 8건은 worker 가 고쳤다(메인 재확인 전), PR #16 의 iOS 빌드가 `commands.rs:126` 오류 타입으로 실패해 worker 4단계가 iOS 수정, 모바일 target lint 검사, develop 에 먼저 넣을 lint 예외 기준 목록을 만든다, 그 뒤 메인이 기준 목록을 develop 에 커밋하고 3~4단계를 검증해 PR #16 에 올리고 CI 를 다시 본다, Pi 시험 결과로 빠진 검사를 메운 뒤 merge 하고 PR #11, #13, #14 를 rebase 한다
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유

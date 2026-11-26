@@ -264,3 +264,6 @@
 - 사용자 지시로 pstack 개념을 레포에 적용하는 밤샘 실행을 시작했다(이슈 #15, 지시 원문은 이슈 board 1절, 운영 방침은 이 board 3절)
 - worker 조사와 Opus 5.5 high 설계 검토를 거쳐 이번 밤 범위를 native 작업 crate 분리와 그 검사로 정했다(이슈 decision D1, D2)
 - `b2d2990`, `ce55aac` 를 draft [PR #16](https://github.com/guny524/seamone/pull/16) 에 올렸다, 메인이 `make check-architecture`, `make lint`, `make test`(99개) 통과를 확인했다, 자세한 근거는 이슈 log 2026-11-27 01:50
+
+## 2026-11-27 02:25 구조 검사 PR 의 iOS 빌드 실패
+- draft PR #16 의 build run 45862643316 에서 iOS 시뮬레이터만 실패했다(`app/src-tauri/src/commands.rs:126` E0308), 나머지 다섯 산출물과 ci 두 run 은 통과했다, 고치는 일과 이 실수를 lint 단계에서 막는 모바일 컴파일 검사를 worker 가 하고 있다, 자세한 것은 이슈 log 2026-11-27 02:21
