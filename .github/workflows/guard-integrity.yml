@@ -20,7 +20,8 @@ jobs:
     needs: guard-base
     runs-on: ubuntu-22.04
     env:
-      LINT_BASE_REF: ${{ needs.guard-base.outputs.commit }}
+      LINT_BASE_REF: ${{ needs.guard-base.outputs.policy-commit }}
+      GUARD_ALLOW_SELF: ${{ needs.guard-base.outputs.allow-self }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -42,7 +43,7 @@ jobs:
           def git(root, *args):
               return subprocess.check_output(['git', *args], cwd=root, text=True, stderr=subprocess.PIPE)
           base = git(source, 'rev-parse', '--verify', '--end-of-options', base + '^{commit}').strip()
-          if base == git(source, 'rev-parse', 'HEAD').strip():
+          if base == git(source, 'rev-parse', 'HEAD').strip() and os.environ.get('GUARD_ALLOW_SELF') != 'true':
               raise SystemExit('guard base must differ from HEAD')
           scratch = source / '.tmp/base-guards'
           scratch.mkdir(parents=True, exist_ok=True)

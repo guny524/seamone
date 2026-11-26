@@ -200,12 +200,16 @@ class DeletionChecker(ast.NodeVisitor):
         function = self.symbol(node.func)
         self.check_symbol(node, function)
         self.check_symbol(node, self.symbol(node))
+        publisher = self.path == ENTRY_FILE and self.scope == ['publish_partial']
+        if (function.rsplit('.', 1)[-1] == 'replace' and len(node.args) < 2
+                and function != 'dataclasses.replace' and not publisher):
+            self.reject(node, 'one-argument replacement can move a path; use cache.publish_partial', always=True)
         if function in {'builtins.__import__', 'importlib.import_module'}:
             if not node.args or literal(node.args[0]) is None:
                 self.reject(node, 'dynamic imports cannot establish a safe deletion boundary')
         if function == 'builtins.getattr' and len(node.args) >= 2:
             base = self.symbol(node.args[0])
-            if literal(node.args[1]) is None and (base.startswith('?') or base.split('.')[0] in FILESYSTEM):
+            if literal(node.args[1]) is None and (base == 'builtins' or base.startswith('?') or base.split('.')[0] in FILESYSTEM):
                 self.reject(node, 'dynamic filesystem attribute lookup is forbidden')
         if isinstance(node.func, ast.Attribute) and node.func.attr == '__getattribute__':
             if not node.args or literal(node.args[0]) is None:

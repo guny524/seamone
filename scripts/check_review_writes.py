@@ -247,6 +247,9 @@ def writes(db, sql):
         if partial.strip():
             statements.append(partial)
         for statement in statements:
+            statement = re.sub(r'\A(?:\s|;|--[^\n]*(?:\n|$)|/\*.*?\*/)*', '', statement, flags=re.S)
+            if not statement:
+                continue
             try:
                 db.execute('EXPLAIN ' + statement)
             except sqlite3.ProgrammingError as error:
@@ -262,6 +265,61 @@ def writes(db, sql):
     return found
 
 
+def prepared_calls(code):
+    """Track local prepare* bindings and their lexical block, including let shadowing."""
+    closing, stack = {}, []
+    for index, token in enumerate(code):
+        if token.text in {'(', '[', '{'}:
+            stack.append(index)
+        elif token.text in {')', ']', '}'} and stack:
+            closing[stack.pop()] = index
+    bindings, calls, data = [], set(), []
+    for index, token in enumerate(code):
+        if token.text == 'let':
+            name = index + 1
+            if name < len(code) and code[name].text == 'mut':
+                name += 1
+            if name + 1 < len(code) and code[name + 1].text == '=':
+                end = name + 2
+                while end < len(code) and code[end].text != ';':
+                    end += 1
+                stop = min((finish for start, finish in closing.items()
+                            if code[start].text == '{' and start < index < finish), default=len(code))
+                prepared = any(code[cursor].text in SQL_METHODS and code[cursor].text.startswith('prepare')
+                               and cursor > name + 2 and code[cursor - 1].text in {'.', ':'}
+                               and cursor + 1 < end and code[cursor + 1].text == '('
+                               for cursor in range(name + 2, end))
+                bindings.append((code[name].text, index, stop, prepared))
+        if (token.text in {'execute', 'query_row'} and index >= 2
+                and code[index - 1].text == '.' and index + 1 < len(code)
+                and code[index + 1].text == '('):
+            receiver = code[index - 2].text
+            if index >= 3 and code[index - 3].text in {'.', ':'}:
+                continue
+            binding = next((item for item in reversed(bindings)
+                            if item[0] == receiver and item[1] < index < item[2]), None)
+            if binding is not None and binding[3]:
+                calls.add(index)
+                data.append((index + 1, closing.get(index + 1, index + 1)))
+    return calls, data
+
+
+def module_path_attribute(code, index):
+    depth = 0
+    for cursor in range(index - 1, -1, -1):
+        text = code[cursor].text
+        if text == ']':
+            depth += 1
+        elif text == '[':
+            if depth:
+                depth -= 1
+            else:
+                return cursor > 0 and code[cursor - 1].text == '#' and code[cursor + 1].text in {'path', 'cfg_attr'}
+        elif not depth and text in {';', '{', '}'}:
+            return False
+    return False
+
+
 def violations(source, path, policy, db, test_only=False):
     code, scopes = functions(source, test_only)
     reviewed_modules = {item['path']: item['sha256'] for item in policy.get('modules', [])}
@@ -271,8 +329,20 @@ def violations(source, path, policy, db, test_only=False):
     for index, token in enumerate(code[:-2]):
         if token.text in connections and code[index + 1].text == 'as':
             connections.add(code[index + 2].text)
+    changed = True
+    while changed:
+        previous = connections.copy()
+        for index, token in enumerate(code[:-3]):
+            if token.text == 'type' and code[index + 2].text == '=':
+                end = index + 3
+                while end < len(code) and code[end].text != ';':
+                    end += 1
+                if any(item.text in connections for item in code[index + 3:end]):
+                    connections.add(code[index + 1].text)
+        changed = connections != previous
     diagnostics = []
     decoded_arguments = {}
+    prepared, bound_data = prepared_calls(code)
 
     def owner(token):
         enclosing = [scope for scope in scopes if scope.start <= token.start < scope.end]
@@ -290,12 +360,25 @@ def violations(source, path, policy, db, test_only=False):
         name = scope.name if scope else '<outside function>'
         if test_only or (scope is not None and scope.testing) or any(start <= token.start < stop for start, stop in testing):
             continue
+        receiver = index - 3
+        connection_type = receiver >= 0 and code[receiver].text in connections
+        if receiver >= 0 and code[receiver].text == '>':
+            start, depth = receiver - 1, 1
+            while start >= 0 and depth:
+                depth += (code[start].text == '>') - (code[start].text == '<')
+                start -= 1
+            connection_type = any(item.text in connections for item in code[start + 1:receiver])
         is_open = (token.text.startswith('open') and index >= 3
                    and [item.text for item in code[index - 2:index]] == [':', ':']
-                   and code[index - 3].text in connections)
+                   and connection_type)
+        authority_owner = path == 'crates/seamone-runtime/src/write_guard.rs' or (path == 'crates/seamone-runtime/src/store.rs' and name == 'Store::open')
+        if token.text in {'Batch', 'raw_execute', 'raw_bind_parameter'} and not reviewed:
+            reject(token, f'{name} cannot use raw SQL API {token.text} outside the reviewed persistence module')
+        if token.text in {'authorizer', 'hooks'} and not authority_owner:
+            reject(token, f'{name} cannot change SQLite authorization outside Store::open and write_guard')
         if is_open and (path != 'crates/seamone-runtime/src/store.rs' or name != 'Store::open'):
             reject(token, f'{name} cannot open a SQLite connection outside Store::open')
-        if token.text == 'path' and index >= 2 and [item.text for item in code[index - 2:index]] == ['#', '[']:
+        if token.text == 'path' and index + 1 < len(code) and code[index + 1].text == '=' and module_path_attribute(code, index):
             target = index + 1
             while target < len(code) and code[target].text not in {'mod', 'fn', 'struct', 'enum', 'impl'}:
                 target += 1
@@ -313,6 +396,8 @@ def violations(source, path, policy, db, test_only=False):
         if (token.text in SQL_METHODS and index > 0 and code[index - 1].text in {'.', ':'}
                 and index + 1 < len(code) and code[index + 1].text != '('):
             reject(token, f'{name} cannot use a SQL method reference')
+        if index in prepared:
+            continue
         # Dynamic SQL expressions must not hide writes from the literal inspection.
         if (token.text in SQL_METHODS and index > 0 and code[index - 1].text in {'.', ':'}
                 and index + 2 < len(code) and code[index + 1].text == '('):
@@ -344,7 +429,7 @@ def violations(source, path, policy, db, test_only=False):
                 reject(token, f'{name} uses dynamic SQL that cannot establish a verified-write boundary')
             elif argument_sql is not None:
                 decoded_arguments[argument.start] = argument_sql
-        if token.start not in decoded_arguments and not sql_literal(token):
+        if token.start not in decoded_arguments and (any(start < index < stop for start, stop in bound_data) or not sql_literal(token)):
             continue
         try:
             sql = decoded_arguments.get(token.start) if token.start in decoded_arguments else string_value(token)
@@ -352,9 +437,6 @@ def violations(source, path, policy, db, test_only=False):
             reject(token, f'{name} has an invalid Rust SQL literal: {error}')
             continue
         if sql is None:
-            continue
-        leading = re.sub(r'\A(?:\s|--[^\n]*(?:\n|$)|/\*.*?\*/)*', '', sql, flags=re.S)
-        if not re.match(r'(?:SELECT|INSERT|REPLACE|UPDATE|DELETE|WITH|CREATE|ALTER|DROP|PRAGMA)\b', leading, re.I):
             continue
         try:
             critical = writes(db, sql)

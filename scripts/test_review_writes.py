@@ -160,6 +160,9 @@ class ReviewWrites(unittest.TestCase):
     def test_connection_opening_sql_references_and_hidden_source_are_rejected(self):
         for source in (
             'fn bypass() { let c = rusqlite::Connection::open(path); }',
+            'fn bypass() { <rusqlite::Connection>::open(path); }',
+            'type Db = rusqlite::Connection; fn bypass() { Db::open(path); }',
+            'fn bypass() { db.authorizer(None::<fn(rusqlite::hooks::AuthContext)>); }',
             'use rusqlite::Connection as Db; fn bypass() { Db::open_in_memory(); }',
             'fn bypass() { let run = Connection::execute; }',
             'fn bypass() { stringify!(UPDATE segments SET body = ?); }',
@@ -178,6 +181,16 @@ class ReviewWrites(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertEqual(self.errors(source), '')
 
+    def test_conditional_module_paths_require_test_only_items(self):
+        for attribute in (
+            '#[cfg_attr(all(), path="../store_ext.rs")]',
+            '#[cfg_attr(feature="external", path="../store_ext.rs")]',
+        ):
+            source = attribute + ' mod external;'
+            self.assertIn('cannot use #[path]', self.errors(source))
+            self.assertEqual(self.errors('#[cfg(test)] ' + source), '')
+        self.assertEqual(self.errors('fn normal() { let path = "audio"; }'), '')
+
     def test_reads_state_updates_comments_and_literal_examples_remain_allowed(self):
         source = '''fn work() {
             // db.execute("UPDATE segments SET body=?1", params);
@@ -187,6 +200,37 @@ class ReviewWrites(unittest.TestCase):
             let text = "an example: UPDATE segments SET body=?1";
         }'''
         self.assertEqual(self.errors(source), '')
+
+    def test_prepared_statement_parameters_are_data_and_local_shadowing_is_respected(self):
+        source = '''fn marks() {
+            let mut s = tx.prepare_cached("INSERT INTO settings(key,value) VALUES (?1,?2)")?;
+            for mark in marks { s.execute(params![mark.id, "UPDATE segments SET body='example'"])?; }
+            let mut read = tx.prepare("SELECT value FROM settings WHERE key=?1")?;
+            read.query_row(["key"], callback)?;
+            { let s = connection; s.execute(sql, params); }
+            s.execute(params)?;
+        }'''
+        diagnostic = self.errors(source)
+        self.assertEqual(diagnostic.count('uses dynamic SQL'), 1, diagnostic)
+        self.assertNotIn('writes segments', diagnostic)
+        self.assertIn('uses dynamic SQL', self.errors('fn bypass() { let s = choose(prepare); s.execute(sql, params); }'))
+        self.assertIn('writes segments', self.errors('fn bypass() { let mut s = tx.prepare("UPDATE segments SET body=?1")?; s.execute(params)?; }'))
+
+    def test_sql_arguments_are_inspected_after_transaction_control_or_empty_prefixes(self):
+        for prefix in ('SAVEPOINT a;', 'VALUES(1);', ';'):
+            source = f'fn bypass() {{ db.execute_batch("{prefix} UPDATE segments SET body=?1;"); }}'
+            with self.subTest(prefix=prefix):
+                self.assertIn('writes segments', self.errors(source))
+        self.assertEqual(self.errors('fn normal() { db.execute_batch("; SAVEPOINT a; SELECT 1; RELEASE a;"); }'), '')
+
+    def test_raw_statement_apis_require_the_reviewed_module(self):
+        for source in (
+            'fn bypass() { rusqlite::Batch::new(&tx, &sql); }',
+            'fn bypass() { statement.raw_execute(); }',
+            'fn bypass() { statement.raw_bind_parameter(1, value); }',
+        ):
+            with self.subTest(source=source):
+                self.assertIn('raw SQL API', self.errors(source))
 
     def test_multiple_statements_and_unparseable_sql_fail_closed(self):
         self.assertIn('writes segments', self.errors('fn f() { db.execute_batch("SELECT 1; UPDATE segments SET body=?1;"); }'))

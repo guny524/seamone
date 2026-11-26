@@ -21,7 +21,7 @@
   "modules": [
     {
       "path": "crates/seamone-runtime/src/write_guard.rs",
-      "sha256": "814d3feaf66eef55a5c2be0535998e8f3166e5fc92331deca0c6911dbc59d978"
+      "sha256": "4c963660fda6f80571b6db60d3511cbf9082121b468f8336c5c8d964b170e704"
     }
   ]
 }

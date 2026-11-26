@@ -151,6 +151,19 @@ text = "shutil.rmtree(path)"
             with self.subTest(source=source):
                 self.assertTrue(self.check(source))
 
+    def test_unknown_path_replacement_and_dynamic_builtin_lookup_are_rejected(self):
+        for source in (
+            'data.raw_cache_dir("zeroth_ko").replace(scratch)',
+            'def evict(p):\n    p.replace(other)',
+            'def evict(p: str):\n    p.replace(other)',
+            'def evict(p):\n    p.replace(target=other)',
+            'import builtins\ngetattr(builtins, name)(code)',
+        ):
+            with self.subTest(source=source):
+                self.assertTrue(self.check(source))
+        self.assertEqual(self.check('hyp.lower().replace(" ", "")'), [])
+        self.assertEqual(self.check('from dataclasses import replace\nreplace(row, text="updated")'), [])
+
     def test_syntax_errors_do_not_skip_the_check(self):
         self.assertTrue(self.check('def invalid('))
 

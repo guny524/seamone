@@ -14,8 +14,8 @@
 - host와 runtime의 녹음 지원 플랫폼은 같아야 한다, host의 const assert가 컴파일할 때 CAPTURE_SUPPORTED와 host cfg를 대조한다, Whisper feature 전달은 `make test CARGO_FEATURES=desktop-whisper`에서 host를 통해서만 켜서 확인한다
 - runtime의 `test-support`는 host의 dev 의존에서만 켠다, Cargo 경계 검사가 제품 의존이나 feature의 전달로 켜는 것을 막고 IPC 시험은 합성 녹음과 전사 fixture를 쓴다
 - 새 lint 억제를 달지 않는다, `make lint`와 `make check-architecture`는 `scripts/lint_exceptions.json`을 기준 ref(`LINT_BASE_REF`, 기본 `origin/develop`)와 비교해 억제 추가와 개수 증가를 막고 Cargo/Ruff lint 표 전체와 clippy 명령도 대조한다, 기준 ref나 JSON을 읽지 못하면 실패한다, 기존 억제의 사람 승인과 만료일은 미결정이다
-- research 삭제는 cache.remove_inside, .part 파일 공개는 cache.publish_partial 한 입구로 모은다, HF cache 삭제, rename과 경로로 알아낸 값의 replace, Make recipe의 rm과 eval/exec/compile을 검사한다, 문자열 replace는 허용한다, subprocess와 os 실행 허용 범위는 README의 미결정 정책을 따른다, 시험 코드에 직접 삭제 예외는 없다
-- CI의 기준 선택은 guard-base reusable workflow 한 벌로 한다, PR base와 develop push before를 쓰고 다른 브랜치와 읽지 못한 before는 develop merge-base를 쓴다, tag push는 제외한다, 자기 대조는 CI에서만 거절한다, base 검사에는 PR merge ref를 넣고 보호 파일 차이는 merge-base부터 head까지 본다, 필수 check는 별도 pull_request_target workflow의 guard-rules-review-trusted이며 head 코드를 실행하지 않는다
+- research 삭제는 cache.remove_inside, .part 파일 공개는 cache.publish_partial 한 입구로 모은다, HF cache 삭제, rename과 위치 인자 하나인 replace, Make recipe의 rm과 eval/exec/compile을 검사한다, 문자열 replace는 허용한다, subprocess와 os 실행 허용 범위는 README의 미결정 정책을 따른다, 시험 코드에 직접 삭제 예외는 없다
+- CI의 기준 선택은 guard-base reusable workflow 한 벌로 한다, PR base와 develop push의 첫 parent를 비교 기준으로 쓰며 develop의 정책은 승인된 HEAD에서 읽는다, 다른 브랜치는 develop merge-base를 쓰고 변경 없는 push의 자기 대조도 허용한다, tag push는 제외한다, base 검사에는 PR merge ref를 넣고 보호 파일 차이는 merge-base부터 head까지 본다, 필수 check는 별도 pull_request_target workflow의 guard-rules-review-trusted이며 head 코드를 실행하지 않는다
 
 # 출처
 

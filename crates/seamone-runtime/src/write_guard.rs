@@ -24,7 +24,12 @@ fn install(connection: &Connection, state: Arc<AtomicU8>) -> Result<(), String> 
         .authorizer(Some(move |context: AuthContext<'_>| {
             let permission = state.load(Ordering::Acquire);
             match context.action {
-                AuthAction::CreateTrigger { .. }
+                AuthAction::AlterTable { .. }
+                | AuthAction::CreateTable { .. }
+                | AuthAction::CreateTempTable { .. }
+                | AuthAction::DropTable { .. }
+                | AuthAction::DropTempTable { .. }
+                | AuthAction::CreateTrigger { .. }
                 | AuthAction::CreateTempTrigger { .. }
                 | AuthAction::CreateView { .. }
                 | AuthAction::CreateTempView { .. }
@@ -42,6 +47,11 @@ fn install(connection: &Connection, state: Arc<AtomicU8>) -> Result<(), String> 
                 AuthAction::Insert {
                     table_name: "training_queue",
                 } if permission != 2 || context.accessor.is_some() => Authorization::Deny,
+                AuthAction::Pragma { pragma_name, .. }
+                    if pragma_name.eq_ignore_ascii_case("writable_schema") =>
+                {
+                    Authorization::Deny
+                }
                 _ => Authorization::Allow,
             }
         }))
@@ -225,6 +235,32 @@ impl Drop for WritePermit<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn schema_changes_are_rejected_after_migration_and_reads_remain_available() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch("CREATE TABLE segments(id TEXT,body TEXT)")
+            .unwrap();
+        let _access = WriteAccess::attach(&connection).unwrap();
+        for sql in [
+            "ALTER TABLE segments RENAME COLUMN body TO b",
+            "DROP TABLE segments",
+            "CREATE TABLE replacement(id TEXT)",
+            "CREATE TEMP TABLE replacement(id TEXT)",
+            "PRAGMA writable_schema=ON",
+            "PRAGMA WRITABLE_SCHEMA=ON",
+        ] {
+            assert!(connection.execute_batch(sql).is_err(), "{sql}");
+        }
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM segments", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
 
     #[test]
     fn statements_cannot_retain_authority_after_the_permit_returns() {

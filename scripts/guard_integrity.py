@@ -12,10 +12,11 @@ def git(root, *args):
     return subprocess.check_output(['git', *args], cwd=root, stderr=subprocess.PIPE).decode()
 
 
-def base_commit(root, ref, *, ci=None):
+def base_commit(root, ref, *, ci=None, allow_self=None):
     commit = git(root, 'rev-parse', '--verify', '--end-of-options', ref + '^{commit}').strip()
     ci = os.environ.get('CI') == 'true' if ci is None else ci
-    if ci and commit == git(root, 'rev-parse', 'HEAD').strip():
+    allow_self = os.environ.get('GUARD_ALLOW_SELF') == 'true' if allow_self is None else allow_self
+    if ci and not allow_self and commit == git(root, 'rev-parse', 'HEAD').strip():
         raise ValueError('guard base must differ from HEAD in CI')
     return commit
 

@@ -50,29 +50,33 @@ if __name__ == '__main__': raise SystemExit(main())
         return subprocess.run([sys.executable, '-I', '-c', workflow_program(file, step)],
                               cwd=self.root, env=environment, capture_output=True, text=True)
 
-    def event_base(self, event):
+    def event_base(self, event, *, outputs=False):
         path, output = self.root / '.git/event.json', self.root / '.git/output'
         path.write_text(json.dumps(event))
         output.write_text('')
         result = self.run_program('.github/workflows/guard-base.yml', 'Select event base',
                                   GITHUB_EVENT_PATH=str(path), GITHUB_OUTPUT=str(output))
         self.assertEqual(result.returncode, 0, result.stderr)
-        return output.read_text().removeprefix('commit=').rstrip('\n')
+        selected = dict(line.split('=', 1) for line in output.read_text().splitlines())
+        return selected if outputs else selected['commit']
 
-    def test_local_new_branch_passes_but_ci_refuses_a_self_comparison(self):
+    def test_local_self_comparison_passes_but_a_pr_cannot_select_its_head(self):
         self.assertEqual(base_commit(self.root, 'HEAD', ci=False), self.git('rev-parse', 'HEAD').strip())
         with self.assertRaisesRegex(ValueError, 'differ from HEAD in CI'):
-            base_commit(self.root, 'HEAD', ci=True)
+            base_commit(self.root, 'HEAD', ci=True, allow_self=False)
         path = self.root / '.git/event.json'
-        path.write_text(json.dumps({'ref': 'refs/heads/develop', 'before': self.git('rev-parse', 'HEAD').strip()}))
+        path.write_text(json.dumps({'pull_request': {'base': {'sha': self.git('rev-parse', 'HEAD').strip()}}}))
         result = self.run_program('.github/workflows/guard-base.yml', 'Select event base',
                                   GITHUB_EVENT_PATH=str(path), GITHUB_OUTPUT=str(self.root / '.git/output'))
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('guard base must differ from HEAD in CI', result.stderr)
+        self.assertIn('guard base must differ from HEAD for a pull request', result.stderr)
 
     def test_pr_develop_and_feature_pushes_keep_the_reviewed_base(self):
         self.assertEqual(self.event_base({'pull_request': {'base': {'sha': self.base}}}), self.base)
-        self.assertEqual(self.event_base({'ref': 'refs/heads/develop', 'before': self.base}), self.base)
+        selected = self.event_base({'ref': 'refs/heads/develop', 'before': self.base}, outputs=True)
+        self.assertEqual(selected['commit'], self.base)
+        self.assertEqual(selected['policy-commit'], self.git('rev-parse', 'HEAD').strip())
+        self.assertEqual(selected['allow-self'], 'true')
         previous = self.git('rev-parse', 'HEAD').strip()
         self.commit()
         self.assertEqual(self.event_base({'ref': 'refs/heads/topic', 'before': previous}), self.base)
@@ -80,6 +84,45 @@ if __name__ == '__main__': raise SystemExit(main())
 
     def test_unavailable_before_falls_back_to_the_develop_merge_base(self):
         self.assertEqual(self.event_base({'ref': 'refs/heads/develop', 'before': '1' * 40}), self.base)
+
+    def test_an_unchanged_branch_push_uses_its_existing_policy(self):
+        head = self.git('rev-parse', 'HEAD').strip()
+        self.git('update-ref', 'refs/remotes/origin/develop', head)
+        selected = self.event_base({'ref': 'refs/heads/fresh', 'before': '0' * 40}, outputs=True)
+        self.assertEqual(selected, {'commit': head, 'policy-commit': head, 'allow-self': 'true'})
+        self.assertEqual(base_commit(self.root, head, ci=True, allow_self=True), head)
+        result = self.run_program('.github/workflows/guard-integrity.yml', 'Run frozen base guards',
+                                  LINT_BASE_REF=selected['policy-commit'], GUARD_ALLOW_SELF=selected['allow-self'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_an_approved_develop_merge_compares_its_parent_and_uses_merged_policy(self):
+        import hashlib
+        (self.root / 'guard.rs').write_text('old')
+        policy = self.root / 'scripts/policy.json'
+        policy.write_text(json.dumps({'sha': hashlib.sha256(b'old').hexdigest()}))
+        (self.root / 'scripts/check_probe.py').write_text('''import hashlib,json
+from pathlib import Path
+root=Path(__file__).resolve().parent.parent
+raise SystemExit(int(hashlib.sha256((root/'guard.rs').read_bytes()).hexdigest()!=json.loads((root/'scripts/policy.json').read_text())['sha']))
+''')
+        self.git('add', '.')
+        self.commit()
+        parent = self.git('rev-parse', 'HEAD').strip()
+        self.git('checkout', '-qb', 'approved')
+        (self.root / 'guard.rs').write_text('new')
+        policy.write_text(json.dumps({'sha': hashlib.sha256(b'new').hexdigest()}))
+        self.commit()
+        self.git('checkout', '--detach', parent)
+        self.git('-c', 'user.name=Architecture Test', '-c', 'user.email=test@invalid',
+                 '-c', 'commit.gpgsign=false', 'merge', '--no-ff', '--no-edit', 'approved')
+        head = self.git('rev-parse', 'HEAD').strip()
+        selected = self.event_base({'ref': 'refs/heads/develop', 'before': self.base}, outputs=True)
+        self.assertEqual(selected, {'commit': parent, 'policy-commit': head, 'allow-self': 'true'})
+        stale = self.run_program('.github/workflows/guard-integrity.yml', 'Run frozen base guards', LINT_BASE_REF=parent)
+        self.assertEqual(stale.returncode, 1)
+        approved = self.run_program('.github/workflows/guard-integrity.yml', 'Run frozen base guards',
+                                    LINT_BASE_REF=head, GUARD_ALLOW_SELF='true')
+        self.assertEqual(approved.returncode, 0, approved.stderr)
 
     def test_frozen_guard_ignores_disabled_head_script_and_expanded_head_policy(self):
         (self.root / 'scripts/check_probe.py').write_text('raise SystemExit(0)')
