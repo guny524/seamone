@@ -16,3 +16,12 @@
 - 메인이 원본에서 확인: `app/src-tauri/src/lib.rs:10` 의 `pub mod store`, `app/ui/src/api.rs:17` 의 `call<T>(Command, impl Serialize)`, `app/src-tauri/src/commands.rs:31` 의 공개 필드 `store`, `background`, `recorder`, host `Cargo.toml` 의 rusqlite, symphonia, cpal 직접 의존
 - 기존 lint 예외 10곳(`#[expect]`, 숫자 변환과 mobile 전용 인자)은 이유만 있고 만료일과 사람 승인이 없다, 밤에는 AI 가 승인을 지어 넣지 않는다(사용자 답 "밤에는 새 예외 금지")
 - 보고 원문은 `.tmp/conductor/15-structure/e24ad126fa139773.md`(버려도 되는 사본), Opus 5.5 high 설계 검토를 맡겼다
+
+## 2026-11-27 01:50 runtime crate 분리 구현과 메인 검증
+- worker 가 저장소, 스키마, 음성, 녹음, 받아쓰기, 학습 대기열을 `crates/seamone-runtime` 으로 `git mv` 하고 `LibraryService` 에 모았다, 스키마 SQL 4개와 fixture 4개는 내용이 그대로다(rename 100%)
+- worker 의 과거 실수 되살리기: host 에서 `Store::mutate` 호출은 `E0624 method store is private`, host 에 rusqlite 는 `check-imports` 가 LibraryService 를 쓰라는 오류, `pub mod store` 는 compile_fail doctest 실패, 두 연결 중복 예약은 `two_connections_return_only_one_successful_claim` 실패(left 2, right 1), 새 `allow(dead_code)` 는 `check-lint-exceptions` 거절
+- rustdoc 은 `compile_fail,E9999` 처럼 틀린 오류 번호를 넣어도 통과했다(Rust 1.99.1), 오류 번호 대조에 기대지 않고 통과하는 짝 doctest 와 실제 우회 코드의 E0624 로 대조한다
+- 메인이 같은 worktree 에서 `make check-architecture`, `make lint`, `make test`(99개 통과, 실패 0)를 돌렸다, host `Cargo.toml` 에 hound 를 임시로 넣어 `check-imports` 가 "import hound in seamone-runtime; use seamone_runtime::LibraryService" 로 실패하는 것을 보고 되돌렸다
+- CI 에 새로 넣은 `actions/setup-python` 고정 SHA `ece7cb06` 는 실제 v6.3.0 태그다
+- `check-domain` 은 노트북 전역 Rust 에 `wasm32v1-none` 이 없어 실패했다, worker 가 레포 `.tmp/structure-checks/domain-sdk/` 에만 그 target 라이브러리를 받아 sysroot 로 통과시켰다, CI 의 domain job 은 `rustup target add` 로 받는다
+- 커밋 `b2d2990`(runtime 분리와 검사), `ce55aac`(README 와 AGENTS.md), draft PR #16 https://github.com/guny524/seamone/pull/16

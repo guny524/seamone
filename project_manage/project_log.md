@@ -259,3 +259,8 @@
 - Windows 패키지 작업이 Cargo의 UTF-8 출력을 시스템 문자 인코딩으로 읽던 문제를 수정했다. 실제 빌드 결과와 남은 설치 시험은 [앱 뼈대 이슈의 컴파일·패키지 검사](0001-2026_11_19-app_skeleton_ci/issue_board.md#7-18-컴파일과-패키지-단계의-의존-경계)에 있다
 - `3d82dec`에서 첫 전사의 보관함 갱신과 중복 요청 처리를 유지하며 새 IPC 명령을 연결했다. 기본 Rust 시험 88개(문서 시험 포함)와 Chrome 화면 시험 33개가 통과했다. 별도 기기에서 마이크로 녹음하고 모델을 선택해 전사하는 시험을 위해 PR은 초안으로 두었다. [첫 전사 초안 PR (#11)](https://github.com/guny524/seamone/pull/11) · [통합 커밋 CI](https://github.com/guny524/seamone/actions/runs/45582919461)
 - 첫 전사 초안의 GitHub 비교 범위를 `develop`에 맞췄다. 현재 커밋 `1cb09ec`와 검증 커밋 `3d82dec`는 Git 트리 `4f04a72`가 같다. GitHub의 PR 변경 목록에서도 첫 전사 파일 여섯 개를 확인했다
+
+## 2026-11-27 01:55 구조 검사 밤샘 실행의 첫 결과
+- 사용자 지시로 pstack 개념을 레포에 적용하는 밤샘 실행을 시작했다(이슈 #15, 지시 원문은 이슈 board 1절, 운영 방침은 이 board 3절)
+- worker 조사와 Opus 5.5 high 설계 검토를 거쳐 이번 밤 범위를 native 작업 crate 분리와 그 검사로 정했다(이슈 decision D1, D2)
+- `b2d2990`, `ce55aac` 를 draft [PR #16](https://github.com/guny524/seamone/pull/16) 에 올렸다, 메인이 `make check-architecture`, `make lint`, `make test`(99개) 통과를 확인했다, 자세한 근거는 이슈 log 2026-11-27 01:50
