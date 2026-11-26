@@ -61,31 +61,26 @@ class UnsafeBoundary(unittest.TestCase):
     def test_an_allowance_cannot_be_added_alongside_the_forgery(self):
         (self.root / 'evidence.rs').write_text('fn forge() { unsafe { read(p) } }')
         self.save(['capture.rs', 'evidence.rs'])
-        self.assertIn('new unsafe file allowance evidence.rs', self.errors())
+        self.assertIn('unreviewed snapshot addition', self.errors())
 
     def test_unknown_ref_missing_and_malformed_snapshot_fail_closed(self):
-        self.assertIn('cannot verify unsafe boundary', '\n'.join(check(self.root, 'missing-ref')))
+        self.assertIn('cannot read reviewed snapshot', '\n'.join(check(self.root, 'missing-ref')))
         self.git('rm', BASELINE)
-        self.assertIn('cannot verify unsafe boundary', self.errors())
+        self.assertIn('cannot read reviewed snapshot', self.errors())
         self.save(['capture.rs'])
         (self.root / BASELINE).write_text('{')
-        self.assertIn('cannot verify unsafe boundary', self.errors())
+        self.assertIn('cannot read reviewed snapshot', self.errors())
 
-    def test_bootstrap_uses_actual_base_code_and_rejects_new_allowances(self):
+    def test_missing_base_snapshot_cannot_bootstrap_from_the_source(self):
         self.git('rm', BASELINE)
         self.commit()
         self.save(['capture.rs'])
-        self.assertEqual(self.errors(), '')
-        self.save(['capture.rs', 'forged.rs'])
-        self.assertIn('new unsafe file allowance forged.rs', self.errors())
+        self.assertIn('cannot read reviewed snapshot', self.errors())
 
-    def test_a_git_recognized_move_keeps_the_existing_adapter_scope(self):
+    def test_a_file_move_needs_a_reviewed_base_allowance(self):
         self.git('mv', 'capture.rs', 'native.rs')
         self.save(['native.rs'])
-        self.assertEqual(self.errors(), '')
-        (self.root / 'capture.rs').write_text('fn capture() { unsafe { native(); } }')
-        self.save(['capture.rs', 'native.rs'])
-        self.assertIn('new unsafe file allowance', self.errors())
+        self.assertIn('unreviewed snapshot addition', self.errors())
 
     def test_removing_an_allowance_does_not_allow_remaining_unsafe(self):
         self.save([])

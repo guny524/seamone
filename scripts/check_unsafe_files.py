@@ -7,7 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from check_lint_exceptions import git, relocated
+from check_lint_exceptions import git
+from snapshot_baselines import errors as baseline_errors
 from rust_tokens import tokens
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -32,20 +33,9 @@ def allowed_files(source):
 
 def check(root, ref):
     try:
-        commit = git(root, 'rev-parse', '--verify', '--end-of-options', ref + '^{commit}').strip()
-        base_names = git(root, 'ls-tree', '-r', '--name-only', commit).splitlines()
-        if BASELINE in base_names:
-            previous = allowed_files(git(root, 'show', f'{commit}:{BASELINE}'))
-        else:
-            # Bootstrap only from actual base sources, never from the proposed allowlist.
-            previous = {name for name in base_names if name.endswith('.rs')
-                        and list(unsafe_lines(git(root, 'show', f'{commit}:{name}')))}
-        previous = {name for name, _ in relocated(root, commit, [[name, 'unsafe'] for name in previous])}
+        diagnostics = baseline_errors(root, BASELINE, ref)
         allowed = allowed_files((root / BASELINE).read_text(encoding='utf-8'))
         names = set(filter(None, git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\0')))
-        diagnostics = [f'{BASELINE} vs {ref}: new unsafe file allowance {name}; '
-                       'keep unsafe in existing native adapters, new allowances require base review'
-                       for name in sorted(allowed - previous)]
         for name in sorted(names):
             path = root / name
             if path.suffix != '.rs' or not path.is_file():
@@ -56,7 +46,7 @@ def check(root, ref):
                                    'do not forge playback authorization' for line in lines)
         return diagnostics
     except (OSError, subprocess.CalledProcessError, ValueError, KeyError, TypeError) as error:
-        return [f'{BASELINE}: cannot verify unsafe boundary at {ref}: {error}; fetch a readable base ref']
+        return diagnostics + [f'{BASELINE}: cannot verify unsafe boundary at {ref}: {error}; fetch a readable base ref']
 
 
 def main():

@@ -81,7 +81,7 @@ fn preview_and_error_mark_require_new_full_playback_for_correction() {
     assert!(service.review(&unchanged, Some(&full.token)).is_err());
     let corrected = service.review(&request, Some(&full.token)).unwrap();
     assert_eq!(corrected.range, segment.range);
-    assert_eq!(corrected.verified.unwrap().text, "고친 말");
+    assert_eq!(corrected.verified.unwrap().text(), "고친 말");
 }
 
 #[test]

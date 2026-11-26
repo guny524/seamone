@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from rust_tokens import tokens
+from snapshot_baselines import errors as baseline_errors
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT = Path(__file__).with_name("runtime_api.json")
@@ -88,6 +89,10 @@ def inventory():
 
 
 def main():
+    diagnostics = baseline_errors(ROOT, 'scripts/runtime_api.json')
+    if diagnostics:
+        print('\n'.join(diagnostics), file=sys.stderr)
+        return 1
     expected = json.loads(SNAPSHOT.read_text(encoding="utf-8"))["public"]
     try:
         actual = inventory()

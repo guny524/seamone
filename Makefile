@@ -18,7 +18,7 @@ TAURI_BUILD_ARGS ?=
 # 앱 껍데기 crate 는 컴파일할 때 화면 산출물 폴더가 있어야 한다, lint 와 test 는 화면을 빌드하지 않으므로 빈 폴더만 만든다.
 UI_DIST = app/ui/dist
 
-.PHONY: install install-ci-tools fmt lint lint-native lint-ios check-imports check-runtime-api check-unsafe check-research-deletions check-architecture check-domain check-lint-exceptions test build dev clean
+.PHONY: install install-ci-tools fmt lint lint-native lint-ios check-imports check-runtime-api check-unsafe check-review-writes test-snapshot-guards check-research-deletions check-architecture check-domain check-lint-exceptions test build dev clean
 
 install:
 	rustup toolchain install
@@ -44,30 +44,41 @@ check-runtime-api:
 check-unsafe:
 	$(PYTHON) scripts/check_unsafe_files.py
 
+check-review-writes:
+	$(PYTHON) scripts/check_review_writes.py
+
+# Unit tests also run while a newly requested baseline awaits review on develop.
+test-snapshot-guards:
+	$(PYTHON) scripts/test_snapshot_baselines.py
+	$(PYTHON) scripts/test_review_writes.py
+	$(PYTHON) scripts/test_unsafe_files.py
+
 check-research-deletions:
 	$(PYTHON) scripts/check_research_deletions.py
 	$(PYTHON) scripts/test_research_deletions.py
 
-check-architecture: check-imports check-lint-exceptions check-runtime-api check-unsafe check-research-deletions
+check-architecture: check-imports check-lint-exceptions check-runtime-api check-unsafe check-review-writes check-research-deletions
 	$(PYTHON) scripts/test_crate_boundaries.py
 	$(PYTHON) scripts/test_lint_exceptions.py
 	$(PYTHON) scripts/test_runtime_api.py
 	$(PYTHON) scripts/test_playback_boundary.py
 	$(PYTHON) scripts/test_unsafe_files.py
+	$(PYTHON) scripts/test_snapshot_baselines.py
+	$(PYTHON) scripts/test_review_writes.py
 
 check-domain:
 	cargo check --locked -p seamone-core --lib --target wasm32v1-none
 
-lint-native: check-imports check-lint-exceptions check-runtime-api check-unsafe
+lint-native: check-imports check-lint-exceptions check-runtime-api check-unsafe check-review-writes
 	mkdir -p $(UI_DIST)
 	cargo clippy --locked -p seamone -p seamone-runtime --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings
 
 # iOS target and SDK are prepared on the CI macOS runner, never installed by this target.
-lint-ios: check-imports check-lint-exceptions check-runtime-api check-unsafe
+lint-ios: check-imports check-lint-exceptions check-runtime-api check-unsafe check-review-writes
 	mkdir -p $(UI_DIST)
 	cargo clippy --locked -p seamone -p seamone-runtime --target aarch64-apple-ios-sim -- -D warnings
 
-lint: check-imports check-lint-exceptions check-runtime-api check-unsafe
+lint: check-imports check-lint-exceptions check-runtime-api check-unsafe check-review-writes
 	mkdir -p $(UI_DIST)
 	cargo fmt --all --check
 	node --check app/ui/tests/review.mjs

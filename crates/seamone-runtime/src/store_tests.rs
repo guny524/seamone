@@ -635,7 +635,7 @@ fn import_verify_reopen_exports_without_blocking_and_keeps_exact_snapshot() {
     )
     .unwrap();
     assert_eq!(
-        accepted.verified.as_ref().unwrap().source,
+        accepted.verified.as_ref().unwrap().source(),
         LabelSource::Accepted
     );
     assert_eq!(store.library(false).unwrap().pending_training, 1);
@@ -679,7 +679,7 @@ fn no_and_edits_are_not_labels_and_confirmation_is_invalidated_by_later_edits() 
     let example = store.next_job().unwrap().unwrap();
     assert_eq!(example.segment(), &confirmed);
     assert_eq!(
-        example.segment().verified.as_ref().unwrap().source,
+        example.segment().verified.as_ref().unwrap().source(),
         LabelSource::Corrected
     );
     let edited = mutate_after_playback(
@@ -1218,9 +1218,9 @@ fn one_listen_correction_atomically_stores_edited_text_and_verified_snapshot() {
     let saved = state.review(&action, Some(&playback.token)).unwrap();
     assert_eq!(saved.text, "한 번 듣고 고친 말 그대로");
     let label = saved.verified.as_ref().unwrap();
-    assert_eq!(label.text, saved.text);
-    assert_eq!(label.revision, saved.revision);
-    assert_eq!(label.source, LabelSource::Corrected);
+    assert_eq!(label.text(), saved.text);
+    assert_eq!(label.revision(), saved.revision);
+    assert_eq!(label.source(), LabelSource::Corrected);
     assert!(
         state
             .store()
@@ -1322,7 +1322,7 @@ fn unchanged_no_and_whitespace_edits_require_explicit_reset_then_binary_review()
     )
     .unwrap();
     assert!(store.eligible(&accepted.id, accepted.revision).is_ok());
-    assert_eq!(accepted.verified.unwrap().source, LabelSource::Accepted);
+    assert_eq!(accepted.verified.unwrap().source(), LabelSource::Accepted);
 }
 
 struct TestTrainer<F>(F);

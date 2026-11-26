@@ -598,7 +598,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        assert_eq!(confirmed.verified.unwrap().text, "수정 초안");
+        assert_eq!(confirmed.verified.unwrap().text(), "수정 초안");
         assert_eq!(
             invoke(
                 &window,
@@ -708,7 +708,7 @@ mod tests {
         let corrected: ReviewSegment =
             serde_json::from_value(invoke(&window, "save_review", correction).unwrap()).unwrap();
         assert_eq!(corrected.range, segment.range);
-        assert_eq!(corrected.verified.unwrap().text, "고친 말");
+        assert_eq!(corrected.verified.unwrap().text(), "고친 말");
     }
 
     #[test]

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from check_runtime_api import surface
 from rust_tokens import tokens
+from snapshot_baselines import errors as baseline_errors
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / 'crates/seamone-runtime/src/playback_evidence.rs'
@@ -63,6 +64,10 @@ def errors(actual, expected):
 
 
 def main():
+    diagnostics = baseline_errors(ROOT, 'scripts/playback_api.json')
+    if diagnostics:
+        print('\n'.join(diagnostics), file=sys.stderr)
+        return 1
     try:
         diagnostics = errors(declarations(SOURCE.read_text(encoding='utf-8')),
                              json.loads(SNAPSHOT.read_text(encoding='utf-8'))['declarations'])
