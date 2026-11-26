@@ -35,7 +35,8 @@
   - 바꾸는 범위: 이 레포 안만, `~/llms` 와 사용자 홈의 하네스 설정은 고치지 않는다, pstack 은 설치하지도 파일로 받지도 않는다(사용자)
   - 열린 초안 PR #11, #13, #14 는 worker 가 새 구조로 rebase 한다, 밤에는 lint 예외를 새로 달지 않는다(2026-11-27 사용자 답)
   - 밖으로 나가는 일: push, PR, develop merge, PR 댓글은 검사와 검토를 통과하면 한다, 메일과 Slack 은 보내지 않는다(기본값)
-  - 물을 것: 있음 3개
+  - 물을 것: 있음 4개
+    - [미답] 남은 우회를 어디까지 막을지: 네 번의 Pi 시험과 다섯 번의 Opus 검토에서 막을 때마다 다음 우회가 나왔다(이슈 log 05:46, 05:52), 지금은 재생 증거 없는 학습 후보와 공유 cache 삭제가 "사람 확인 필요" 관문까지 몰린다, 남은 것은 SQL 앞머리, authorizer 끄기, 다른 SQLite crate, `EligibleExample` 직접 만들기, 필수 check 범위다, 추천은 PR #18 을 사람이 검토해 merge 하고, 남은 것은 실제로 LLM 이 그 길로 실수한 기록이 생길 때 하나씩 막는 것(pstack `correct` 의 "두 번 나온 부류만 센다"), branch protection 에 필수 check(`guard-rules-review-trusted`, `base-guards`, `lint-test`, `domain`, `macos-native-lint`)를 거는 것은 레포 설정이라 사용자가 정한다
     - [미답] 밤사이 메인이 고정한 기준 목록 다섯 개(`scripts/lint_exceptions.json`, `runtime_api.json`, `playback_api.json`, `review_writes.json`, `unsafe_files.json`)를 사람이 확인할지: 이 목록이 PR base 의 "사람이 확인한 것" 기준이 되는데 밤에는 메인이 내용을 보고 넣었다, 추천은 아침에 다섯 목록을 훑어보고 이상 없으면 그대로 두는 것
     - [미답] 기존 lint 예외 15곳(develop 기준: 코드의 `#[expect]` 11곳, `Cargo.toml` 의 clippy allow 3곳, `research/pyproject.toml` 의 시험용 Ruff ignore 1곳, PR #16 이 들어가면 mobile 전용 인자 예외가 없어져 14곳, 처음에 13곳이라 한 것은 잘못 센 것)에 만료일과 사람 승인을 어떻게 달지: 이유는 이미 clippy 설정이 강제하고, pstack 은 예외마다 만료일과 사람 승인을 요구한다, 사람만 정할 수 있다, 추천은 아침에 사용자가 목록을 보고 한 번에 승인하고 만료일은 사용자가 정하는 것, 답이 없으면 새 예외만 거절하는 검사까지 만들고 완료라고 하지 않는다(이슈 #15 decision D2)
     - [미답] 재생을 끝까지 듣지 않고 확인하는 길을 막을지: 지금도(2acdfb0 이전부터) host 코드가 재생 시작 바로 뒤 재생 끝 알림을 보내면 듣지 않고 확인 전사가 되어 학습 후보가 된다, 막으려면 runtime 이 재생 토큰을 낸 시각과 구간 길이로 최소 경과 시간을 확인해야 하는데 검수 동작(PD13, PD14)이 바뀌어 사람이 정할 일이다, 추천은 이번 밤에는 하지 않고 다음 이슈 후보로 두는 것, 답이 없으면 문서에 남은 길이라고만 적는다(Opus 구현 검토 8번)
@@ -107,7 +108,7 @@
 ### #15 LLM 실수를 lint, build, compile 에서 거르게 폴더 구조와 검사를 바꾼다 (pstack 개념 적용)
 - 폴더: [0015-2026_11_27-pstack_structure_checks](0015-2026_11_27-pstack_structure_checks/issue_board.md), 상태: 진행, 2026-11-27 04:20 첫 단계 [PR #16](https://github.com/guny524/seamone/pull/16) 을 develop 에 merge 했다(`9ed37ed`), 검사 자체 지키기와 남은 우회는 `guny524/15-guard-integrity` 에서 한다
 - 실행 정보: worker Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(브랜치 `guny524/15-structure-checks`), handle `term_80ba4343-14c4-40db-9a12-24b2a7b7c5d0`, 마지막 turn 01:49, 보고 `.tmp/conductor/15-structure/`, Pi 시험 worktree `/Users/min-jo/orca/workspaces/seamone/15-pi-trap`(브랜치 `guny524/15-pi-trap`, push 하지 않고 확인 뒤 지운다), handle `term_41dcdadb-78c9-48e3-bc7f-83a203b8f0d0`
-- 다음 행동(2026-11-27 05:42): PR #18 에 10단계 `35f64ff` 를 올렸다(사람 확인 뒤 merge), Opus 마지막 검토와 Pi 재시험 4 를 기다린다, 06:52 마감 보고
+- 다음 행동(2026-11-27 05:52): 11단계(회귀와 과잉 검사, 06:30 까지)를 worker 가 한다, 06:52 마감 보고, PR #18 은 사람 확인 뒤 merge
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유

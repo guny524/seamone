@@ -173,3 +173,11 @@
 - 네 번의 시험 정리: Pi 의 가장 짧은 길은 host SQL(1차, 2단계 코드) -> runtime 새 함수와 Store 안 SQL(2차) -> 증거 module 안 새 함수와 목록 늘리기(3차) -> 증거 module 안 새 승인 종류와 정책 변경(4차)로 옮겨 갔다, 3차부터는 기계 검사가 우회를 "사람 확인 필요" 로 넘겼다, 남는 길은 검수 정책을 바꾸는 코드를 사람이 PR 에서 승인하는 것뿐이다
 - 판단: 이 레포에서 LLM 실수를 컴파일과 lint 로 거르는 것은 "재생 증거 없는 학습 후보" 와 "공유 cache 삭제" 에 대해 사람 확인 관문까지 왔다, 검수 정책 자체를 바꾸려는 변경은 기계가 막을 일이 아니라 사람이 정할 일이다(AGENTS.md 에 적힌 대로)
 - 보관: `.tmp/conductor/15-structure/pi-trap/t4-commits/`, `t4-arch-base.log`(이슈를 닫을 때 지운다)
+
+## 2026-11-27 05:52 Opus 의 10단계 마지막 검토와 11단계
+- Opus 5.5 high(세션 `6ade108f-e32e-4db3-aae7-b3fac825a002`): 앞 검토 11건 가운데 permit, push base, 뒤처진 PR, job 이름, 세 벌 프로그램, 매크로, `--cap-lints` 는 고쳐졌다, 따로 연결 열기와 `#[path]` 와 정상 CI 실패는 일부만 고쳐졌다
+- 새로 남은 것
+  - 회귀: research 의 `Path.replace` 금지가 풀렸다(10단계가 타입을 아는 값에만 금지를 걸어 `raw_cache_dir(..).replace(..)` 가 통과)
+  - 과잉: 커밋 없는 새 브랜치 push 와 사람이 승인해 merge 한 목록 변경 뒤의 develop push 가 빨갛게 된다, 준비된 문의 `execute`, `query_row` 를 동적 SQL 로 거절한다
+  - 우회: SQL 앞머리 낱말(`SAVEPOINT`)로 EXPLAIN 을 건너뛴다, `Batch`, `raw_execute`, authorizer 끄기, `ALTER TABLE ... RENAME` 으로 열과 표 이름 바꾸기, `<Connection>::open` 과 `type` alias 로 따로 열기, `cfg_attr(..., path = ...)`, runtime 에 다른 SQLite crate 더하기, 필수 check 가 `guard-rules-review-trusted` 하나뿐이라 다른 검사가 참고용이 됨, `EligibleExample::check` 가 pub 이라 학습 예시를 직접 만들 수 있음(이번 이슈 전부터)
+- 11단계(06:30 까지): 회귀와 과잉부터, 시간이 되면 authorizer, SQL 앞머리, `cfg_attr` path, 다른 SQLite crate 와 필수 check 목록과 `EligibleExample` 은 사람에게 올린다
