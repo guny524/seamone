@@ -108,3 +108,14 @@
 - 메인이 기준 목록 네 개의 내용(unsafe 허용 파일은 `capture.rs` 하나, 쓰기 허용 함수는 `Store::mutate`, 미검증 쓰기 허용은 `Store::commit_transcription` 과 `flag_overlapping_segments`, 공개 API 38개)을 보고 develop 에 `fdf16ac` 로 넣었다, 밤에는 메인이 고정했으므로 사람 확인을 물을 것에 올렸다
 - 메인이 실제 develop 기준으로 검사, lint, 시험 122개(실패 0) 통과를 확인했다, 8단계를 커밋하고 develop 위로 rebase 했다(중간 커밋의 기준 목록 add/add 충돌은 커밋 쪽 내용으로 풀었고 rebase 전후 코드 diff 0), PR HEAD `967c9c8`, merge 가능
 - Pi 재시험 3 을 `967c9c8` 에서 새 세션으로 시작했다, Opus 5.5 high 에게 6~8단계 검토를 맡겼다
+
+## 2026-11-27 04:03 Opus 의 6~8단계 검토와 CI 실패
+- Opus 5.5 high(세션 `2733a86a-3e84-48f0-9b7f-f638a891d1ab`) 결함 9건, 앞 네 건은 "한 파일만 고친 가장 짧은 길" 이 그대로 통과하는 우회다
+  - 검사 스크립트, Makefile, ci.yml 을 같은 PR 에서 고치면 검사가 꺼진다(lint 의존에서 한 줄 빼기, `LINT_BASE_REF=HEAD`), migration 목록이 검사 스크립트에 하드코딩돼 base 와 대조되지 않는다
+  - runtime 안 비공개 함수가 `issue` -> `ended` -> `authorize` 를 한 번에 부르면 목록 대조에 걸리지 않고 재생 없이 확인 전사가 생긴다
+  - `concat!` 으로 쪼갠 SQL, `Connection::execute(&tx, ..)` 경로 호출, 목록에 없는 rusqlite 메서드로 SQL 쓰기 검사를 피한다, trigger 로 승인 함수 밖에서 쓸 수 있다(추측)
+  - `Store::mutate` 안에서 재생이 필요 없는 요청에 확인 전사를 붙여도 통과한다
+  - 그 밖: unsafe 가 파일 단위라 `capture.rs` 안 위조, research 삭제 검사가 subprocess 와 HF cache 삭제 API 와 rename 을 못 봄, push 이벤트의 base 가 자기 자신, `origin/main` 에 기준 목록이 없어 develop -> main PR 이 늘 실패, Rust escape 로 검사 전체가 멈춤, 죽은 target, doctest 머리말 중복
+- 동작 변화와 약해진 시험은 없었다
+- PR CI run 45879419850 의 domain 과 lint-test 가 실패했다, CI 의 Python 3.12 에 든 SQLite 가 오래되어 `unixepoch()` 이 없어 `check-review-writes` 가 `store.rs:644` 등의 SQL 을 해석하지 못했다, 노트북 SQLite 는 새것이라 통과했다, 검사가 실행 환경의 SQLite 판에 기대는 결함이다, 패키지 빌드 run 45879419943 은 통과했다
+- 판단 [밤사이 결정]: PR #16 은 동작 변화와 약해진 시험이 없고 develop 보다 확실히 낫다, CI 를 고치면 develop 에 merge 하고 9건은 새 브랜치 `guny524/15-guard-integrity` 의 새 PR 에서 고친다, 그 PR 은 검사 파일을 고치므로 새로 넣는 "검사 파일이 바뀌면 사람이 확인" job 이 실패하는 것이 맞고 사람이 merge 한다
