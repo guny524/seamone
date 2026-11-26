@@ -1,0 +1,148 @@
+{
+  "description": "Existing suppressions in origin/develop (044b47d6f2ced621979cfa196f235f465c7f93e8); human approval and expiry remain unresolved. Additions and count increases are forbidden.",
+  "existing": [
+    [
+      "Cargo.toml",
+      "clippy.missing_errors_doc=allow"
+    ],
+    [
+      "Cargo.toml",
+      "clippy.missing_panics_doc=allow"
+    ],
+    [
+      "Cargo.toml",
+      "clippy.module_name_repetitions=allow"
+    ],
+    [
+      "app/src-tauri/src/audio_ingest.rs",
+      "#[expect( clippy::cast_precision_loss, reason = \"The decoder normalizes integer PCM to f32 before resampling to PCM16.\" )]"
+    ],
+    [
+      "app/src-tauri/src/audio_input_tests.rs",
+      "#[expect( clippy::cast_precision_loss, reason = \"The two fixture sample rates and frame indices fit exactly in f32.\" )]"
+    ],
+    [
+      "app/src-tauri/src/commands.rs",
+      "#[cfg_attr( not(desktop), expect( unused_variables, reason = \"Only desktop dialogs take a parent window.\" ) )]"
+    ],
+    [
+      "app/src-tauri/src/commands.rs",
+      "#[cfg_attr( not(mobile), expect( unused_variables, reason = \"Only mobile document URIs require the app filesystem plugin.\" ) )]"
+    ],
+    [
+      "app/src-tauri/src/normalize.rs",
+      "#[expect( clippy::cast_possible_truncation, reason = \"The channel mix accumulates in f64 and returns a normalized f32 sample.\" )]"
+    ],
+    [
+      "app/src-tauri/src/normalize.rs",
+      "#[expect( clippy::cast_possible_truncation, reason = \"The rounded sample is clamped to the i16 range before quantization.\" )]"
+    ],
+    [
+      "app/src-tauri/src/normalize.rs",
+      "#[expect( clippy::cast_precision_loss, clippy::cast_possible_truncation, reason = \"The validated input rate bounds the filter radius and the normalized coefficients are stored as f32.\" )]"
+    ],
+    [
+      "app/ui/src/spectrum.rs",
+      "#[expect( clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = \"FFT indices fit in f32 and the clamped intensity maps into a single color byte.\" )]"
+    ],
+    [
+      "app/ui/src/spectrum.rs",
+      "#[expect( clippy::cast_precision_loss, reason = \"Twiddle angles use indices bounded by the 512-sample FFT window.\" )]"
+    ],
+    [
+      "app/ui/src/timeline.rs",
+      "#[expect( clippy::cast_precision_loss, reason = \"Offsets within the 30-minute recording limit fit exactly in f64.\" )]"
+    ],
+    [
+      "crates/seamone-asr/src/speed.rs",
+      "#[expect( clippy::cast_precision_loss, reason = \"표본 수가 2^53 을 넘으려면 음성이 17만 시간을 넘어야 한다\" )]"
+    ],
+    [
+      "research/pyproject.toml",
+      "ruff.per-file-ignores={\"tests/*.py\": [\"PLR2004\", \"E501\"]}"
+    ]
+  ],
+  "configuration": {
+    "Cargo.toml": {
+      "lints": {},
+      "workspace.lints": {
+        "clippy": {
+          "all": {
+            "level": "warn",
+            "priority": -1
+          },
+          "pedantic": {
+            "level": "warn",
+            "priority": -1
+          },
+          "missing_errors_doc": "allow",
+          "missing_panics_doc": "allow",
+          "module_name_repetitions": "allow",
+          "allow_attributes": "deny",
+          "allow_attributes_without_reason": "deny",
+          "undocumented_unsafe_blocks": "deny"
+        }
+      }
+    },
+    "app/src-tauri/Cargo.toml": {
+      "lints": {
+        "workspace": true
+      },
+      "workspace.lints": {}
+    },
+    "app/ui/Cargo.toml": {
+      "lints": {
+        "workspace": true
+      },
+      "workspace.lints": {}
+    },
+    "crates/seamone-asr/Cargo.toml": {
+      "lints": {
+        "workspace": true
+      },
+      "workspace.lints": {}
+    },
+    "crates/seamone-core/Cargo.toml": {
+      "lints": {
+        "workspace": true
+      },
+      "workspace.lints": {}
+    },
+    "research/pyproject.toml": {
+      "select": [
+        "E",
+        "W",
+        "F",
+        "I",
+        "C90",
+        "N",
+        "UP",
+        "B",
+        "A",
+        "C4",
+        "SIM",
+        "PLR",
+        "PLW",
+        "RUF"
+      ],
+      "mccabe": {
+        "max-complexity": 15
+      },
+      "pylint": {
+        "max-args": 8,
+        "max-statements": 50
+      },
+      "per-file-ignores": {
+        "tests/*.py": [
+          "PLR2004",
+          "E501"
+        ]
+      }
+    }
+  },
+  "clippy_commands": [
+    "cargo clippy --locked -p seamone --all-targets $(CARGO_FEATURE_ARGS) -- -D warnings",
+    "cargo clippy --workspace --all-targets $(CARGO_FEATURE_ARGS) -- -D warnings",
+    "cargo clippy -p seamone-core -p seamone-ui --target wasm32-unknown-unknown -- -D warnings"
+  ]
+}
