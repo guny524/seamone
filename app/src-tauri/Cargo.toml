@@ -15,7 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = []
-desktop-whisper = ["seamone-asr/whisper"]
+desktop-whisper = ["seamone-runtime/desktop-whisper"]
 
 [build-dependencies]
 seamone-core.workspace = true
@@ -23,33 +23,18 @@ tauri-build = { version = "2.7.6", features = [] }
 
 [dependencies]
 seamone-core.workspace = true
-seamone-asr = { path = "../../crates/seamone-asr" }
+seamone-runtime = { path = "../../crates/seamone-runtime" }
 serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
-rusqlite = { version = "0.39", features = ["bundled", "fallible_uint"] }
-hound = "3.5.1"
-tempfile = "3"
-symphonia = { version = "0.5.5", default-features = false, features = ["aac", "isomp4", "mp3"] }
-uuid = { version = "1.23", features = ["v4"] }
-base64 = "0.22"
-sha2 = "0.10"
 tauri-plugin-dialog = "2.8.4"
 tauri-plugin-clipboard-manager = "2"
 tauri = { version = "2.12.7", features = [] }
-
-[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
-cpal = "0.15.3"
-rtrb = "0.3"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-block2 = "0.6"
-objc2 = "0.6"
-objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-fs = "2.7.1"
 
 [dev-dependencies]
+tempfile = "3"
 # 시험에서 mock runtime 으로 등록된 command 에 IPC 요청을 보낸다
 tauri = { version = "2.12.7", features = ["test"] }
 

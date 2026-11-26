@@ -8,8 +8,8 @@ use std::{fs, io::Cursor, path::PathBuf};
 use uuid::Uuid;
 
 pub(crate) struct Fixture {
-    root: PathBuf,
-    source: PathBuf,
+    pub(crate) root: PathBuf,
+    pub(crate) source: PathBuf,
 }
 impl Fixture {
     pub(crate) fn new() -> Self {
@@ -868,7 +868,7 @@ fn after_listening_a_changed_source_can_be_rejected_but_cannot_be_accepted() {
     let fixture = Fixture::new();
     let (store, segment) = fixture.transcribed();
     let path = store.audio.existing_path(&segment.recording_id).unwrap();
-    let state = crate::commands::AppState::new(store);
+    let state = crate::LibraryService::new(store);
     let playback = state.playback(&segment.id, segment.revision).unwrap();
     let yes = request(
         &segment,
@@ -911,7 +911,7 @@ fn neither_correction_can_confirm_a_changed_recording_with_completed_playback() 
     let fixture = Fixture::new();
     let (store, segment) = fixture.transcribed();
     let path = store.audio.existing_path(&segment.recording_id).unwrap();
-    let state = crate::commands::AppState::new(store);
+    let state = crate::LibraryService::new(store);
     let draft = state
         .review(
             &request(
@@ -1020,7 +1020,8 @@ fn two_connections_return_only_one_successful_claim() {
             .into_iter()
             .filter_map(|h| h.join().unwrap())
             .count(),
-        1
+        1,
+        "store::Store::next_job에서 확인된 revision의 claim을 한 연결만 획득해야 한다"
     );
 }
 
@@ -1114,7 +1115,7 @@ fn inference_commit_is_atomic_even_for_a_silent_zero_segment_result() {
 
 #[test]
 fn one_listen_correction_atomically_stores_edited_text_and_verified_snapshot() {
-    use crate::commands::AppState;
+    use crate::LibraryService;
     let f = Fixture::new();
     let (mut store, s) = f.transcribed();
     let rejected = store
@@ -1125,7 +1126,7 @@ fn one_listen_correction_atomically_stores_edited_text_and_verified_snapshot() {
             },
         ))
         .unwrap();
-    let state = AppState::new(store);
+    let state = LibraryService::new(store);
     let playback = state.playback(&rejected.id, rejected.revision).unwrap();
     state.playback_ended(&playback.token).unwrap();
     let action = request(
@@ -1322,14 +1323,14 @@ fn foreground_work_defers_a_candidate_and_source_failure_is_retryable() {
 #[test]
 #[ignore = "requires offline official Whisper small model and a public Korean WAV"]
 fn real_desktop_path() {
-    use crate::{commands::AppState, inference};
+    use crate::{LibraryService, inference};
     let f = Fixture::new();
     let model =
         PathBuf::from(std::env::var("SEAMONE_WHISPER_MODEL").expect("SEAMONE_WHISPER_MODEL"));
     let wav = PathBuf::from(std::env::var("SEAMONE_TEST_WAV").expect("SEAMONE_TEST_WAV"));
     let mut store = f.store();
     let info = store.import(&wav).unwrap();
-    let state = AppState::new(store);
+    let state = LibraryService::new(store);
     inference::select(&state, &model).unwrap();
     let segments = inference::transcribe(&state, &info.id).unwrap();
     assert_ne!(segments, Vec::<ReviewSegment>::new());
@@ -1415,7 +1416,7 @@ fn real_desktop_path() {
     {
         let selected = f.root.join("selected-model.bin");
         std::os::unix::fs::symlink(&model, &selected).unwrap();
-        let state = AppState::new(f.store());
+        let state = LibraryService::new(f.store());
         inference::select(&state, &selected).unwrap();
         fs::remove_file(&selected).unwrap();
         fs::write(&selected, b"replaced model bytes").unwrap();

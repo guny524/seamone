@@ -1,0 +1,37 @@
+[package]
+name = "seamone-runtime"
+description = "기기 내 녹음, 전사, 검수 증거와 보관함의 단일 작업 경계"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+desktop-whisper = ["seamone-asr/whisper"]
+
+[dependencies]
+seamone-core.workspace = true
+seamone-asr = { path = "../seamone-asr" }
+serde = { workspace = true, features = ["std"] }
+serde_json.workspace = true
+rusqlite = { version = "0.39", features = ["bundled", "fallible_uint"] }
+hound = "3.5.1"
+tempfile = "3"
+symphonia = { version = "0.5.5", default-features = false, features = ["aac", "isomp4", "mp3"] }
+uuid = { version = "1.23", features = ["v4"] }
+base64 = "0.22"
+sha2 = "0.10"
+
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
+cpal = "0.15.3"
+rtrb = "0.3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+
+[lints]
+workspace = true

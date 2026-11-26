@@ -11,12 +11,14 @@ CARGO_FEATURES ?=
 PYTHON ?= $(if $(filter Windows_NT,$(OS)),python,python3)
 TEST_PATTERN ?=
 CARGO_FEATURE_ARGS = $(if $(CARGO_FEATURES),--features $(CARGO_FEATURES))
+# workspace 전체에서 feature를 직접 켜면 host -> runtime 전달 누락이 가려진다.
+WORKSPACE_FEATURE_ARGS = $(if $(CARGO_FEATURES),--features $(patsubst desktop-whisper,seamone/desktop-whisper,$(CARGO_FEATURES)))
 TAURI_BUILD_ARGS ?=
 
 # 앱 껍데기 crate 는 컴파일할 때 화면 산출물 폴더가 있어야 한다, lint 와 test 는 화면을 빌드하지 않으므로 빈 폴더만 만든다.
 UI_DIST = app/ui/dist
 
-.PHONY: install install-ci-tools fmt lint lint-native check-imports check-architecture check-domain test build dev clean
+.PHONY: install install-ci-tools fmt lint lint-native check-imports check-architecture check-domain check-lint-exceptions test build dev clean
 
 install:
 	rustup toolchain install
@@ -32,26 +34,30 @@ fmt:
 check-imports:
 	$(PYTHON) scripts/check_crate_boundaries.py
 
-check-architecture: check-imports
+check-lint-exceptions:
+	$(PYTHON) scripts/check_lint_exceptions.py
+
+check-architecture: check-imports check-lint-exceptions
 	$(PYTHON) scripts/test_crate_boundaries.py
+	$(PYTHON) scripts/test_lint_exceptions.py
 
 check-domain:
 	cargo check --locked -p seamone-core --lib --target wasm32v1-none
 
-lint-native:
+lint-native: check-imports check-lint-exceptions
 	mkdir -p $(UI_DIST)
-	cargo clippy --locked -p seamone --all-targets $(CARGO_FEATURE_ARGS) -- -D warnings
+	cargo clippy --locked -p seamone -p seamone-runtime --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings
 
-lint: check-imports
+lint: check-imports check-lint-exceptions
 	mkdir -p $(UI_DIST)
 	cargo fmt --all --check
 	node --check app/ui/tests/review.mjs
-	cargo clippy --workspace --all-targets $(CARGO_FEATURE_ARGS) -- -D warnings
+	cargo clippy --workspace --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings
 	cargo clippy -p seamone-core -p seamone-ui --target wasm32-unknown-unknown -- -D warnings
 
 test:
 	mkdir -p $(UI_DIST)
-	cargo test --workspace $(CARGO_FEATURE_ARGS) $(TEST_PATTERN)
+	cargo test --workspace $(WORKSPACE_FEATURE_ARGS) $(TEST_PATTERN)
 
 .PHONY: check-macos-dmg
 check-macos-dmg:
@@ -81,4 +87,4 @@ site-preview:
 .PHONY: desktop-proof
 desktop-proof:
 	mkdir -p $(UI_DIST)
-	cargo test -p seamone --features desktop-whisper real_desktop_path -- --ignored --nocapture
+	cargo test -p seamone-runtime --features desktop-whisper real_desktop_path -- --ignored --nocapture

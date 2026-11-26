@@ -10,14 +10,20 @@ WORKSPACE_IMPORTS = {
     "seamone-core": set(),
     "seamone-ui": {"seamone-core"},
     "seamone-asr": {"seamone-core"},
-    "seamone": {"seamone-core", "seamone-asr"},
+    "seamone-runtime": {"seamone-core", "seamone-asr"},
+    "seamone": {"seamone-core", "seamone-runtime"},
 }
 
 # Libraries that implement these adapters belong to their respective crates.
 ADAPTER_OWNERS = {
-    "cpal": "seamone",
-    "rusqlite": "seamone",
-    "symphonia": "seamone",
+    "cpal": "seamone-runtime",
+    "rusqlite": "seamone-runtime",
+    "symphonia": "seamone-runtime",
+    "hound": "seamone-runtime",
+    "rtrb": "seamone-runtime",
+    "block2": "seamone-runtime",
+    "objc2": "seamone-runtime",
+    "objc2-av-foundation": "seamone-runtime",
     "tauri": "seamone",
     "whisper-rs": "seamone-asr",
     "leptos": "seamone-ui",
@@ -40,7 +46,7 @@ def violations(packages):
             context = f"{manifest}: {name} -> {target} ({kind}, {dep['target'] or 'all targets'})"
             if target in members or dep.get("path"):
                 if target not in WORKSPACE_IMPORTS[name]:
-                    yield f"{context}: use the shared domain or move adapter work to its owner"
+                    yield f"{context}: use seamone_runtime::LibraryService in the host, or the shared domain in other crates"
                 elif not dep.get("path") or Path(dep["path"]) != members.get(target):
                     yield f"{context}: depend on the workspace copy of {target}"
                 continue
@@ -49,10 +55,15 @@ def violations(packages):
                     yield f"{context}: keep the domain free of adapters and build-time I/O"
                 continue
             owner = ADAPTER_OWNERS.get(target)
+            if name == "seamone-ui" and target == "hound":
+                # The WASM player decodes the WAV returned by the runtime; it does not own files.
+                continue
+            if target.startswith("objc2-"):
+                owner = "seamone-runtime"
             if target.startswith("tauri-"):
                 owner = "seamone"
             if owner and owner != name:
-                yield f"{context}: import {target} in {owner} and use the existing crate or IPC interface"
+                yield f"{context}: import {target} in {owner}; use seamone_runtime::LibraryService for native work and IPC from the UI"
 
 
 def main():

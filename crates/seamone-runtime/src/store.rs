@@ -1,6 +1,7 @@
 //! A single versioned database owns edits, verification snapshots and the durable work queue.
 use crate::audio::{AudioLibrary, StagedAudio};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+#[cfg(test)]
 use seamone_asr::Transcriber;
 use seamone_core::error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage, overlaps};
 use seamone_core::review::{
@@ -110,6 +111,7 @@ impl Store {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn import(&mut self, source: &Path) -> Result<RecordingInfo, String> {
         let input = self.audio.open_source(source)?;
         let mut audio = crate::audio_ingest::decode(&self.audio, input)?;
@@ -162,6 +164,7 @@ impl Store {
         decode(&text)
     }
 
+    #[cfg(test)]
     pub fn transcribe(
         &mut self,
         id: &str,
@@ -176,6 +179,13 @@ impl Store {
         self.commit_transcription(&info, segments, engine_name, model)
     }
 
+    #[cfg(any(
+        test,
+        all(
+            feature = "desktop-whisper",
+            not(any(target_os = "android", target_os = "ios"))
+        )
+    ))]
     pub fn prepare_transcription(&self, id: &str) -> Result<(RecordingInfo, Vec<f32>), String> {
         let info = self.recording(id)?;
         let state: String = self
@@ -192,6 +202,13 @@ impl Store {
         Ok((info, self.audio.read_all(id)?))
     }
 
+    #[cfg(any(
+        test,
+        all(
+            feature = "desktop-whisper",
+            not(any(target_os = "android", target_os = "ios"))
+        )
+    ))]
     pub fn commit_transcription(
         &mut self,
         info: &RecordingInfo,

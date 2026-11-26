@@ -3995,27 +3995,16 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 name = "seamone"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
- "block2",
- "cpal",
- "hound",
- "objc2",
- "objc2-av-foundation",
- "rtrb",
- "rusqlite",
- "seamone-asr",
  "seamone-core",
+ "seamone-runtime",
  "serde",
  "serde_json",
- "sha2 0.10.9",
- "symphonia",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tempfile",
- "uuid",
 ]
 
 [[package]]
@@ -4034,6 +4023,28 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "seamone-runtime"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "block2",
+ "cpal",
+ "hound",
+ "objc2",
+ "objc2-av-foundation",
+ "rtrb",
+ "rusqlite",
+ "seamone-asr",
+ "seamone-core",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "symphonia",
+ "tempfile",
+ "uuid",
 ]
 
 [[package]]

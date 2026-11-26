@@ -11,7 +11,7 @@ use std::sync::{
 ///
 /// ```
 /// use seamone_core::review::EligibleExample;
-/// use seamone_lib::training::LocalTrainer;
+/// use seamone_runtime::LocalTrainer;
 ///
 /// fn train(trainer: &mut dyn LocalTrainer, example: &EligibleExample, audio: &[f32]) {
 ///     let _ = trainer.train(example, audio);
@@ -20,7 +20,7 @@ use std::sync::{
 ///
 /// ```compile_fail,E0308
 /// use seamone_core::review::ReviewSegment;
-/// use seamone_lib::training::LocalTrainer;
+/// use seamone_runtime::LocalTrainer;
 ///
 /// fn train(trainer: &mut dyn LocalTrainer, draft: &ReviewSegment, audio: &[f32]) {
 ///     let _ = trainer.train(draft, audio);
