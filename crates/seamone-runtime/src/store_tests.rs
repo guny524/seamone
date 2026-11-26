@@ -53,6 +53,15 @@ fn request(segment: &ReviewSegment, action: ReviewAction) -> ReviewRequest {
     }
 }
 
+fn authorize(request: &ReviewRequest) -> crate::playback_evidence::AuthorizedReview<'_> {
+    let playbacks = crate::playback_evidence::Playbacks::default();
+    let token = playbacks
+        .begin(&request.segment_id, request.expected_revision)
+        .unwrap();
+    playbacks.ended(&token).unwrap();
+    playbacks.authorize(request, Some(&token)).unwrap()
+}
+
 #[test]
 fn saved_error_marks_reopen_and_flag_only_overlapping_rows_without_relabeling() {
     use seamone_core::TranscriptSegment;
@@ -79,20 +88,20 @@ fn saved_error_marks_reopen_and_flag_only_overlapping_rows_without_relabeling() 
         )
         .unwrap();
     let checked = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &original[0],
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     let draft = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &original[1],
             ReviewAction::SaveDraft {
                 text: "수정 초안".into(),
             },
-        ))
+        )))
         .unwrap();
 
     let mark = ErrorMark {
@@ -161,12 +170,12 @@ fn batch_rolls_back_all_ranges_and_same_id_retries_once() {
     let f = Fixture::new();
     let (mut store, segment) = f.transcribed();
     let checked = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &segment,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     let zero_and_one = SampleRange {
         start: 0,
@@ -269,7 +278,7 @@ fn remarking_dismissed_audio_refreshes_review_without_duplicate_sample_rows() {
     store.save_error_marks(&batch).unwrap();
     let marked = store.segment(&segment.id).unwrap();
     let dismissed = store
-        .mutate(&request(&marked, ReviewAction::DismissErrorMark))
+        .mutate(authorize(&request(&marked, ReviewAction::DismissErrorMark)))
         .unwrap();
     store.save_error_marks(&batch).unwrap();
     assert_eq!(store.segment(&segment.id).unwrap(), dismissed);
@@ -362,12 +371,12 @@ fn mark_migration_preserves_verified_data_and_rejects_stale_or_invalid_inputs() 
     let f = Fixture::new();
     let (mut store, segment) = f.transcribed();
     let checked = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &segment,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     let pending = store.import(&f.source).unwrap();
     drop(store);
@@ -421,12 +430,12 @@ fn error_mark_blocks_unchanged_latest_text_after_draft_save_and_reopen() {
     let f = Fixture::new();
     let (mut store, segment) = f.transcribed();
     let edited = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &segment,
             ReviewAction::SaveDraft {
                 text: "표시 당시수정한 글".into(),
             },
-        ))
+        )))
         .unwrap();
     let mark = ErrorMark {
         id: Uuid::new_v4().to_string(),
@@ -446,44 +455,49 @@ fn error_mark_blocks_unchanged_latest_text_after_draft_save_and_reopen() {
         },
     ] {
         assert_eq!(
-            store.mutate(&request(&marked, action)).unwrap_err(),
+            store
+                .mutate(authorize(&request(&marked, action)))
+                .unwrap_err(),
             seamone_core::review::ReviewError::UnchangedErrorMarked.to_string(),
         );
     }
     let draft = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &marked,
             ReviewAction::SaveDraft {
                 text: "  표시 당시수정한 글  ".into(),
             },
-        ))
+        )))
         .unwrap();
     drop(store);
     let mut store = f.store();
     assert!(
         store
-            .mutate(&request(&draft, ReviewAction::ConfirmCorrection))
+            .mutate(authorize(&request(&draft, ReviewAction::ConfirmCorrection)))
             .is_err()
     );
     let changed_draft = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &draft,
             ReviewAction::SaveDraft {
                 text: "표시 당시 수정한 글".into(),
             },
-        ))
+        )))
         .unwrap();
     assert!(
         store
-            .mutate(&request(
+            .mutate(authorize(&request(
                 &changed_draft,
                 ReviewAction::CorrectAndConfirm { text: edited.text }
-            ))
+            )))
             .is_err()
     );
     assert_eq!(store.library(false).unwrap().pending_training, 0);
     let confirmed = store
-        .mutate(&request(&changed_draft, ReviewAction::ConfirmCorrection))
+        .mutate(authorize(&request(
+            &changed_draft,
+            ReviewAction::ConfirmCorrection,
+        )))
         .unwrap();
     assert!(store.eligible(&confirmed.id, confirmed.revision).is_ok());
 }
@@ -505,12 +519,12 @@ fn dismissing_a_repeated_error_mark_preserves_draft_and_original_ranges() {
     let marked = store.segment(&segment.id).unwrap();
     assert!(marked.needs_review());
     let draft = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &marked,
             ReviewAction::SaveDraft {
                 text: "사용자가 고친 글".into(),
             },
-        ))
+        )))
         .unwrap();
     let second = ErrorMark {
         id: "second".into(),
@@ -530,12 +544,18 @@ fn dismissing_a_repeated_error_mark_preserves_draft_and_original_ranges() {
     );
     assert!(
         store
-            .mutate(&request(&remarked, ReviewAction::ConfirmCorrection))
+            .mutate(authorize(&request(
+                &remarked,
+                ReviewAction::ConfirmCorrection
+            )))
             .is_err()
     );
 
     let dismissed = store
-        .mutate(&request(&remarked, ReviewAction::DismissErrorMark))
+        .mutate(authorize(&request(
+            &remarked,
+            ReviewAction::DismissErrorMark,
+        )))
         .unwrap();
     store.save_error_mark(&second).unwrap();
     drop(store);
@@ -597,12 +617,12 @@ fn import_verify_reopen_exports_without_blocking_and_keeps_exact_snapshot() {
     assert!(store.eligible(&segment.id, 1).is_err());
     assert_eq!(store.library(false).unwrap().pending_training, 0);
     let accepted = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &segment,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     assert_eq!(
         accepted.verified.as_ref().unwrap().source,
@@ -620,25 +640,25 @@ fn no_and_edits_are_not_labels_and_confirmation_is_invalidated_by_later_edits() 
     let f = Fixture::new();
     let (mut store, segment) = f.transcribed();
     let rejected = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &segment,
             ReviewAction::Judge {
                 verdict: Verdict::No,
             },
-        ))
+        )))
         .unwrap();
     assert!(store.next_job().unwrap().is_none());
     let draft = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &rejected,
             ReviewAction::SaveDraft {
                 text: "네 안녕하십니까".into(),
             },
-        ))
+        )))
         .unwrap();
     assert!(store.next_job().unwrap().is_none());
     let confirmed = store
-        .mutate(&request(&draft, ReviewAction::ConfirmCorrection))
+        .mutate(authorize(&request(&draft, ReviewAction::ConfirmCorrection)))
         .unwrap();
     let example = store.next_job().unwrap().unwrap();
     assert_eq!(example.segment(), &confirmed);
@@ -647,12 +667,12 @@ fn no_and_edits_are_not_labels_and_confirmation_is_invalidated_by_later_edits() 
         LabelSource::Corrected
     );
     let edited = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &confirmed,
             ReviewAction::SaveDraft {
                 text: "회의 요약 초안".into(),
             },
-        ))
+        )))
         .unwrap();
     assert!(store.publish(&example, "candidate").is_err());
     assert!(store.eligible(&edited.id, edited.revision).is_err());
@@ -672,23 +692,23 @@ fn replay_is_idempotent_and_stale_or_colliding_events_fail() {
             verdict: Verdict::Yes,
         },
     );
-    let accepted = store.mutate(&req).unwrap();
-    assert_eq!(store.mutate(&req).unwrap(), accepted);
+    let accepted = store.mutate(authorize(&req)).unwrap();
+    assert_eq!(store.mutate(authorize(&req)).unwrap(), accepted);
     assert_eq!(store.library(false).unwrap().pending_training, 1);
     let mut collision = req.clone();
     collision.action = ReviewAction::Judge {
         verdict: Verdict::No,
     };
-    assert!(store.mutate(&collision).is_err());
+    assert!(store.mutate(authorize(&collision)).is_err());
     let mut second = f.store();
     assert!(
         second
-            .mutate(&request(
+            .mutate(authorize(&request(
                 &segment,
                 ReviewAction::SaveDraft {
                     text: "오래된 수정".into()
                 }
-            ))
+            )))
             .unwrap_err()
             .contains("다른 수정본")
     );
@@ -703,12 +723,12 @@ fn queue_and_verified_snapshot_roll_back_together() {
     other.execute_batch("CREATE TRIGGER fail_queue BEFORE INSERT ON training_queue BEGIN SELECT RAISE(ABORT, 'disk full simulation'); END;").unwrap();
     assert!(
         store
-            .mutate(&request(
+            .mutate(authorize(&request(
                 &segment,
                 ReviewAction::Judge {
                     verdict: Verdict::Yes
                 }
-            ))
+            )))
             .is_err()
     );
     assert_eq!(store.segment(&segment.id).unwrap(), segment);
@@ -720,12 +740,12 @@ fn pending_queue_recovers_and_publication_rechecks_source() {
     let f = Fixture::new();
     let (mut store, segment) = f.transcribed();
     let accepted = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &segment,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     store.next_job().unwrap().unwrap();
     drop(store);
@@ -789,12 +809,12 @@ fn modified_audio_prevents_confirmation_and_training() {
     let f = Fixture::new();
     let (mut store, segment) = f.transcribed();
     let accepted = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &segment,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     fs::write(
         store.audio.existing_path(&segment.recording_id).unwrap(),
@@ -810,21 +830,21 @@ fn identical_save_preserves_verification_and_claimed_job() {
     let f = Fixture::new();
     let (mut store, s) = f.transcribed();
     let accepted = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &s,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     let example = store.next_job().unwrap().unwrap();
     let saved = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &accepted,
             ReviewAction::SaveDraft {
                 text: accepted.text.clone(),
             },
-        ))
+        )))
         .unwrap();
     assert_eq!(saved, accepted);
     store.publish(&example, "candidate").unwrap();
@@ -837,27 +857,30 @@ fn edited_and_invalidated_segments_remain_in_correction_workflow() {
     let f = Fixture::new();
     let (mut store, s) = f.transcribed();
     let draft = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &s,
             ReviewAction::SaveDraft {
                 text: "수정한 글".into(),
             },
-        ))
+        )))
         .unwrap();
     assert_eq!(draft.verdict, None, "편집은 No 판정을 만들지 않는다");
     let invalidated = store
-        .mutate(&request(&draft, ReviewAction::Invalidate))
+        .mutate(authorize(&request(&draft, ReviewAction::Invalidate)))
         .unwrap();
     assert!(invalidated.needs_correction);
     let mut flow = ReviewFlow::default();
     flow.start(ReviewMode::Correction, std::slice::from_ref(&invalidated));
     assert_eq!(flow.remaining(), 1);
     let confirmed = store
-        .mutate(&request(&invalidated, ReviewAction::ConfirmCorrection))
+        .mutate(authorize(&request(
+            &invalidated,
+            ReviewAction::ConfirmCorrection,
+        )))
         .unwrap();
     assert!(store.eligible(&confirmed.id, confirmed.revision).is_ok());
     let invalidated = store
-        .mutate(&request(&confirmed, ReviewAction::Invalidate))
+        .mutate(authorize(&request(&confirmed, ReviewAction::Invalidate)))
         .unwrap();
     flow.start(ReviewMode::Correction, &[invalidated]);
     assert_eq!(flow.remaining(), 1);
@@ -948,12 +971,12 @@ fn unreadable_source_is_retryable_and_recovers_without_reconfirming() {
     let f = Fixture::new();
     let (mut store, s) = f.transcribed();
     let saved = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &s,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     let path = store.audio.existing_path(&s.recording_id).unwrap();
     let bytes = fs::read(&path).unwrap();
@@ -976,12 +999,12 @@ fn another_store_cannot_reset_or_publish_an_active_claim() {
     let f = Fixture::new();
     let (mut first, s) = f.transcribed();
     first
-        .mutate(&request(
+        .mutate(authorize(&request(
             &s,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     let example = first.next_job().unwrap().unwrap();
     let mut second = f.store();
@@ -996,12 +1019,12 @@ fn two_connections_return_only_one_successful_claim() {
     let f = Fixture::new();
     let (mut store, s) = f.transcribed();
     store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &s,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     let barrier = Arc::new(Barrier::new(2));
     let handles = (0..2)
@@ -1045,7 +1068,7 @@ fn concurrent_updates_and_replayed_events_use_durable_cas() {
             std::thread::spawn(move || {
                 let mut store = Store::open(&root).unwrap();
                 barrier.wait();
-                store.mutate(&req).unwrap()
+                store.mutate(authorize(&req)).unwrap()
             })
         })
         .collect::<Vec<_>>();
@@ -1063,9 +1086,14 @@ fn concurrent_updates_and_replayed_events_use_durable_cas() {
             text: "먼저 저장".into(),
         },
     );
-    first.mutate(&next).unwrap();
+    first.mutate(authorize(&next)).unwrap();
     let stale = request(&saved[0], ReviewAction::Invalidate);
-    assert!(second.mutate(&stale).unwrap_err().contains("다른 수정본"));
+    assert!(
+        second
+            .mutate(authorize(&stale))
+            .unwrap_err()
+            .contains("다른 수정본")
+    );
 }
 
 #[test]
@@ -1119,12 +1147,12 @@ fn one_listen_correction_atomically_stores_edited_text_and_verified_snapshot() {
     let f = Fixture::new();
     let (mut store, s) = f.transcribed();
     let rejected = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &s,
             ReviewAction::Judge {
                 verdict: Verdict::No,
             },
-        ))
+        )))
         .unwrap();
     let state = LibraryService::new(store);
     let playback = state.playback(&rejected.id, rejected.revision).unwrap();
@@ -1182,44 +1210,44 @@ fn unchanged_no_and_whitespace_edits_require_explicit_reset_then_binary_review()
     let f = Fixture::new();
     let (mut store, s) = f.transcribed();
     let no = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &s,
             ReviewAction::Judge {
                 verdict: Verdict::No,
             },
-        ))
+        )))
         .unwrap();
     assert!(
         store
-            .mutate(&request(&no, ReviewAction::ConfirmCorrection))
+            .mutate(authorize(&request(&no, ReviewAction::ConfirmCorrection)))
             .is_err()
     );
     assert!(
         store
-            .mutate(&request(
+            .mutate(authorize(&request(
                 &no,
                 ReviewAction::CorrectAndConfirm {
                     text: format!("  {} \n", no.machine_text)
                 }
-            ))
+            )))
             .is_err()
     );
     assert_eq!(store.library(false).unwrap().pending_training, 0);
     let draft = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &no,
             ReviewAction::SaveDraft {
                 text: format!(" {} ", no.machine_text),
             },
-        ))
+        )))
         .unwrap();
     assert!(
         store
-            .mutate(&request(&draft, ReviewAction::ConfirmCorrection))
+            .mutate(authorize(&request(&draft, ReviewAction::ConfirmCorrection)))
             .is_err()
     );
     let reset = store
-        .mutate(&request(&draft, ReviewAction::Invalidate))
+        .mutate(authorize(&request(&draft, ReviewAction::Invalidate)))
         .unwrap();
     assert_eq!(reset.verdict, None);
     assert!(!reset.needs_correction);
@@ -1227,12 +1255,12 @@ fn unchanged_no_and_whitespace_edits_require_explicit_reset_then_binary_review()
     assert!(reset.verified.is_none());
     assert_eq!(store.library(false).unwrap().pending_training, 0);
     let accepted = store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &reset,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     assert!(store.eligible(&accepted.id, accepted.revision).is_ok());
     assert_eq!(accepted.verified.unwrap().source, LabelSource::Accepted);
@@ -1259,12 +1287,12 @@ fn foreground_work_defers_a_candidate_and_source_failure_is_retryable() {
     let f = Fixture::new();
     let (mut store, s) = f.transcribed();
     store
-        .mutate(&request(
+        .mutate(authorize(&request(
             &s,
             ReviewAction::Judge {
                 verdict: Verdict::Yes,
             },
-        ))
+        )))
         .unwrap();
     let source = store.audio.existing_path(&s.recording_id).unwrap();
     let original = fs::read(&source).unwrap();

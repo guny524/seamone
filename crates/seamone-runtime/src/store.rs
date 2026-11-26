@@ -521,7 +521,11 @@ impl Store {
         Ok(self.audio.matches(&segment.recording_id, &hash))
     }
 
-    pub fn mutate(&mut self, request: &ReviewRequest) -> Result<ReviewSegment, String> {
+    pub(super) fn mutate(
+        &mut self,
+        authorization: crate::playback_evidence::AuthorizedReview<'_>,
+    ) -> Result<ReviewSegment, String> {
+        let request = authorization.request();
         if request.event_id.is_empty() || request.event_id.len() > 128 {
             return Err("요청 ID가 잘못됐습니다.".into());
         }

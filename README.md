@@ -50,6 +50,7 @@ graph LR
 - `crates/seamone-core`: 음성 구간, 자동 전사문, 수정본, 실제 Yes/No 판정, 정답 snapshot, 학습 적격 조건과 검토 화면의 상태 전이, 화면과 native가 함께 쓴다
 - `crates/seamone-asr`: 기존 `Transcriber` interface와 시험용 `FakeTranscriber`, `whisper` feature의 실제 엔진, 시험용 전사문은 제품 화면에 넣지 않는다
 - `crates/seamone-runtime`: `LibraryService`가 CPAL 마이크, 입력 디코딩, WAV 보관, SQLite migration, 받아쓰기, 재생 증거, 검수 저장과 학습 대기열을 소유한다, Store와 raw mutate는 crate 밖에 공개하지 않아 host가 Store를 직접 바꿀 수 없다
+- runtime의 비공개 `playback_evidence` 모듈은 token의 완료 상태, 조각 ID와 revision을 확인해 `PlaybackProof`를 만든다. `Store::mutate`는 이 증거 모듈이 발급한 `AuthorizedReview`만 받으며 승인 값은 검사한 요청을 불변 참조로 묶는다. 증거가 필요한 Yes와 No 판정, 교정 확정은 이 경로를 거치고, 초안 저장과 오류 표시 해제, 검증 취소는 기존 정책대로 재생 없이 승인한다. 증거와 승인 값의 필드 및 생성자는 같은 crate의 다른 모듈에도 공개하지 않는다
 - `app/src-tauri`: 신뢰할 창과 command 권한, 파일 dialog, mobile 문서 URI 접근과 해제, clipboard와 Tauri 이벤트를 맡고 `LibraryService`를 호출한다, Android의 seek할 수 없는 문서 스트림은 runtime이 크기를 제한해 임시 파일로 옮긴 뒤 디코딩한다
 - `app/ui`: 빠른 검수, 조각별 검증, 교정, 일반 편집 화면, 빠른 검수는 원본을 최대 30초씩 이어 재생한다, 검증과 교정 확인은 현재 조각의 HTML audio `ended` event를 확인한다
 - `research`: 앱과 별도인 PyTorch 연구 코드, 앱은 Python을 포함하지 않고 연구 adapter를 활성화하지 않는다
@@ -109,6 +110,7 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 - `make lint`는 의존 경계, 새 lint 억제, Rust 서식, native와 WASM Clippy, UI 시험 JavaScript 구문을 검사한다. 기존 억제는 `scripts/lint_exceptions.json`을 기준 ref와 비교해 새 항목과 개수 증가를 거절한다. 기준 ref는 `LINT_BASE_REF`(기본 `origin/develop`)이며 CI는 PR base를 쓰고 전체 history를 받는다. 기준 ref나 JSON이 없으면 실패하므로 기준 브랜치에 검토한 목록을 먼저 준비해야 한다. 매개변수와 closure의 Rust 속성도 찾고 Cargo/Ruff lint 표 전체를 대조해 규칙 삭제와 임계값 변경을 거절한다. 별도의 clippy/Ruff 설정 파일, Cargo rustflags의 `-A`, Clippy 명령의 억제 추가와 `-D warnings` 삭제도 거절한다. 기존 예외의 만료일과 사람 승인 방식은 아직 정하지 않았다. Clippy는 `expect`의 reason과 더 이상 필요하지 않은 억제를 검사한다. macOS CI의 `make lint-native`는 host와 runtime을 함께 검사해 AVFoundation unsafe 블록도 포함한다
 - UI가 호출할 Tauri 명령 이름은 `crates/seamone-core/src/ipc.rs`에 선언한다. 같은 선언이 UI 명령 타입, native 처리 함수 등록, 빌드 시 권한 이름을 만든다. 새 명령은 허용할 창과 플랫폼의 capability에도 추가해야 권한 시험을 통과한다
 - `make test`: runtime에서 합성 녹음 수명과 저장 복구, WAV·MP3·M4A 변환, 실제 SQLite 저장과 검수 증거를 확인한다. public 서비스와 비공개 저장소의 통과/컴파일 거절 doctest도 실행한다. host는 dev 의존에서만 켜는 runtime `test-support`로 보관함을 준비하고 등록 IPC로 재생 완료, 검수 저장과 내보내기, 오류 위치, 녹음 상태의 JSON과 창 닫기 차단을 확인한다. host의 const assert는 녹음 지원 플랫폼을 제품 컴파일에서도 대조한다. fixture는 runtime에 두며 실제 마이크나 OS 파일 선택기는 열지 않는다. `make test CARGO_FEATURES=desktop-whisper`는 host feature만 켜서 runtime 엔진까지 전달되는지도 확인한다
+- 같은 crate 안의 증거 경계도 `make test`로 확인한다. 실제 Store와 증거 모듈의 소스를 함께 컴파일하는 정상 예제와 compile_fail 예제가 증거 없는 저장 호출, PlaybackProof 직접 생성, 승인 값 직접 생성을 거절하는지 대조한다. 공개 API 목록을 바꾸거나 private 함수를 더해도 저장 입력 타입은 그대로 필요하다
 - `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치, HTML audio의 `ended` event와 별도 교정 화면을 확인한다. 앱의 IPC 서비스는 시험용이다. 다운로드 페이지의 화면과 빌드 링크도 확인한다
 - `make site-preview`: [다운로드 안내](site/index.html)를 로컬 `http://127.0.0.1:4173`에서 열어 본다. 포트가 쓰이는 중이면 `make site-preview SITE_PORT=4174`로 바꾼다
 - macOS 패키지 CI는 업로드할 DMG를 읽기 전용으로 열어 체크섬, 앱 식별자, CPU 종류와 마이크 권한 안내를 검사한다. Whisper 빌드에서는 Mach-O와 Info.plist의 최소 macOS 버전을 빌드 설정과 대조한다

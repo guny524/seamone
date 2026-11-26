@@ -2,6 +2,7 @@
 
 - host의 native 작업은 `seamone_runtime::LibraryService`를 호출한다, 직접 SQL과 음성 저장 경로를 더하면 재생 증거와 claim 검사를 건너뛸 수 있다, `make check-architecture`가 Cargo 의존 방향과 adapter 주인을 검사한다
 - runtime의 Store, AudioLibrary, Connection과 raw mutate는 공개하지 않는다, host가 Store를 직접 바꾸는 길은 `make test`의 통과/compile_fail doctest와 `make check-architecture`의 `scripts/runtime_api.json` 대조로 막는다, 공개 항목을 목록에 더하기 전에 LibraryService의 증거 확인 경로를 거치는지 검토한다
+- Store의 검수 저장은 비공개 playback_evidence 모듈이 발급한 AuthorizedReview만 받는다, PlaybackProof와 승인 값의 생성자 및 필드는 그 모듈 밖에서 열지 않는다, core의 required_evidence가 재생을 요구하는 요청은 같은 crate 안에서도 재생 완료와 token 범위를 확인한 뒤에만 저장하도록 하며 `make test`가 실제 모듈 소스를 쓰는 같은 crate의 정상/compile_fail 짝으로 확인한다
 - host는 재생을 듣지 않고 `playback_ended`를 바로 부를 수 있다, 최소 재생 시간 확인은 현재 검수 정책에 없으며 바꾸려면 사람 결정이 필요하다
 - 학습 입력은 현재 원본과 확인된 전사 버전이 일치하는 EligibleExample만 쓴다, `LocalTrainer`의 doctest와 runtime 행동 시험이 일반 전사 입력, 오래된 재생 증거와 중복 claim을 거절한다
 - 도메인은 OS I/O에 의존하지 않는다, `make check-domain`의 no_std 컴파일과 `make check-architecture`의 Cargo 검사가 이 경계를 지킨다

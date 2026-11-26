@@ -49,6 +49,7 @@ mod audio_input_tests;
 mod capture;
 mod inference;
 mod normalize;
+mod playback_evidence;
 mod store;
 #[cfg(test)]
 mod store_tests;
@@ -66,7 +67,6 @@ use seamone_core::{
     },
 };
 use std::{
-    collections::HashMap,
     fs::File,
     io::Read,
     path::Path,
@@ -74,7 +74,6 @@ use std::{
 };
 use store::Store;
 pub use training::LocalTrainer;
-use uuid::Uuid;
 
 /// Whether this target supports native microphone capture.
 pub const CAPTURE_SUPPORTED: bool = cfg!(any(
@@ -83,19 +82,43 @@ pub const CAPTURE_SUPPORTED: bool = cfg!(any(
     target_os = "windows"
 ));
 
-struct Listening {
-    segment_id: String,
-    revision: u64,
-    complete: bool,
-}
-
 /// Owns recording, playback evidence, verified revisions and local work.
+#[doc = concat!(
+    "A sibling module cannot pass an unchecked request to storage.\n```compile_fail\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
+    "mod sibling {\nfn bypass(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nstore.mutate(request);\n}\n}\n# fn main() {}\n```\n",
+    "A sibling module cannot manufacture playback evidence.\n```compile_fail\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
+    "mod sibling {\nfn forge(request: &seamone_core::review::ReviewRequest) {\nlet _ = super::playback_evidence::PlaybackProof { request };\n}\n}\n# fn main() {}\n```\n",
+    "A sibling module cannot manufacture a proof-free authorization.\n```compile_fail\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
+    "mod sibling {\nfn forge() {\nlet _ = super::playback_evidence::AuthorizedReview { authority: todo!() };\n}\n}\n# fn main() {}\n```\n",
+    "A sibling module can store only the request returned by the evidence gate.\n```\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
+    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
+    "fn checked(store: &mut store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = playback_evidence::Playbacks::default();\nlet token = playbacks.begin(&request.segment_id, request.expected_revision).unwrap();\nplaybacks.ended(&token).unwrap();\nstore.mutate(playbacks.authorize(request, Some(&token)).unwrap()).unwrap();\n}\n# fn main() {}\n```\n",
+)]
 pub struct LibraryService {
     store: std::sync::Arc<Mutex<Store>>,
     background: crate::training::BackgroundWork,
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     recorder: crate::capture::Recorder,
-    listening: Mutex<HashMap<String, Listening>>,
+    listening: playback_evidence::Playbacks,
 }
 
 impl LibraryService {
@@ -107,7 +130,7 @@ impl LibraryService {
             background,
             #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
             recorder: crate::capture::Recorder::default(),
-            listening: Mutex::default(),
+            listening: playback_evidence::Playbacks::default(),
         }
     }
     fn store(&self) -> Result<MutexGuard<'_, Store>, String> {
@@ -126,19 +149,7 @@ impl LibraryService {
         let wav = store
             .audio
             .range_wav(&segment.recording_id, segment.range, recording.samples)?;
-        let token = Uuid::new_v4().to_string();
-        let mut listening = self.listening.lock().map_err(|e| e.to_string())?;
-        if listening.len() >= 128 {
-            listening.clear();
-        }
-        listening.insert(
-            token.clone(),
-            Listening {
-                segment_id: id.into(),
-                revision,
-                complete: false,
-            },
-        );
+        let token = self.listening.begin(id, revision)?;
         Ok(PlaybackReply {
             segment_id: id.into(),
             revision,
@@ -148,12 +159,7 @@ impl LibraryService {
     }
 
     pub fn playback_ended(&self, token: &str) -> Result<(), String> {
-        let mut listening = self.listening.lock().map_err(|e| e.to_string())?;
-        let item = listening
-            .get_mut(token)
-            .ok_or("재생이 바뀌었습니다. 이 조각을 다시 들으세요.")?;
-        item.complete = true;
-        Ok(())
+        self.listening.ended(token)
     }
 
     pub fn review(
@@ -165,18 +171,8 @@ impl LibraryService {
         if let Some(replayed) = store.replay(request)? {
             return Ok(replayed);
         }
-        if request.action.required_evidence().requires_playback() {
-            let listening = self.listening.lock().map_err(|e| e.to_string())?;
-            let valid = proof.and_then(|p| listening.get(p)).is_some_and(|l| {
-                l.complete
-                    && l.segment_id == request.segment_id
-                    && l.revision == request.expected_revision
-            });
-            if !valid {
-                return Err("현재 수정본의 음성을 끝까지 들은 뒤 확인하세요.".into());
-            }
-        }
-        let saved = store.mutate(request)?;
+        let authorized = self.listening.authorize(request, proof)?;
+        let saved = store.mutate(authorized)?;
         drop(store);
         if saved.verified.is_some() {
             self.background.notify();
