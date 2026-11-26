@@ -12,14 +12,23 @@ SNAPSHOT = Path(__file__).with_name("runtime_api.json")
 RUNTIME = ROOT / "crates/seamone-runtime/src"
 
 
-def surface(source):
+def surface(source, *, restricted=False):
     code = list(tokens(source))
     for index, token in enumerate(code):
-        if token.text != "pub" or index + 1 >= len(code) or code[index + 1].text == "(":
+        if token.text != "pub" or index + 1 >= len(code):
             continue
-        kind = code[index + 1].text
+        declaration_start = index + 1
+        if code[declaration_start].text == "(":
+            if not restricted:
+                continue
+            while declaration_start < len(code) and code[declaration_start].text != ")":
+                declaration_start += 1
+            declaration_start += 1
+        if declaration_start >= len(code):
+            raise ValueError("incomplete Rust visibility")
+        kind = code[declaration_start].text
         is_use = kind == "use"
-        end, stack = index + 1, []
+        end, stack = declaration_start, []
         while end < len(code):
             text = code[end].text
             if not stack and (text == ";" or (text == "{" and not is_use) or text in (",", "}")):

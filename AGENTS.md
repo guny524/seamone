@@ -2,8 +2,9 @@
 
 - host의 native 작업은 `seamone_runtime::LibraryService`를 호출한다, 직접 SQL과 음성 저장 경로를 더하면 재생 증거와 claim 검사를 건너뛸 수 있다, `make check-architecture`가 Cargo 의존 방향과 adapter 주인을 검사한다
 - runtime의 Store, AudioLibrary, Connection과 raw mutate는 공개하지 않는다, host가 Store를 직접 바꾸는 길은 `make test`의 통과/compile_fail doctest와 `make check-architecture`의 `scripts/runtime_api.json` 대조로 막는다, 공개 항목을 목록에 더하기 전에 LibraryService의 증거 확인 경로를 거치는지 검토한다
-- Store의 검수 저장은 비공개 playback_evidence 모듈이 발급한 AuthorizedReview만 받는다, PlaybackProof와 승인 값의 생성자 및 필드는 그 모듈 밖에서 열지 않는다, core의 required_evidence가 재생을 요구하는 요청은 같은 crate 안에서도 재생 완료와 token 범위를 확인한 뒤에만 저장하도록 하며 `make test`가 실제 모듈 소스를 쓰는 같은 crate의 정상/compile_fail 짝으로 확인한다
-- host는 재생을 듣지 않고 `playback_ended`를 바로 부를 수 있다, 최소 재생 시간 확인은 현재 검수 정책에 없으며 바꾸려면 사람 결정이 필요하다
+- Store의 검수 저장은 비공개 playback_evidence 모듈의 AuthorizedReview만 받는다, 재생이 필요한 요청의 token은 Playbacks::issue가 현재 조각 조회와 revision 대조, 해당 구간 WAV 준비를 마친 뒤에만 발급한다, begin과 증거 필드는 모듈 비공개이며 Default 생성 경로는 두지 않는다, make test의 정상/compile_fail 짝과 make check-architecture의 scripts/playback_api.json 대조가 이 경계를 확인한다
+- token 발급 뒤 끝 알림을 바로 보내는 길은 host와 runtime 안 호출자 모두에게 남는다, 승인은 완료 알림과 token 범위를 확인하며 실제 청취나 최소 재생 시간은 확인하지 않는다, 이 검수 정책을 바꾸려면 사람 결정이 필요하다
+- Rust unsafe는 기존 native adapter인 crates/seamone-runtime/src/capture.rs에서만 쓴다, make check-unsafe가 scripts/unsafe_files.json과 기준 ref(LINT_BASE_REF)의 허용 파일을 대조해 다른 파일의 unsafe와 허용 파일 추가를 거절한다, make check-architecture와 lint도 이 검사를 실행한다
 - 학습 입력은 현재 원본과 확인된 전사 버전이 일치하는 EligibleExample만 쓴다, `LocalTrainer`의 doctest와 runtime 행동 시험이 일반 전사 입력, 오래된 재생 증거와 중복 claim을 거절한다
 - 도메인은 OS I/O에 의존하지 않는다, `make check-domain`의 no_std 컴파일과 `make check-architecture`의 Cargo 검사가 이 경계를 지킨다
 - IPC 이름은 core의 catalog에 한 번만 쓴다, 같은 catalog로 handler와 build 권한 이름을 만들고 `make test`에서 창과 플랫폼 capability를 대조한다

@@ -1,6 +1,8 @@
 //! Issues storage authorization after applying the domain's playback requirements.
 
-use seamone_core::review::ReviewRequest;
+use crate::store::Store;
+use base64::{Engine, engine::general_purpose::STANDARD};
+use seamone_core::review::{PlaybackReply, ReviewError, ReviewRequest};
 use std::{collections::HashMap, sync::Mutex};
 use uuid::Uuid;
 
@@ -35,13 +37,42 @@ impl<'a> AuthorizedReview<'a> {
     }
 }
 
-#[derive(Default)]
 pub(super) struct Playbacks {
     listening: Mutex<HashMap<String, Listening>>,
 }
 
 impl Playbacks {
-    pub(super) fn begin(&self, id: &str, revision: u64) -> Result<String, String> {
+    pub(super) fn new() -> Self {
+        Self {
+            listening: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Preparing the exact current audio is the only way to issue a token.
+    pub(super) fn issue(
+        &self,
+        store: &Store,
+        id: &str,
+        revision: u64,
+    ) -> Result<PlaybackReply, String> {
+        let segment = store.segment(id)?;
+        if segment.revision != revision {
+            return Err(ReviewError::StaleRevision.to_string());
+        }
+        let recording = store.recording(&segment.recording_id)?;
+        let wav = store
+            .audio
+            .range_wav(&segment.recording_id, segment.range, recording.samples)?;
+        let token = self.begin(id, revision)?;
+        Ok(PlaybackReply {
+            segment_id: id.into(),
+            revision,
+            wav_base64: STANDARD.encode(wav),
+            token,
+        })
+    }
+
+    fn begin(&self, id: &str, revision: u64) -> Result<String, String> {
         let token = Uuid::new_v4().to_string();
         let mut listening = self.listening.lock().map_err(|e| e.to_string())?;
         if listening.len() >= 128 {
@@ -90,16 +121,37 @@ impl Playbacks {
     }
 }
 
+/// Storage tests prepare current audio through the production issuer before authorization.
+#[cfg(test)]
+pub(super) fn mutate_after_playback(
+    store: &mut Store,
+    request: &ReviewRequest,
+) -> Result<seamone_core::review::ReviewSegment, String> {
+    let playbacks = Playbacks::new();
+    let token = if request.action.required_evidence().requires_playback() {
+        let reply = playbacks.issue(store, &request.segment_id, request.expected_revision)?;
+        playbacks.ended(&reply.token)?;
+        Some(reply.token)
+    } else {
+        None
+    };
+    store.mutate(playbacks.authorize(request, token.as_deref())?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::Playbacks;
+    use crate::store_tests::Fixture;
     use seamone_core::review::{ReviewAction, ReviewRequest, Verdict};
 
-    fn request(action: ReviewAction) -> ReviewRequest {
+    fn request(
+        segment: &seamone_core::review::ReviewSegment,
+        action: ReviewAction,
+    ) -> ReviewRequest {
         ReviewRequest {
             event_id: "event".into(),
-            segment_id: "segment".into(),
-            expected_revision: 2,
+            segment_id: segment.id.clone(),
+            expected_revision: segment.revision,
             action,
         }
     }
@@ -118,16 +170,21 @@ mod tests {
             },
             ReviewAction::ConfirmCorrection,
         ] {
-            let playbacks = Playbacks::default();
-            let request = request(action);
+            let fixture = Fixture::new();
+            let (store, segment) = fixture.transcribed();
+            let playbacks = Playbacks::new();
+            let request = request(&segment, action);
             assert!(playbacks.authorize(&request, None).is_err());
-            let token = playbacks.begin("segment", 2).unwrap();
+            let token = playbacks
+                .issue(&store, &segment.id, segment.revision)
+                .unwrap()
+                .token;
             assert!(playbacks.authorize(&request, Some(&token)).is_err());
             playbacks.ended(&token).unwrap();
             let authorized = playbacks.authorize(&request, Some(&token)).unwrap();
             assert_eq!(authorized.request(), &request);
             let stale = ReviewRequest {
-                expected_revision: 3,
+                expected_revision: segment.revision + 1,
                 ..request.clone()
             };
             assert!(playbacks.authorize(&stale, Some(&token)).is_err());
@@ -140,8 +197,43 @@ mod tests {
     }
 
     #[test]
+    fn issuance_requires_a_current_segment_and_readable_exact_audio() {
+        let fixture = Fixture::new();
+        let (store, segment) = fixture.transcribed();
+        let playbacks = Playbacks::new();
+        assert!(
+            playbacks
+                .issue(&store, "missing", segment.revision)
+                .is_err()
+        );
+        assert_eq!(
+            playbacks
+                .issue(&store, &segment.id, segment.revision + 1)
+                .unwrap_err(),
+            seamone_core::review::ReviewError::StaleRevision.to_string()
+        );
+        assert!(playbacks.listening.lock().unwrap().is_empty());
+        let reply = playbacks
+            .issue(&store, &segment.id, segment.revision)
+            .unwrap();
+        assert_ne!(reply.wav_base64, "");
+        assert_eq!(reply.segment_id, segment.id);
+        assert_eq!(reply.revision, segment.revision);
+        let path = store.audio.existing_path(&segment.recording_id).unwrap();
+        std::fs::write(path, b"unreadable WAV").unwrap();
+        assert!(
+            playbacks
+                .issue(&store, &segment.id, segment.revision)
+                .is_err()
+        );
+        assert_eq!(playbacks.listening.lock().unwrap().len(), 1);
+    }
+
+    #[test]
     fn edits_without_playback_requirements_keep_their_proof_free_path() {
-        let playbacks = Playbacks::default();
+        let fixture = Fixture::new();
+        let (_store, segment) = fixture.transcribed();
+        let playbacks = Playbacks::new();
         for action in [
             ReviewAction::SaveDraft {
                 text: "초안".into(),
@@ -149,7 +241,7 @@ mod tests {
             ReviewAction::DismissErrorMark,
             ReviewAction::Invalidate,
         ] {
-            let request = request(action);
+            let request = request(&segment, action);
             assert_eq!(
                 playbacks.authorize(&request, None).unwrap().request(),
                 &request
