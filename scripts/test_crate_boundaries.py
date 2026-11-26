@@ -11,12 +11,16 @@ CHECK = Path(__file__).with_name("check_crate_boundaries.py").resolve()
 
 class DependencyBoundaries(unittest.TestCase):
     def setUp(self):
-        temp = tempfile.TemporaryDirectory()
+        scratch = CHECK.parent.parent / ".tmp" / "architecture-tests"
+        scratch.mkdir(parents=True, exist_ok=True)
+        temp = tempfile.TemporaryDirectory(dir=scratch)
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
         (self.root / "Cargo.toml").write_text('[workspace]\nmembers = ["*layer"]\nresolver = "3"\n')
-        for layer in ("core", "asr", "ui"):
+        for layer in ("core", "asr", "ui", "runtime"):
             self.crate(f"{layer}-layer", f"seamone-{layer}")
+        self.crate("host-layer", "seamone")
+        self.add("runtime-layer", '[features]\ntest-support = []\n')
 
     def crate(self, folder, name):
         path = self.root / folder
@@ -69,6 +73,73 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("classify workspace crate bridge", result.stderr)
+
+    def test_host_uses_runtime_instead_of_engine(self):
+        self.add("host-layer", '[dependencies]\nengine = {package="seamone-asr", path="../asr-layer"}\n')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("seamone_runtime::LibraryService", result.stderr)
+
+    def test_host_cannot_own_sqlite_or_wav_io(self):
+        for dependency in ("rusqlite", "hound"):
+            with self.subTest(dependency=dependency):
+                manifest = self.root / "host-layer/Cargo.toml"
+                original = manifest.read_text()
+                try:
+                    self.add("host-layer", f'[dependencies]\n{dependency} = "*"\n')
+                    result = self.check()
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("seamone-runtime", result.stderr)
+                    self.assertIn("seamone_runtime::LibraryService", result.stderr)
+                finally:
+                    manifest.write_text(original)
+
+    def test_runtime_cannot_import_tauri_even_as_a_gated_alias(self):
+        self.add("runtime-layer", '[target.\'cfg(target_os="ios")\'.build-dependencies]\nshell = {package="tauri", version="2"}\n')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("import tauri in seamone", result.stderr)
+
+    def test_host_can_use_runtime_and_runtime_can_use_engine(self):
+        self.add("host-layer", '[dependencies]\nservice = {package="seamone-runtime", path="../runtime-layer"}\n')
+        self.add("runtime-layer", '[dependencies]\nengine = {package="seamone-asr", path="../asr-layer"}\n')
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_ui_can_decode_runtime_playback_wav(self):
+        self.add("ui-layer", '[dependencies]\nhound = "3.5.1"\n')
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_host_cannot_use_an_unlisted_native_dependency(self):
+        self.add("host-layer", '[dependencies]\nsqlite = {package="libsqlite3-sys", version="*"}\n')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("put native work in seamone-runtime", result.stderr)
+
+    def test_support_is_only_allowed_on_the_host_dev_edge(self):
+        for kind in ("dependencies", "build-dependencies", "dev-dependencies"):
+            with self.subTest(kind=kind):
+                path = self.root / "host-layer/Cargo.toml"
+                original = path.read_text()
+                try:
+                    self.add("host-layer", f'[{kind}]\nservice = {{package="seamone-runtime", path="../runtime-layer", features=["test-support"]}}\n')
+                    result = self.check()
+                    self.assertEqual(result.returncode == 0, kind == "dev-dependencies", result.stderr)
+                finally:
+                    path.write_text(original)
+
+    def test_support_cannot_be_forwarded_by_a_product_feature(self):
+        self.add("host-layer", '[dependencies]\nservice = {package="seamone-runtime", path="../runtime-layer"}\n[features]\ndefault=["service/test-support"]\n')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("test-support belongs only", result.stderr)
+
+    def test_support_cannot_be_a_runtime_default(self):
+        self.add("runtime-layer", 'default=["test-support"]\n')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("test-support belongs only", result.stderr)
 
 
 if __name__ == "__main__":

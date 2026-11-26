@@ -52,10 +52,45 @@ pub enum LabelSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// A stored review snapshot, constructed by the review transition.
+/// Its JSON representation remains readable for persistence and IPC.
+///
+/// ```compile_fail,E0451
+/// use seamone_core::review::{LabelSource, VerifiedText};
+/// fn snapshot(existing: VerifiedText) {
+///     let value = VerifiedText { revision: 2, text: "안녕".into(), source: LabelSource::Accepted };
+///     let _ = (value.revision(), value.text(), value.source());
+/// }
+/// ```
+///
+/// ```
+/// use seamone_core::review::{LabelSource, VerifiedText};
+/// fn snapshot(existing: VerifiedText) {
+///     let value = existing.clone();
+///     let _ = (value.revision(), value.text(), value.source());
+/// }
+/// ```
 pub struct VerifiedText {
-    pub revision: u64,
-    pub text: String,
-    pub source: LabelSource,
+    revision: u64,
+    text: String,
+    source: LabelSource,
+}
+
+impl VerifiedText {
+    #[must_use]
+    pub const fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    #[must_use]
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    #[must_use]
+    pub const fn source(&self) -> LabelSource {
+        self.source
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -426,6 +461,53 @@ mod tests {
             .unwrap();
         assert!(EligibleExample::check(&yes, 1600, true).is_ok());
         assert_eq!(yes.verified.unwrap().source, LabelSource::Accepted);
+    }
+
+    #[test]
+    fn verified_snapshot_preserves_its_database_and_ipc_json() {
+        let current = segment();
+        let accepted = current
+            .apply(
+                &request(
+                    &current,
+                    ReviewAction::Judge {
+                        verdict: Verdict::Yes,
+                    },
+                ),
+                1600,
+            )
+            .unwrap()
+            .verified
+            .unwrap();
+        let wire = serde_json::json!({"revision": 2, "text": "안녕", "source": "accepted"});
+        assert_eq!(serde_json::to_value(&accepted).unwrap(), wire);
+        let loaded: VerifiedText = serde_json::from_value(wire).unwrap();
+        assert_eq!(loaded, accepted);
+        assert_eq!(loaded.revision(), 2);
+        assert_eq!(loaded.text(), "안녕");
+        assert_eq!(loaded.source(), LabelSource::Accepted);
+        let draft = current
+            .apply(
+                &request(
+                    &current,
+                    ReviewAction::SaveDraft {
+                        text: "안녕하세요".into(),
+                    },
+                ),
+                1600,
+            )
+            .unwrap();
+        let corrected = draft
+            .apply(&request(&draft, ReviewAction::ConfirmCorrection), 1600)
+            .unwrap()
+            .verified
+            .unwrap();
+        let wire = serde_json::json!({"revision": 3, "text": "안녕하세요", "source": "corrected"});
+        assert_eq!(serde_json::to_value(&corrected).unwrap(), wire);
+        assert_eq!(
+            serde_json::from_value::<VerifiedText>(wire).unwrap(),
+            corrected
+        );
     }
     #[test]
     fn arbitrary_edits_need_a_separate_verbatim_confirmation() {

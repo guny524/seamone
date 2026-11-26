@@ -4,7 +4,7 @@
 
 ## 1. make target
 - `make -C research install`: 의존성을 설치한다
-- `make -C research lint`: ruff 검사와 형식 검사
+- `make -C research lint`: 삭제 경계 AST 검사와 행동 시험, ruff 검사와 형식 검사
 - `make -C research test`: lint 를 돌린 뒤 pytest
 - `make -C research test-offline`: CI의 Linux runner에서 외부 네트워크를 분리한 뒤 같은 lint와 pytest를 실행한다. 먼저 `uv sync --locked --project research`로 가상환경을 준비한다. `sudo` 권한으로 네트워크 namespace를 만들고 원래 사용자로 돌아와 loopback 인터페이스만 있는지 확인한다
 - `make -C research eval-ids`: 시험 세트의 표본 id 목록(`data/eval_ids.json`)을 만들고 음성을 `.tmp/hf` 에 둔다
@@ -22,6 +22,7 @@
 ## 2. 자리
 - `seamone_research/cer.py`: 글 정규화와 CER 계산
 - `seamone_research/data.py`: 시험 세트(FLEURS 한국어와 영어, Zeroth-Korean)의 표본 뽑기와 음성 준비
+- `seamone_research/cache.py`: 전용 cache의 삭제 입구 `remove_inside`, HF_HOME 아래 eval-raw/seamone_eval 안에서만 root의 자식을 지우며 공유 hub는 거절한다, 소스와 시험의 직접 삭제 API는 AST 검사로 막고 경로와 symlink는 행동 시험으로 확인한다
 - `seamone_research/models.py`, `transcribe.py`: 후보 모델과 같은 interface 의 받아쓰기
 - `seamone_research/measure.py`, `hypotheses.py`: 받아쓰기 실행과 가설 글 파일 읽기와 쓰기
 - `seamone_research/score.py`, `compare.py`: 채점, 같은 발화에서 모델끼리 견주기

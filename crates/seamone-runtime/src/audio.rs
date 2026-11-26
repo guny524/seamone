@@ -83,6 +83,14 @@ impl AudioLibrary {
             .is_ok_and(|actual| actual == expected)
     }
 
+    #[cfg(any(
+        test,
+        feature = "test-support",
+        all(
+            feature = "desktop-whisper",
+            not(any(target_os = "android", target_os = "ios"))
+        )
+    ))]
     pub fn read_all(&self, id: &str) -> Result<Vec<f32>, String> {
         let mut reader = WavReader::open(self.existing_path(id)?).map_err(|e| e.to_string())?;
         check_spec(reader.spec())?;
