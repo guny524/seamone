@@ -198,6 +198,9 @@ pub(crate) fn MicrophonePanel(
                             on:click=move |_| microphone.finish(false, on_saved)>"녹음 취소"</button>
                     </Show>
                 </div>
+                <Show when=move || !microphone.notice.with(String::is_empty)>
+                    <p class="status" role="status">{move || microphone.notice.get()}</p>
+                </Show>
                 <p aria-live="polite">{move || match microphone.action.get() {
                     Action::Start => "마이크를 여는 중입니다.".into(),
                     Action::Save => "녹음을 저장하는 중입니다.".into(),
@@ -219,6 +222,7 @@ pub(crate) fn MicrophonePanel(
                 }}</p>
                 <Show when=move || matches!(microphone.status.get(), CaptureStatus::Failed { .. })>
                     <p class="error" role="alert">{move || if let CaptureStatus::Failed { message } = microphone.status.get() { message } else { String::new() }}</p>
+                    <p>"마이크 권한과 연결을 확인한 뒤 녹음 시작을 다시 누르세요. 음성 파일 가져오기로 시작할 수도 있습니다."</p>
                 </Show>
             </section>
         </Show>

@@ -103,6 +103,11 @@ summary { cursor: pointer; color: var(--muted); }
 .editor-pane > section { max-width: 78rem; margin-inline: auto; }
 .empty-editor { padding: 2rem 0; }
 .empty-editor p { color: var(--muted); }
+.transcription-preparation { margin-block: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--rail); }
+.transcription-preparation p { font-size: .88rem; }
+.transcription-preparation details { margin-top: .75rem; }
+.model-source, .selected-recording { overflow-wrap: anywhere; }
+.model-source { display: block; margin-block: .75rem; font-size: .8rem; }
 .info { margin: 1rem; padding: 1rem 1.25rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface); }
 .toolbar, .verdicts, .review-header, .review-state { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; }
 .toolbar { margin: .75rem 0; }

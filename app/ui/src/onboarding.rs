@@ -6,7 +6,7 @@ pub(crate) fn PrivacyInfo(
     microphone: Microphone,
     can_add: Signal<bool>,
     import_disabled: RwSignal<bool>,
-    inference_available: Signal<bool>,
+    inference_available: Signal<Option<bool>>,
     on_dismiss: Callback<()>,
     on_import: Callback<()>,
 ) -> impl IntoView {
@@ -15,10 +15,10 @@ pub(crate) fn PrivacyInfo(
             <div class="onboarding-header">
                 <div>
                     <h2 id="privacy-heading">"기기에 남는 음성과 글"</h2>
-                    <p>{move || if inference_available.get() {
-                        "녹음하거나 음성 파일을 열어 기기 안에서 받아쓸 수 있습니다."
-                    } else {
-                        "음성 파일을 기기에 보관할 수 있습니다. 새 받아쓰기는 Whisper 엔진이 포함된 데스크톱 빌드에서 쓸 수 있습니다."
+                    <p>{move || match inference_available.get() {
+                        Some(true) => "녹음하거나 음성 파일을 열어 기기 안에서 받아쓸 수 있습니다.",
+                        Some(false) => "음성 파일을 기기에 보관할 수 있습니다. 새 받아쓰기는 Whisper 엔진이 포함된 데스크톱 빌드에서 쓸 수 있습니다.",
+                        None => "보관함 정보를 확인한 뒤 이 기기의 받아쓰기 지원 여부를 안내합니다. 음성 파일은 기기에 보관할 수 있습니다.",
                     }}</p>
                 </div>
                 <button on:click=move |_| on_dismiss.run(())>"안내 닫기"</button>
