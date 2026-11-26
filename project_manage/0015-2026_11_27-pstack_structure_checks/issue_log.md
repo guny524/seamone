@@ -57,3 +57,8 @@
 - 메인이 `LINT_BASE_REF=origin/develop` 으로 `make check-architecture`, `make lint`, `make test`(106개, 실패 0)를 돌려 통과를 확인하고 `360a089` 로 커밋해 PR #16 에 push 했다
 - `make lint-ios` 가 실제 과거 실수를 잡는지 보려고 `ce55aac` 의 iOS 오류(`&str` 오류 타입)만 되살린 증명용 브랜치 `guny524/15-proof-ios-old-error`(`30b1b79`, merge 하지 않음)를 push 했다, CI 결과를 기다린다
 - 5단계(재생 증거를 타입으로 강제)를 worker 에게 맡겼다
+
+## 2026-11-27 02:46 lint-ios 가 옛 iOS 오류를 잡는 증명
+- 증명 브랜치 `guny524/15-proof-ios-old-error`(`30b1b79`, `360a089` 에서 iOS 오류 타입 고침 한 줄만 되돌림)의 CI run https://github.com/guny524/seamone/actions/runs/45869322299 에서 `macos-native-lint` 의 `make lint-ios` 가 `app/src-tauri/src/commands.rs:122`, `:126` E0308 로 실패했다(`make: *** [lint-ios] Error 101`), 다른 job 은 통과했다, 옛날에는 15분 넘는 iOS 패키지 빌드에서만 드러난 실수가 lint 단계에서 걸린다
+- 고친 `360a089` 의 push CI run 45869278859 는 통과했다, 증명 브랜치는 원격에서 지웠다
+- PR #16 은 develop 과 `scripts/lint_exceptions.json` add/add 로 충돌한다(develop `e13746d` 가 먼저 같은 파일을 만들었다), 그래서 PR 이벤트 CI 와 패키지 빌드가 돌지 않았다, 5단계가 끝나면 develop 위로 rebase 하고 PR 쪽 목록을 남긴다
