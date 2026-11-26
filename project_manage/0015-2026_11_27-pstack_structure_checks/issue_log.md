@@ -131,3 +131,8 @@
   - PR #14 연구 JSONL(`dot/research-jsonl-commit-boundary`): `6941d5a`, `AGENTS.md` add/add 충돌을 develop 쪽 규칙 목록에 PR #14 의 JSONL 규칙 한 줄을 같은 꼴로 더해 풀었다, 구조 검사(research 삭제 검사 포함) 통과
   - PR #13 CER 비교(`dot/cer-shared-reference-20261126`): `18c8d9b`, 충돌 없음, develop 과의 차이는 PR 의 연구 파일 3개뿐, PR base 를 main 에서 develop 으로 바꿨다 [밤사이 결정]: 이 레포의 기준 브랜치는 develop 이고 main 에는 기준 목록이 없어 새 검사가 늘 실패한다
 - 세 브랜치의 CI 결과를 기다린다, PR #11 은 core 의 `VerifiedText` 필드 비공개(8단계) 때문에 UI 코드가 컴파일되지 않을 수 있다(추측)
+
+## 2026-11-27 04:36 열린 PR 의 CI
+- PR #11(`71aab5a`)과 PR #14(`6941d5a`)는 PR CI 와 다섯 플랫폼 패키지 빌드가 모두 통과했다, PR #11 의 UI 코드는 `VerifiedText` 필드 비공개 뒤에도 컴파일된다
+- PR #13(`18c8d9b`)의 PR CI 는 base 를 develop 으로 바꾸기 전에 시작되어 main(`618aecc`)과 비교했고, main 에 `scripts/lint_exceptions.json` 이 없어 `check-lint-exceptions` 가 lint-test, domain, macos-native-lint 에서 실패했다, Opus 6~8단계 검토 8번(main 대상 PR 은 늘 실패)이 실제로 드러난 것이다, base 변경은 PR CI 를 다시 돌리지 않아 PR 을 닫았다 다시 열었다(run 45884662913, 45884662922)
+- Pi 재시험 3 은 증거 module(`playback_evidence.rs`)과 그 선언 목록(`scripts/playback_api.json`), 공개 API 목록을 고치고 있다(진행 중)
