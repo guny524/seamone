@@ -1,0 +1,21 @@
+{
+  "description": "Only AuthorizedReview may write verified segment bodies or enqueue training. Existing unverified initialization and label clearing bodies are frozen separately.",
+  "authorized": [
+    {
+      "path": "crates/seamone-runtime/src/store.rs",
+      "function": "Store::mutate"
+    }
+  ],
+  "unverified": [
+    {
+      "path": "crates/seamone-runtime/src/store.rs",
+      "function": "Store::commit_transcription",
+      "body_sha256": "04139fc566c6f01de5413a3ef0efb6110ba814763659a447faf6a5c12710138d"
+    },
+    {
+      "path": "crates/seamone-runtime/src/store.rs",
+      "function": "flag_overlapping_segments",
+      "body_sha256": "1d6e789665004879ed72e6cada48a5a5209f453497e94897b1b4a69eaa832d2a"
+    }
+  ]
+}

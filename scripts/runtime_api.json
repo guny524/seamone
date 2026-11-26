@@ -1,0 +1,157 @@
+{
+  "description": "Reviewed runtime declarations; check LibraryService evidence checks before adding any public item. Re-export source declarations are frozen conservatively, including trait bodies.",
+  "public": [
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub const CAPTURE_SUPPORTED : bool = cfg ! ( any ( target_os = \"linux\" , target_os = \"macos\" , target_os = \"windows\" ) )"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub const fn inference_available ( ) - > bool"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn capture_status ( & self ) - > CaptureStatus"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn close ( & self )"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn dismiss_info ( & self ) - > Result < ( ) , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn error_marks ( & self , id : & str , offset : u32 ) - > Result < ErrorMarkPage , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn export_text ( & self , id : & str ) - > Result < String , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn finish_recording ( & self , id : & str , save : bool ) - > Result < Option < RecordingInfo > , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn import_file ( & self , source : impl AsRef < Path > , input : File , can_commit : impl Fn ( ) - > bool , ) - > Result < RecordingInfo , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn import_path ( & self , path : & Path , can_commit : impl Fn ( ) - > bool , ) - > Result < RecordingInfo , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn import_stream ( & self , name : String , input : impl Read , can_commit : impl Fn ( ) - > bool , ) - > Result < RecordingInfo , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn library ( & self ) - > Result < LibraryPage , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn open ( root : & Path ) - > Result < Self , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn playback ( & self , id : & str , revision : u64 ) - > Result < PlaybackReply , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn playback_ended ( & self , token : & str ) - > Result < ( ) , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn recording_playback ( & self , id : & str , revision : u64 , range : SampleRange , ) - > Result < String , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn request_close ( & self ) - > bool"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn review ( & self , request : & ReviewRequest , proof : Option < & str > , ) - > Result < ReviewSegment , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn save_error_mark ( & self , mark : & ErrorMark ) - > Result < ( ) , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn save_error_marks ( & self , batch : & ErrorMarkBatch ) - > Result < ( ) , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn segments ( & self , id : & str , offset : u32 ) - > Result < SegmentPage , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn select_model ( & self , path : & Path ) - > Result < ( ) , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn start_recording ( & self ) - > Result < CaptureStatus , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub fn transcribe ( & self , id : & str ) - > Result < Vec < ReviewSegment > , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub mod test_support"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub struct LibraryService"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
+      "pub use training : : LocalTrainer"
+    ],
+    [
+      "crates/seamone-runtime/src/test_support.rs",
+      "pub fn open ( root : & Path ) - > Result < LibraryService , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/test_support.rs",
+      "pub fn transcribed ( root : & Path ) - > Result < ( LibraryService , ReviewSegment ) , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/training.rs",
+      "pub fn enter ( self : & Arc < Self > ) - > ForegroundGuard"
+    ],
+    [
+      "crates/seamone-runtime/src/training.rs",
+      "pub fn new ( store : & Arc < Mutex < Store > > , trainer : Option < Box < dyn LocalTrainer > > ) - > Self"
+    ],
+    [
+      "crates/seamone-runtime/src/training.rs",
+      "pub fn notify ( & self )"
+    ],
+    [
+      "crates/seamone-runtime/src/training.rs",
+      "pub fn run_next ( store : & Mutex < Store > , foreground : & Foreground , trainer : & mut dyn LocalTrainer , ) - > Result < bool , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/training.rs",
+      "pub foreground : Arc < Foreground >"
+    ],
+    [
+      "crates/seamone-runtime/src/training.rs",
+      "pub struct BackgroundWork"
+    ],
+    [
+      "crates/seamone-runtime/src/training.rs",
+      "pub struct Foreground"
+    ],
+    [
+      "crates/seamone-runtime/src/training.rs",
+      "pub struct ForegroundGuard ( Arc < Foreground > )"
+    ],
+    [
+      "crates/seamone-runtime/src/training.rs",
+      "pub trait LocalTrainer : Send { fn train ( & mut self , example : & EligibleExample , audio : & [ f32 ] ) - > Result < String , String > ; }"
+    ]
+  ]
+}

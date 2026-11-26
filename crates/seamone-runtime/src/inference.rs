@@ -1,4 +1,4 @@
-use crate::commands::AppState;
+use crate::LibraryService;
 #[cfg(all(
     feature = "desktop-whisper",
     not(any(target_os = "android", target_os = "ios"))
@@ -15,7 +15,7 @@ pub const fn available() -> bool {
     ))
 }
 
-pub fn select(state: &AppState, path: &Path) -> Result<(), String> {
+pub fn select(state: &LibraryService, path: &Path) -> Result<(), String> {
     if !available() {
         return Err("이 설치본에는 Whisper 엔진이 없습니다.".into());
     }
@@ -30,7 +30,7 @@ pub fn select(state: &AppState, path: &Path) -> Result<(), String> {
 
 pub use seamone_asr::SMALL_SHA256;
 
-pub fn transcribe(state: &AppState, id: &str) -> Result<Vec<ReviewSegment>, String> {
+pub fn transcribe(state: &LibraryService, id: &str) -> Result<Vec<ReviewSegment>, String> {
     let _foreground = state.background.foreground.enter();
     #[cfg(all(
         feature = "desktop-whisper",

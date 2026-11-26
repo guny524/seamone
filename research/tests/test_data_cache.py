@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import soundfile
 
-from seamone_research import data
+from seamone_research import cache, data
 from seamone_research.data import EVAL_SETS
 
 IDS = ["a.flac", "b.flac"]
@@ -63,7 +63,7 @@ def test_a_truncated_reference_file_is_rejected(hf_home):
 def test_a_missing_wav_or_reference_is_rejected(hf_home):
     make_cache("zeroth_ko", IDS)
     out_dir = data.eval_audio_dir("zeroth_ko")
-    (out_dir / data._wav_name("b.flac")).unlink()
+    cache.remove_inside(out_dir, out_dir / data._wav_name("b.flac"), file=True)
     assert not valid()
     make_cache("fleurs_en", IDS)
     path = data.eval_audio_dir("fleurs_en") / "references.json"
@@ -73,7 +73,8 @@ def test_a_missing_wav_or_reference_is_rejected(hf_home):
 
 def test_a_cache_without_a_manifest_is_rejected(hf_home):
     make_cache("zeroth_ko", IDS)
-    (data.eval_audio_dir("zeroth_ko") / "manifest.json").unlink()
+    out_dir = data.eval_audio_dir("zeroth_ko")
+    cache.remove_inside(out_dir, out_dir / "manifest.json", file=True)
     assert not valid()
 
 
@@ -97,16 +98,16 @@ def test_downloads_go_to_the_dedicated_cache_not_the_shared_hub(hf_home, monkeyp
     assert hf_home / "hub" not in calls[0]["cache_dir"].parents
 
 
-def test_remove_inside_refuses_the_root_and_outside_paths_and_links_out(tmp_path):
-    root, outside = tmp_path / "root", tmp_path / "outside"
+def test_remove_inside_refuses_the_root_and_outside_paths_and_links_out(hf_home):
+    root, outside = hf_home / "eval-raw", hf_home / "outside"
     (root / "inner").mkdir(parents=True)
     outside.mkdir()
     (root / "link").symlink_to(outside)
-    data.remove_inside(root, root / "inner")
+    cache.remove_inside(root, root / "inner")
     assert not (root / "inner").exists()
     for target in (root, outside, root / "link"):
         with pytest.raises(ValueError, match="안이 아니라서"):
-            data.remove_inside(root, target)
+            cache.remove_inside(root, target)
     assert outside.exists()
 
 

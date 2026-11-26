@@ -1,127 +1,15 @@
-use crate::{
-    audio::{AudioLibrary, StagedAudio},
-    audio_ingest,
-    store::Store,
-};
-use base64::{Engine, engine::general_purpose::STANDARD};
 use seamone_core::{
     AppInfo,
     capture::CaptureStatus,
     error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage},
     review::{
-        LibraryPage, PlaybackReply, RecordingInfo, ReviewError, ReviewRequest, ReviewSegment,
-        SampleRange,
+        LibraryPage, PlaybackReply, RecordingInfo, ReviewRequest, ReviewSegment, SampleRange,
     },
 };
-use std::{
-    collections::HashMap,
-    sync::{Mutex, MutexGuard},
-};
+use seamone_runtime::LibraryService;
 use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::{DialogExt, FileAccessMode, FilePath, PickerMode};
-use uuid::Uuid;
-
-struct Listening {
-    segment_id: String,
-    revision: u64,
-    complete: bool,
-}
-
-pub struct AppState {
-    pub store: std::sync::Arc<Mutex<Store>>,
-    pub background: crate::training::BackgroundWork,
-    #[cfg(native_capture)]
-    pub recorder: crate::capture::Recorder,
-    listening: Mutex<HashMap<String, Listening>>,
-}
-
-impl AppState {
-    pub fn new(store: Store) -> Self {
-        let store = std::sync::Arc::new(Mutex::new(store));
-        let background = crate::training::BackgroundWork::new(&store, None);
-        Self {
-            store,
-            background,
-            #[cfg(native_capture)]
-            recorder: crate::capture::Recorder::default(),
-            listening: Mutex::default(),
-        }
-    }
-    pub fn store(&self) -> Result<MutexGuard<'_, Store>, String> {
-        self.store
-            .lock()
-            .map_err(|_| "보관함을 다시 여세요.".into())
-    }
-
-    pub fn playback(&self, id: &str, revision: u64) -> Result<PlaybackReply, String> {
-        let store = self.store()?;
-        let segment = store.segment(id)?;
-        if segment.revision != revision {
-            return Err(seamone_core::review::ReviewError::StaleRevision.to_string());
-        }
-        let recording = store.recording(&segment.recording_id)?;
-        let wav = store
-            .audio
-            .range_wav(&segment.recording_id, segment.range, recording.samples)?;
-        let token = Uuid::new_v4().to_string();
-        let mut listening = self.listening.lock().map_err(|e| e.to_string())?;
-        if listening.len() >= 128 {
-            listening.clear();
-        }
-        listening.insert(
-            token.clone(),
-            Listening {
-                segment_id: id.into(),
-                revision,
-                complete: false,
-            },
-        );
-        Ok(PlaybackReply {
-            segment_id: id.into(),
-            revision,
-            wav_base64: STANDARD.encode(wav),
-            token,
-        })
-    }
-
-    pub fn playback_ended(&self, token: &str) -> Result<(), String> {
-        let mut listening = self.listening.lock().map_err(|e| e.to_string())?;
-        let item = listening
-            .get_mut(token)
-            .ok_or("재생이 바뀌었습니다. 이 조각을 다시 들으세요.")?;
-        item.complete = true;
-        Ok(())
-    }
-
-    pub fn review(
-        &self,
-        request: &ReviewRequest,
-        proof: Option<&str>,
-    ) -> Result<ReviewSegment, String> {
-        let mut store = self.store()?;
-        if let Some(replayed) = store.replay(request)? {
-            return Ok(replayed);
-        }
-        if request.action.required_evidence().requires_playback() {
-            let listening = self.listening.lock().map_err(|e| e.to_string())?;
-            let valid = proof.and_then(|p| listening.get(p)).is_some_and(|l| {
-                l.complete
-                    && l.segment_id == request.segment_id
-                    && l.revision == request.expected_revision
-            });
-            if !valid {
-                return Err("현재 수정본의 음성을 끝까지 들은 뒤 확인하세요.".into());
-            }
-        }
-        let saved = store.mutate(request)?;
-        drop(store);
-        if saved.verified.is_some() {
-            self.background.notify();
-        }
-        Ok(saved)
-    }
-}
 
 /// Capabilities restrict these commands to bundled content; this also rejects other windows and navigation.
 fn trusted<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
@@ -147,21 +35,21 @@ pub async fn get_app_info<R: Runtime>(window: WebviewWindow<R>) -> Result<AppInf
 #[tauri::command]
 pub async fn get_library<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
 ) -> Result<LibraryPage, String> {
     trusted(&window)?;
-    state.store()?.library(crate::inference::available())
+    state.library()
 }
 
 #[tauri::command]
 pub async fn get_segments<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
     recording_id: String,
     offset: u32,
 ) -> Result<seamone_core::review::SegmentPage, String> {
     trusted(&window)?;
-    state.store()?.segment_page(&recording_id, offset)
+    state.segments(&recording_id, offset)
 }
 
 #[tauri::command]
@@ -175,21 +63,14 @@ pub async fn import_audio<R: Runtime>(
             return Ok(None);
         };
         trusted(&window)?;
-        let state = app.state::<AppState>();
-        let _foreground = state.background.foreground.enter();
-        let library = state.store()?.audio.clone();
-        let (name, mut audio) = decode_selected(&app, &library, path)?;
-        state
-            .store()?
-            .save_audio(name, &mut audio, || trusted(&window).is_ok())
-            .map(Some)
+        import_selected(&app, &window, path).map(Some)
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
-pub struct TestAudioPicker(pub Mutex<std::collections::VecDeque<Option<FilePath>>>);
+pub struct TestAudioPicker(pub std::sync::Mutex<std::collections::VecDeque<Option<FilePath>>>);
 
 fn pick_audio<R: Runtime>(
     app: &AppHandle<R>,
@@ -217,18 +98,12 @@ fn pick_audio<R: Runtime>(
     dialog.blocking_pick_file()
 }
 
-fn decode_selected<R: Runtime>(
-    #[cfg_attr(
-        not(mobile),
-        expect(
-            unused_variables,
-            reason = "Only mobile document URIs require the app filesystem plugin."
-        )
-    )]
+fn import_selected<R: Runtime>(
     app: &AppHandle<R>,
-    library: &AudioLibrary,
+    window: &WebviewWindow<R>,
     selection: FilePath,
-) -> Result<(String, StagedAudio), String> {
+) -> Result<RecordingInfo, String> {
+    let service = app.state::<LibraryService>();
     #[cfg(mobile)]
     if let FilePath::Url(url) = &selection {
         use tauri_plugin_fs::{FsExt, OpenOptions};
@@ -242,32 +117,25 @@ fn decode_selected<R: Runtime>(
         {
             let source = url
                 .to_file_path()
-                .map_err(|()| "선택한 파일 경로를 읽지 못했습니다.");
-            let result = input.and_then(|file| audio_ingest::decode(library, file));
+                .map_err(|()| "선택한 파일 경로를 읽지 못했습니다.".to_string());
+            let result = source.and_then(|source| {
+                input
+                    .and_then(|file| service.import_file(&source, file, || trusted(window).is_ok()))
+            });
             let _ = fs.stop_accessing_security_scoped_resource(selection);
-            return Ok((audio_ingest::display_name(&source?), result?));
+            return result;
         }
         #[cfg(target_os = "android")]
         if url.scheme() == "content" {
-            use std::io::Read;
-            // A document provider can return a pipe. Spool a bounded local copy for seeking.
-            let mut input = input?.take(audio_ingest::MAX_FILE_BYTES + 1);
-            let mut scratch = library.scratch_file()?;
-            let bytes = std::io::copy(&mut input, &mut scratch).map_err(|e| e.to_string())?;
-            if bytes > audio_ingest::MAX_FILE_BYTES {
-                return Err(audio_ingest::SIZE_ERROR.into());
-            }
-            return Ok((
-                "가져온 음성".into(),
-                audio_ingest::decode(library, scratch)?,
-            ));
+            return service.import_stream("가져온 음성".into(), input?, || {
+                trusted(window).is_ok()
+            });
         }
     }
     let path = selection
         .into_path()
         .map_err(|e| format!("선택한 파일 경로를 읽지 못했습니다. {e}"))?;
-    let audio = audio_ingest::decode(library, library.open_source(&path)?)?;
-    Ok((audio_ingest::display_name(&path), audio))
+    service.import_path(&path, || trusted(window).is_ok())
 }
 
 #[tauri::command]
@@ -275,10 +143,7 @@ pub async fn get_capture_status<R: Runtime>(
     window: WebviewWindow<R>,
 ) -> Result<CaptureStatus, String> {
     trusted(&window)?;
-    #[cfg(native_capture)]
-    return Ok(window.state::<AppState>().recorder.status());
-    #[cfg(not(native_capture))]
-    Ok(CaptureStatus::Unavailable)
+    Ok(window.state::<LibraryService>().capture_status())
 }
 
 #[cfg(native_capture)]
@@ -287,11 +152,7 @@ pub async fn start_recording<R: Runtime>(
     window: WebviewWindow<R>,
 ) -> Result<CaptureStatus, String> {
     trusted(&window)?;
-    let state = window.state::<AppState>();
-    let library = state.store()?.audio.clone();
-    state
-        .recorder
-        .start(library, state.background.foreground.enter())
+    window.state::<LibraryService>().start_recording()
 }
 
 #[cfg(native_capture)]
@@ -303,13 +164,9 @@ pub async fn finish_recording<R: Runtime>(
 ) -> Result<Option<RecordingInfo>, String> {
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let state = window.state::<AppState>();
-        let _foreground = state.background.foreground.enter();
-        state.recorder.finish(&session_id, save, |audio, active| {
-            state
-                .store()?
-                .save_audio("마이크 녹음.wav".into(), audio, active)
-        })
+        window
+            .state::<LibraryService>()
+            .finish_recording(&session_id, save)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -323,7 +180,7 @@ pub async fn transcribe_recording<R: Runtime>(
 ) -> Result<Vec<ReviewSegment>, String> {
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
-        crate::inference::transcribe(&app.state::<AppState>(), &recording_id)
+        app.state::<LibraryService>().transcribe(&recording_id)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -336,9 +193,9 @@ pub async fn select_model<R: Runtime>(
 ) -> Result<bool, String> {
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
-        if !crate::inference::available() { return Err("이 설치본에는 Whisper 엔진이 없습니다. desktop-whisper feature로 만든 데스크톱 설치본을 사용하세요.".into()); }
+        if !LibraryService::inference_available() { return Err("이 설치본에는 Whisper 엔진이 없습니다. desktop-whisper feature로 만든 데스크톱 설치본을 사용하세요.".into()); }
         let Some(path) = app.dialog().file().add_filter("Whisper small GGML", &["bin"]).blocking_pick_file() else { return Ok(false); };
-        crate::inference::select(&app.state::<AppState>(), &path.into_path().map_err(|e| e.to_string())?)?;
+        app.state::<LibraryService>().select_model(&path.into_path().map_err(|e| e.to_string())?)?;
         Ok(true)
     }).await.map_err(|e| e.to_string())?
 }
@@ -346,7 +203,7 @@ pub async fn select_model<R: Runtime>(
 #[tauri::command]
 pub async fn get_playback<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
     segment_id: String,
     revision: u64,
 ) -> Result<PlaybackReply, String> {
@@ -357,58 +214,50 @@ pub async fn get_playback<R: Runtime>(
 #[tauri::command]
 pub async fn get_recording_playback<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
     recording_id: String,
     revision: u64,
     range: SampleRange,
 ) -> Result<String, String> {
     trusted(&window)?;
-    let store = state.store()?;
-    let recording = store.recording(&recording_id)?;
-    if recording.revision != revision {
-        return Err(ReviewError::StaleRevision.to_string());
-    }
-    let wav = store
-        .audio
-        .range_wav(&recording_id, range, recording.samples)?;
-    Ok(STANDARD.encode(wav))
+    state.recording_playback(&recording_id, revision, range)
 }
 
 #[tauri::command]
 pub async fn get_error_marks<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
     recording_id: String,
     offset: u32,
 ) -> Result<ErrorMarkPage, String> {
     trusted(&window)?;
-    state.store()?.error_mark_page(&recording_id, offset)
+    state.error_marks(&recording_id, offset)
 }
 
 #[tauri::command]
 pub async fn save_error_mark<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
     mark: ErrorMark,
 ) -> Result<(), String> {
     trusted(&window)?;
-    state.store()?.save_error_mark(&mark)
+    state.save_error_mark(&mark)
 }
 
 #[tauri::command]
 pub async fn save_error_marks<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
     batch: ErrorMarkBatch,
 ) -> Result<(), String> {
     trusted(&window)?;
-    state.store()?.save_error_marks(&batch)
+    state.save_error_marks(&batch)
 }
 
 #[tauri::command]
 pub async fn playback_ended<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
     token: String,
 ) -> Result<(), String> {
     trusted(&window)?;
@@ -418,7 +267,7 @@ pub async fn playback_ended<R: Runtime>(
 #[tauri::command]
 pub async fn save_review<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
     request: ReviewRequest,
     proof: Option<String>,
 ) -> Result<ReviewSegment, String> {
@@ -429,20 +278,20 @@ pub async fn save_review<R: Runtime>(
 #[tauri::command]
 pub async fn dismiss_info<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
 ) -> Result<(), String> {
     trusted(&window)?;
-    state.store()?.set_setting("info_seen", "1")
+    state.dismiss_info()
 }
 
 #[tauri::command]
 pub async fn export_text<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, AppState>,
+    state: State<'_, LibraryService>,
     recording_id: String,
 ) -> Result<String, String> {
     trusted(&window)?;
-    state.store()?.export_text(&recording_id)
+    state.export_text(&recording_id)
 }
 
 #[tauri::command]
@@ -452,10 +301,7 @@ pub async fn save_text_file<R: Runtime>(
     recording_id: String,
 ) -> Result<bool, String> {
     trusted(&window)?;
-    let text = app
-        .state::<AppState>()
-        .store()?
-        .export_text(&recording_id)?;
+    let text = app.state::<LibraryService>().export_text(&recording_id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let Some(path) = app
             .dialog()
@@ -500,10 +346,7 @@ pub async fn copy_saved_text<R: Runtime>(
     recording_id: String,
 ) -> Result<(), String> {
     trusted(&window)?;
-    let text = app
-        .state::<AppState>()
-        .store()?
-        .export_text(&recording_id)?;
+    let text = app.state::<LibraryService>().export_text(&recording_id)?;
     app.clipboard()
         .write_text(text)
         .map_err(|e| format!("복사하지 못했습니다: {e}. 텍스트 파일 저장을 사용할 수 있습니다."))
