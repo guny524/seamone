@@ -13,6 +13,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  LINT_BASE_REF: ${{ github.event.pull_request.base.sha || 'origin/develop' }}
 
 jobs:
   lint-test:
@@ -20,6 +21,11 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
 
       # 판, 구성요소, wasm 타깃은 rust-toolchain.toml 이 정한다
       - name: Install the Rust toolchain
@@ -29,7 +35,7 @@ jobs:
       - name: Install the Tauri Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev patchelf xdg-utils
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
@@ -38,3 +44,68 @@ jobs:
 
       - name: Test
         run: make test
+
+      - name: Optional offline desktop engine regression
+        run: |
+          make lint CARGO_FEATURES=desktop-whisper
+          make test CARGO_FEATURES=desktop-whisper
+
+      - name: Install pinned UI build tools
+        run: make install-ci-tools
+
+      - name: Install UI regression dependencies
+        run: npm ci --prefix app/ui/tests --ignore-scripts --no-audit --no-fund
+
+      - name: UI regression with the runner Chrome
+        shell: bash
+        run: |
+          chrome_path="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome_path" || { echo "No Chrome/Chromium executable on this runner" >&2; exit 1; }
+          SEAMONE_CHROME="$chrome_path" make ui-test
+
+  domain:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - run: rustup target add wasm32v1-none
+      - run: make check-architecture check-domain
+
+  macos-native-lint:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Add the iOS simulator target on CI
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-apple-ios-sim
+      - name: Compile and lint the iOS host and runtime
+        run: make lint-ios
+      - run: make lint-native CARGO_FEATURES=desktop-whisper
+
+  research-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned uv
+        run: python3 -m pip install --user uv==0.13.7
+
+      - name: Install locked research dependencies
+        run: uv sync --locked --project research
+
+      - name: Research regression in an isolated network namespace
+        run: make -C research test-offline

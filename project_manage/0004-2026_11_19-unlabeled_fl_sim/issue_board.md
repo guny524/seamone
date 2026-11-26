@@ -1,5 +1,5 @@
 # 라벨 없는 FL 모의실험으로 오류율을 낮추는 방법을 고른다
-(이 파일: 기준 브랜치 main 의 `project_manage/0004-2026_11_19-unlabeled_fl_sim/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
+(이 파일: 기준 브랜치 develop 의 `project_manage/0004-2026_11_19-unlabeled_fl_sim/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
 - 이슈: https://github.com/guny524/seamone/issues/4, 유형: research(조사)
 - 운영 상태(상태, 브랜치, worktree, worker, 세션, 선행과 후속): 프로젝트 `project_manage/project_board.md` 4절(이슈) #4
 
@@ -125,10 +125,12 @@
 
 - [x] 공개 한국어 음성의 화자 분할과 고정 seed, 가중 평균(FedAvg), 학습·평가 명령을 초안으로 확보한다. [FL 모의실험 초안 PR #9](https://github.com/guny524/seamone/pull/9)
 - [x] 기기 8개, 기기당 발화 6개, 2라운드로 소규모 실행을 끝내고 CER와 업데이트 크기를 기록한다. [소규모 실행 결과](https://github.com/guny524/seamone/blob/0d93e7c147b28b1df1334ccb43f8f3a973035534/research/results/2026_11_19_unlabeled_fl_sim.md)
-- [ ] 초안 PR에서 학습·평가 화자가 겹치지 않는지, 각 방법이 같은 평가 발화를 쓰는지, 결과 문서의 명령으로 재현할 수 있는지 검토한다
-- [ ] 결과 문서의 학습 없음, 공개 정답 전사, 자동 전사 연구 조건별 실측 범위를 확인한다. 실행하지 않은 상위층 학습 비교와 이 표본으로 개선 여부를 판정할 수 없는 이유를 적는다
+- [x] 보존된 Zeroth-Korean 학습·평가 ID에서 화자 겹침이 없음을 확인했다. 같은 평가 발화로 CER를 재계산했다. 원본 코퍼스를 다시 내려받는 검증과 새 학습 실행은 남았다
+- [x] 소규모 결과의 범위와 한계를 확인했다. 한 설정은 Zeroth-Korean CER가 8.36%에서 7.70%로, FLEURS 한국어는 7.49%에서 7.94%로 변했다. 개선과 회귀 방지 기준을 함께 충족하지 않았다. 같은 추론 경로의 라운드 0 대조와 상위층 비교가 남았다
 - [ ] 효과를 판정하는 다음 실험은 사람이 확인한 전사를 학습 입력으로 준비한다. 같은 평가 발화에서 한국어·영어 CER, 발화당 학습 시간, 업데이트 크기와 표본 규모를 비교할 수 있도록 실행 계획을 남긴다
-- [ ] `make -C research test` 결과와 재현 명령, 결과 파일, 초안 PR 검토 상태를 이슈에 남긴다
+- [x] 초안 `0d93e7c`에서 `make -C research test` 129개가 통과했다. 보존된 가설은 `make -C research compare MODELS="whisper-small fl-a2-lr3e-3" SETS="zeroth_ko" PAIR="fl-a2-lr3e-3 whisper-small"`로 재채점했다
+- [ ] 새 환경에서 학습 전에 평가 캐시와 고정 평가 ID를 검증한다. 입력이 없거나 revision이 다르면 학습 전에 발견할 수 있도록 한다
+- [ ] `FL_TEACHER`를 전사 생성과 학습 양쪽에 전달하고, 같은 이름으로 재실행할 때 선행 결과가 덮어써지지 않도록 실행 설정과 출력 위치를 보존한다
 
 #### 작업 위치와 선행 조건
 `guny524/4-unlabeled-fl-sim`의 `research/Makefile`, `research/seamone_research/{fl_data,fedavg,fl_train,fl_sim}.py`, `research/results/`에서 시작한다. #2의 공개 평가 세트를 재사용한다. 실제 사용자 데이터로 학습하는 앱 기능과 서버 통신은 후속 작업이다.
@@ -150,7 +152,7 @@
 
 ## 9. 지금 상태
 - #2의 오류율 측정은 main에 병합됐다. 초안 PR #9에 기기 8개, 기기당 6발화, 2라운드의 소규모 결과가 있다. 이 규모에서는 효과를 판정할 수 없다
-- 남은 것: 초안 검토, 결과와 재현 명령 확인, 사람이 확인한 전사를 쓰는 다음 실험 계획. 작업 순서와 완료 증거는 7-9절을 따른다
+- 저장한 결과의 재채점과 연구 시험을 확인했다. 재실행은 평가 캐시 검증, 교사 옵션 전달과 결과 보존을 먼저 보완해야 한다. 작업 순서와 완료 증거는 7-9절을 따른다
 
 ## 10. Closing
 ### 10-1. 검토

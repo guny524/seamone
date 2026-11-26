@@ -1,5 +1,5 @@
 # 앱 뼈대(Tauri 2 + Leptos)를 세우고 다섯 플랫폼 설치 파일을 CI 로 만든다
-(이 파일: 기준 브랜치 main 의 `project_manage/0001-2026_11_19-app_skeleton_ci/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
+(이 파일: 기준 브랜치 develop 의 `project_manage/0001-2026_11_19-app_skeleton_ci/issue_board.md`, 같은 폴더에 `issue_decision.md`, `issue_log.md`)
 - 이슈: https://github.com/guny524/seamone/issues/1, 유형: impl(범위가 정해진 구현)
 - 운영 상태(상태, 브랜치, worktree, worker, 세션, 선행과 후속): 프로젝트 `project_manage/project_board.md` 4절(이슈) #1
 
@@ -188,6 +188,14 @@ Tauri 2와 Leptos 앱의 첫 화면을 띄우고 macOS, Windows, Linux, Android 
 #### 작업 위치와 검증
 main의 `Makefile`, `app/src-tauri/`, `app/ui/`, `.github/workflows/{ci,build}.yml`을 사용한다. 앱을 묶는 검증은 GitHub Actions에서 한다. 설치 파일 보관 기간이 지났으면 같은 커밋의 빌드 실행을 다시 확보한다. #5의 실제 녹음·전사 검증은 별도로 기록한다.
 
+### 7-18. 컴파일과 패키지 단계의 의존 경계
+
+- [x] Cargo가 해석한 직접 의존성의 방향을 검사하고 운영체제 표준 라이브러리가 없는 타깃에서 공용 도메인을 컴파일한다. IPC 명령과 처리 함수, 플랫폼별 권한, 검수 증거, 코드별 lint 예외를 함께 검사한다. [컴파일과 CI 검사 PR (#12)](https://github.com/guny524/seamone/pull/12)
+- [x] 실제 코드에 위반을 하나씩 넣어 컴파일러와 Clippy가 여섯 가지를 각각 거절하는지 확인한다. [거절 진단](https://github.com/guny524/seamone/actions/runs/45583994420)
+- [ ] IPC 요청과 응답의 타입을 명령별로 연결한다. 현재 화면은 명령 이름을 타입으로 고르지만 인자는 JSON으로 만들고 응답 타입도 호출부에서 정한다. 우선 검수 저장에서 잘못된 인자나 응답 타입을 컴파일러가 거절하고, 기존 JSON 요청과 응답을 그대로 읽는지 시험한다
+- [x] 기본·Whisper 포함 패키지를 각각 여섯 작업으로 빌드한다. macOS 두 CPU의 실제 DMG에서 앱 식별자, CPU와 마이크 안내를 확인하고, Whisper 패키지의 최소 macOS 11.0을 실행 파일과 Info.plist 양쪽에서 대조한다. [기본 패키지](https://github.com/guny524/seamone/actions/runs/45582899052) · [Whisper 포함 패키지](https://github.com/guny524/seamone/actions/runs/45582909048) 실제 arm64 DMG에 Intel 또는 macOS 12.0을 요구했을 때 두 번 모두 검사가 실패했다. [잘못된 배포 조건 거절 로그](https://github.com/guny524/seamone/actions/runs/45584580590/job/139102813255)
+- [ ] 위의 설치·첫 실행 항목은 별도 시험 기기에서 확인한다. 실제 마이크·모델 선택·터치 검수는 [녹음과 첫 전사 이슈 (#5)](https://github.com/guny524/seamone/issues/5)에서 이어 간다
+
 ## 8. 수정 요약
 (7-9 까지의 파일 목록이다, 7-10 에서 CI 를 고치면 이 목록을 다시 맞춘다)
 - `rust-toolchain.toml`(새 파일): Rust 1.99.1, clippy, rustfmt, wasm32 타깃을 고정
@@ -237,7 +245,7 @@ main의 `Makefile`, `app/src-tauri/`, `app/ui/`, `.github/workflows/{ci,build}.y
 ### 10-4. 사람 시험
 - 설치 파일을 받아 실행하면 첫 화면이 뜨는지: macOS 는 worker 가 CI 앱을 실행해 확인했다고 보고했다(메인 미확인), Windows, Linux, Android 는 대기, 방법은 README 3-3과 3-4
 ### 10-5. 자원
-- 받은 CI artifact 사본은 지웠다(`.tmp/ci-artifacts`, `.tmp/seed`), worktree `/Users/min-jo/orca/workspaces/seamone/1-app-skeleton-ci` 와 `target/` 4.7GB 는 받아쓰기 엔진 이슈의 브랜치 `guny524/3-asr-engine-speed` 가 같은 worktree 를 이어 쓰므로 남겼다, 지울 조건은 그 이슈를 merge 한 뒤이고 정리는 `dispatch-worker` skill 6절, 이슈 폴더 `.tmp/` 의 확인 도구와 캡처는 이슈를 닫을 때 지운다
+- 받은 CI 설치 파일 사본을 지웠다. 이 경로를 이어 쓴 받아쓰기 엔진 공통 코드가 `develop`에 들어간 뒤 2026-11-22에 Orca 작업 사본을 정리했다. 이슈 폴더 `.tmp/`의 확인 도구와 캡처는 설치 시험 뒤 이슈를 닫을 때 지운다
 ### 10-6. 이슈 마무리 코멘트
 - 상태: 사람 시험 뒤에 쓴다(진행 요약은 이슈에 올렸다)
 - 관련 MR: https://github.com/guny524/seamone/pull/6 (merge 됨)

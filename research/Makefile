@@ -23,7 +23,7 @@ LORA_DEVICES ?= mps cpu
 LORA_BATCH ?= 4
 LORA_SCOPE ?= all
 
-.PHONY: install lint test eval-ids prefetch cer score compare lora
+.PHONY: install fmt lint test test-offline test-in-network-namespace eval-ids prefetch cer score compare lora training-fixture verified-step
 
 install:
 	uv sync
@@ -33,11 +33,25 @@ eval-ids:
 	uv run python -m seamone_research.data
 
 lint:
+	uv run $(MAKE) -C .. check-research-deletions
 	uv run ruff check .
 	uv run ruff format --check .
 
 test: lint
 	uv run pytest
+
+test-offline:
+	sudo -n /usr/bin/unshare --net -- /usr/bin/setpriv \
+		--reuid="$$(id -u)" --regid="$$(id -g)" --clear-groups --no-new-privs \
+		/usr/bin/env -i HOME="$$HOME" PATH="$$PATH" \
+		$(MAKE) test-in-network-namespace
+
+test-in-network-namespace:
+	@test "$$(id -u)" -ne 0 || { echo "Research tests must run as an unprivileged user"; exit 1; }
+	@interfaces="$$(python3 -c 'import socket; print(*(name for _, name in socket.if_nameindex()))')"; \
+		echo "Research test network interfaces: $$interfaces"; \
+		test "$$interfaces" = lo
+	UV_OFFLINE=1 UV_NO_SYNC=1 HF_HUB_OFFLINE=1 $(MAKE) test
 
 # 가중치를 미리 받는다(측정 중인 모델의 시간을 내려받기에 쓰지 않으려는 것이다)
 prefetch:
@@ -67,3 +81,15 @@ lora:
 				|| echo "중단됨: $$model $$device"; \
 		done; \
 	done
+
+fmt:
+	uv run ruff format .
+
+FIXTURE ?= ../.tmp/research/training-fixture/fixture.json
+PROOF_DIR ?= ../.tmp/research/verified-step
+PROOF_DEVICE ?= cpu
+training-fixture:
+	$(NICE) uv run python -m seamone_research.training_fixture --output "$(dir $(FIXTURE))"
+
+verified-step:
+	$(NICE) uv run python -m seamone_research.verified_step --fixture "$(FIXTURE)" --output "$(PROOF_DIR)" --device $(PROOF_DEVICE)

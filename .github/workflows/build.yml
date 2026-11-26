@@ -7,6 +7,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      desktop-whisper:
+        description: Include the offline Whisper small desktop engine (no bundled model)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,15 +22,14 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Makefile 의 TAURI_CLI_VERSION, TRUNK_VERSION 과 같은 판을 쓴다, 판을 올리면 scripts/install-tools.sh 의 sha256 도 바꾼다
-  TAURI_CLI_VERSION: "2.12.6"
-  TRUNK_VERSION: "0.22.2"
 
 jobs:
   desktop:
     name: desktop (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      CARGO_FEATURES: ${{ inputs['desktop-whisper'] && 'desktop-whisper' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -59,7 +63,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev patchelf xdg-utils
 
       # Windows runner 에는 make 가 없다
       - name: Install make
@@ -72,7 +76,7 @@ jobs:
 
       - name: Install tauri-cli and trunk
         shell: bash
-        run: scripts/install-tools.sh
+        run: make install-ci-tools
 
       - name: Check the tool versions
         run: |
@@ -82,7 +86,25 @@ jobs:
       # 설치 파일을 만드는 명령은 Makefile 의 build 하나다
       - name: Build the installers
         shell: bash
-        run: make build TAURI_BUILD_ARGS="--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}"
+        run: |
+          build_args="--target ${{ matrix.target }} --bundles ${{ matrix.bundles }}"
+          if [[ "$RUNNER_OS" == "macOS" && "$CARGO_FEATURES" == "desktop-whisper" ]]; then
+            build_args="$build_args --config app/src-tauri/tauri.whisper-macos.conf.json"
+          fi
+          make build TAURI_BUILD_ARGS="$build_args"
+
+      - name: Verify the app in the macOS distribution image
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+        run: |
+          case "$RUST_TARGET" in
+            aarch64-apple-darwin) arch=arm64 ;;
+            x86_64-apple-darwin) arch=x86_64 ;;
+            *) exit 1 ;;
+          esac
+          make check-macos-dmg DMG_DIR="target/$RUST_TARGET/release/bundle/dmg" MACOS_ARCH="$arch"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -132,11 +154,14 @@ jobs:
           fi
 
       - name: Install tauri-cli and trunk
-        run: scripts/install-tools.sh
+        run: make install-ci-tools
 
       # runner 에 깔린 Android SDK 와 NDK 를 쓴다
       - name: Point NDK_HOME at the NDK preinstalled on the runner
         run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+
+      - name: Check crate imports before mobile packaging
+        run: make check-imports
 
       - name: Generate the Android project
         run: cargo tauri android init --ci --skip-targets-install
@@ -188,7 +213,10 @@ jobs:
           key: ios
 
       - name: Install tauri-cli and trunk
-        run: scripts/install-tools.sh
+        run: make install-ci-tools
+
+      - name: Check crate imports before mobile packaging
+        run: make check-imports
 
       - name: Generate the Xcode project
         run: cargo tauri ios init --ci --skip-targets-install

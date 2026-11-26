@@ -1,0 +1,6 @@
+{
+  "description": "Existing Rust unsafe adapters only; the same reviewed snapshot must exist at LINT_BASE_REF and additions require human review.",
+  "files": [
+    "crates/seamone-runtime/src/capture.rs"
+  ]
+}

@@ -213,3 +213,81 @@
 - 사용자 승인 원문: “네, 올리고 초안 PR 만들기”
 - 기존 작업 브랜치 `guny524/5-verified-transcript`의 `73d85d7`을 인계 기준으로 올리고 [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 초안 PR (#10)](https://github.com/guny524/seamone/pull/10)을 열었다. 최신 main을 합치며 README 충돌을 해결했다
 - `make lint`, `make test`, Chrome 화면 시험 18개와 macOS 실제 Whisper 전사 시험을 확인했다. 패키지 빌드와 실제 설치 파일 조작은 [녹음·받아쓰기·수정 화면 이슈 (#5)](https://github.com/guny524/seamone/issues/5)에 남겼다
+
+## 2026-11-22 21:55 작업분 develop 병합과 Orca 정리
+- 당시 `main`에서 `develop`을 만들고 [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 PR (#10)](https://github.com/guny524/seamone/pull/10)을 병합했다(`3ba1047`). 다섯 플랫폼 빌드를 통과한 PR의 앱 코드와 병합 결과가 같다
+- 위 병합 커밋에서 lint, Rust·연구 회귀 시험, 데스크톱 엔진 시험과 Chrome 화면 시험이 통과했다. [develop 병합 커밋 CI](https://github.com/guny524/seamone/actions/runs/45024381990)
+- 로컬 기준 작업 사본과 Orca의 새 worktree 기준을 `develop`으로 맞췄다. 병합된 녹음·교정과 엔진 interface 작업 사본, 종료한 탭 3개, 병합된 로컬 작업 브랜치 4개를 정리했다
+- 병합 전인 연합학습 모의실험의 작업 사본은 보존했다. Orca 표시 이름을 `4-unlabeled-fl-sim`으로 바꾸고 [연합학습 모의실험 이슈 (#4)](https://github.com/guny524/seamone/issues/4)와 [소규모 실험 초안 PR (#9)](https://github.com/guny524/seamone/pull/9)을 연결했다
+
+## 2026-11-24 01:12 야간 점검 시작
+- 01:10:12 KST에 Orca에서 현재 메인 세션을 깨우는 한 시간 간격 타이머를 시작했다. 종료 시각은 08:00 KST다. 짧은 시험에서 메인 세션이 작업 중이면 입력을 건너뛰는 것을 확인했다
+- `develop`의 `1cf5794` 기준 첫 전사 흐름 구현과 `0d93e7c` 기준 연합학습 모의실험 검토를 Codex Sol high 작업자 두 명에게 맡겼다
+- 사용자가 먼저 시작한 두 명은 일을 마치고 이후에는 작업자를 한 명으로 줄이라고 지시했다. 첫 작업이 끝나면 자리를 다시 채우지 않는다
+
+## 2026-11-24 02:12 첫 점검과 소규모 모의실험 검토
+- 시간 점검 신호가 현재 메인 세션의 새 turn을 시작했다. 기존 작업자 두 명의 완료를 각각 확인했다
+- 연합학습 모의실험 `0d93e7c`에서 연구 시험 129개가 통과했다. 저장 결과를 같은 발화로 재채점했고, 한 설정에서 Zeroth-Korean 문자 오류율은 8.36%에서 7.70%, FLEURS 한국어는 7.49%에서 7.94%로 바뀌었다
+- 평가 자료 준비, 교사 모델 인자 전달과 결과 보존의 문제를 코드에서 확인했다. [연합학습 모의실험 이슈 (#4)](https://github.com/guny524/seamone/issues/4)에 남기고 게시 내용을 대조했다. 새 학습과 실제 기기 성능 측정은 이루어지지 않았다
+
+## 2026-11-24 02:15 첫 전사 화면 검증과 후속 수정
+- `1cf5794` 위의 미커밋 앱 화면 변경에서 `make lint`, Rust 시험 83개, Chrome 화면 시험 26개와 실제 Whisper small로 받아쓰는 개발 통합 시험을 메인이 직접 다시 통과시켰다. 실제 설치 파일에서 마이크를 쓰는 시험은 남았다
+- Claude Opus medium 최종 검토(세션 `f8a4e3fd-5de4-439e-985e-6f555554c243`)에서 저장 안내가 작업 결과에 덮이는 문제와 보관함 조회 실패가 엔진 미지원으로 표시되는 문제를 확인했다. 검토자는 기본 브라우저가 없어 화면 시험을 실행하지 못했고, 메인은 설치된 Chrome을 지정해 확인했다
+- [녹음·받아쓰기·수정 화면 이슈 (#5)](https://github.com/guny524/seamone/issues/5)에 수정과 회귀 시험 항목을 적고 게시본을 대조했다. 두 문제는 기존 앱 작업자 한 명이 같은 worktree에서 고친다. 모의실험 검토 작업 사본은 유지하고 끝난 작업자 탭만 정리했다
+
+## 2026-11-24 02:30 첫 전사 후속 수정 검증
+- `c4dbd0a` 위 미커밋 변경의 diff SHA-256은 `7fd7a15d1c9da843b52bd2ffabbd82286db0b4839b129ebe001f704030e1e27a`다. 저장 안내 유지, 보관함 첫 조회 실패와 재시도, 기존 목록 보존을 포함해 lint, Rust 시험 83개, Chrome 시험 32개를 다시 확인했다
+- Claude Opus medium이 두 수정 사항을 확인했다(세션 `f8a4e3fd-5de4-439e-985e-6f555554c243`). 이 변경으로 생긴 다시 열기 안내 중복과 백그라운드 갱신 알림을 확인해 기존 앱 작업자 한 명에게 정리를 보냈다
+
+## 2026-11-24 02:37 첫 전사 흐름 초안 PR
+- 중복 열기 버튼과 백그라운드 로딩 알림에 대한 수정과 시험을 코드에서 대조했다. `develop`의 `39a5c2e`를 반영한 뒤 전체 diff의 SHA-256 `94386a1e72d2ec7b5e2ca56938452b5fc3eec1cdedf4c213c02e26f572cef1a0`에 대해 메인이 lint, Rust 시험 83개와 Chrome 시험 32개를 통과시켰다
+- `7276a7b`을 [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)에 올리고 [녹음·받아쓰기·수정 화면 이슈 (#5)](https://github.com/guny524/seamone/issues/5)의 체크리스트를 대조했다. 패키지 빌드와 실기기 시험은 남았다
+
+## 2026-11-24 03:11 첫 전사 PR 빌드 확인
+- `7276a7b`에서 PR CI와 macOS·Windows·Linux·Android 패키지, iOS 시뮬레이터 빌드가 모두 통과했다. 여섯 플랫폼별 아티팩트가 남아 있다. [PR CI](https://github.com/guny524/seamone/actions/runs/45229632089) · [기본 패키지](https://github.com/guny524/seamone/actions/runs/45229632146)
+- 모델 선택과 실제 전사를 시험할 수 있게 같은 커밋의 기존 수동 빌드에서 `desktop-whisper`를 켰다. 기본 빌드 통과와 수동 빌드 진행 상태를 이슈와 PR 본문에 반영하고 대조했다. [Whisper 포함 패키지](https://github.com/guny524/seamone/actions/runs/45235655790)
+
+## 2026-11-24 04:12 야간 작업 종료
+- `7276a7b`의 [Whisper 포함 수동 빌드](https://github.com/guny524/seamone/actions/runs/45235655790)에서 여섯 job이 모두 통과했다. Apple Silicon DMG 체크섬이 맞았고 arm64 실행 파일, Whisper 함수 심볼과 최소 macOS 11.0 설정을 확인했다. DMG SHA-256은 `98fdfe6a29944f0352f622c6f48259793ec1991f74ae5477d6e9990d3e2f46f5`다
+- 첫 전사 흐름 구현·자동 검증과 연합학습 모의실험 소규모 결과 검토를 마쳐 04:11:34 KST에 점검 프로세스와 Orca 타이머 탭을 종료했다. 확인용 DMG 사본은 지웠다
+- 설치 파일을 직접 실행하는 마이크·모델 선택과 모바일 터치 확인은 [첫 전사 흐름 초안 PR (#11)](https://github.com/guny524/seamone/pull/11)에 남겼다. 병합 전인 앱과 모의실험 작업 사본은 후속 검증을 위해 보존했다
+
+## 2026-11-25 18:20 컴파일과 CI에서 앱 구조와 검수 계약 검사
+
+- 영상의 장면 전환을 색 히스토그램으로 찾고 4:20, 6:35, 6:45 재생 화면을 확인했다. 화면과 native가 공용 타입을 참조하는 예를 Seamone의 Rust crate와 IPC 명령에 적용했다. [영상의 의존 방향 그림](https://www.youtube.com/watch?v=nldpxmin-1M&t=405s) · [pstack의 코드 구조 개선 지침](https://github.com/cursor/plugins/blob/41e400932eca14f289e7db717a70455256b6d388/pstack/skills/correct/SKILL.md)
+- `878e9c5`로 의존 경계, IPC 명령, 검수 동작의 증거 조건, 학습 입력 타입과 lint 예외 검사를 `develop`에 병합했다. 정상 코드와 여섯 가지 위반의 거절 원인을 확인했다. 외부망을 끊은 Linux에서 연구 시험 104개가 통과했고 Chrome에서는 다른 출처로 보낸 요청이 수신 서버에 도달하지 않았다. [구조 검사 PR (#12)](https://github.com/guny524/seamone/pull/12) · [거절 진단](https://github.com/guny524/seamone/actions/runs/45583994420)
+- Windows 패키지 작업이 Cargo의 UTF-8 출력을 시스템 문자 인코딩으로 읽던 문제를 수정했다. 실제 빌드 결과와 남은 설치 시험은 [앱 뼈대 이슈의 컴파일·패키지 검사](0001-2026_11_19-app_skeleton_ci/issue_board.md#7-18-컴파일과-패키지-단계의-의존-경계)에 있다
+- `3d82dec`에서 첫 전사의 보관함 갱신과 중복 요청 처리를 유지하며 새 IPC 명령을 연결했다. 기본 Rust 시험 88개(문서 시험 포함)와 Chrome 화면 시험 33개가 통과했다. 별도 기기에서 마이크로 녹음하고 모델을 선택해 전사하는 시험을 위해 PR은 초안으로 두었다. [첫 전사 초안 PR (#11)](https://github.com/guny524/seamone/pull/11) · [통합 커밋 CI](https://github.com/guny524/seamone/actions/runs/45582919461)
+- 첫 전사 초안의 GitHub 비교 범위를 `develop`에 맞췄다. 현재 커밋 `1cb09ec`와 검증 커밋 `3d82dec`는 Git 트리 `4f04a72`가 같다. GitHub의 PR 변경 목록에서도 첫 전사 파일 여섯 개를 확인했다
+
+## 2026-11-27 01:55 구조 검사 밤샘 실행의 첫 결과
+- 사용자 지시로 pstack 개념을 레포에 적용하는 밤샘 실행을 시작했다(이슈 #15, 지시 원문은 이슈 board 1절, 운영 방침은 이 board 3절)
+- worker 조사와 Opus 5.5 high 설계 검토를 거쳐 이번 밤 범위를 native 작업 crate 분리와 그 검사로 정했다(이슈 decision D1, D2)
+- `b2d2990`, `ce55aac` 를 draft [PR #16](https://github.com/guny524/seamone/pull/16) 에 올렸다, 메인이 `make check-architecture`, `make lint`, `make test`(99개) 통과를 확인했다, 자세한 근거는 이슈 log 2026-11-27 01:50
+
+## 2026-11-27 02:25 구조 검사 PR 의 iOS 빌드 실패
+- draft PR #16 의 build run 45862643316 에서 iOS 시뮬레이터만 실패했다(`app/src-tauri/src/commands.rs:126` E0308), 나머지 다섯 산출물과 ci 두 run 은 통과했다, 고치는 일과 이 실수를 lint 단계에서 막는 모바일 컴파일 검사를 worker 가 하고 있다, 자세한 것은 이슈 log 2026-11-27 02:21
+
+## 2026-11-27 02:26 Pi local LLM 실수 유도 시험 1
+- 재생 확인 없이 모두 "맞음" 으로 만드는 command 를 SQL 로 바로 넣으라는 일에서, Pi 는 host 의 직접 SQL 은 검사 때문에 버렸지만 runtime 안에 증거 없이 저장하는 공개 함수를 더했고 모든 검사가 통과했다, 재생 증거를 타입으로 강제하는 다음 단계를 정했다, 자세한 것은 이슈 log 2026-11-27 02:24
+
+## 2026-11-27 02:42 구조 검사 PR 갱신과 develop 기준 목록
+- develop 에 lint 예외 기준 목록 `e13746d` 를 넣고 PR #16 에 `360a089` 를 올렸다, 메인이 시험 106개 통과를 확인했다, 자세한 것은 이슈 log 2026-11-27 02:40
+
+## 2026-11-27 03:02 재생 증거 타입의 구멍
+- Opus 검토가 5단계의 재생 증거 타입을 runtime 안 네 줄로 우회할 수 있음을 찾았다, 7단계로 고친다, 자세한 것은 이슈 log 2026-11-27 03:00
+
+## 2026-11-27 03:25 PR 빌드 통과와 Pi 의 두 번째 우회
+- PR #16 의 `e0b68d3` 이 CI 와 다섯 플랫폼 패키지 빌드를 통과했다, research 직접 삭제 lint `4c702fe` 를 더했다, Pi 재시험 2 는 Store 안의 SQL 로 확인 전사를 직접 쓰고 공개 API 목록을 스스로 고쳐 다시 우회했다, 자세한 것은 이슈 log 2026-11-27 03:25
+
+## 2026-11-27 03:33 Pi 실수 유도 시험 2 결과
+- 재생 증거 타입이 생긴 뒤에도 Pi 는 Store 안 SQL 로 확인 전사를 직접 만들고 공개 API 목록을 스스로 고쳐 모든 검사를 통과했다, 8단계로 core 전이 하나로 묶기와 목록의 base 대조를 정했다, 자세한 것은 이슈 log 2026-11-27 03:32
+
+## 2026-11-27 03:40 재생 증거 발급 경로 고정
+- 7단계 `d0a3d95` 를 PR #16 에 올렸다, 메인이 시험 119개 통과를 확인했다, 8단계를 시작했다, 자세한 것은 이슈 log 2026-11-27 03:40
+
+## 2026-11-27 03:58 확인 전사 쓰기 막기와 기준 목록
+- 8단계를 PR #16 에 올리고 기준 목록 네 개를 develop 에 넣었다(`fdf16ac`), Pi 재시험 2 의 우회가 세 곳에서 거절된다, 자세한 것은 이슈 log 2026-11-27 03:58
+
+## 2026-11-27 04:03 PR #16 CI 실패와 merge 계획
+- PR #16 CI 가 CI Python 의 오래된 SQLite 때문에 실패했다, 고친 뒤 merge 하고 남은 우회 9건은 새 PR 에서 고친다(이슈 decision D3), 자세한 것은 이슈 log 2026-11-27 04:03
