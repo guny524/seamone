@@ -1,8 +1,8 @@
 """가설 글 파일(.tmp/research/hyp/<모델>/<세트>.jsonl)을 읽고 쓴다.
 
 한 줄은 {"id", "ref", "hyp", "seconds"} 이고 eval_ids.json 의 순서대로 앞에서부터 쌓인다.
-쓰는 중에 멈춰 마지막 줄이 잘렸으면 그 줄만 버린다(repair_hypotheses 가 마지막 완성 줄까지 자른다)
-중간 줄이 깨졌으면 줄 번호를 적은 오류로 멈춘다(침묵하지 않는다).
+개행 없이 잘린 마지막 줄만 버린다(repair_hypotheses 가 마지막 완성 줄까지 자른다).
+개행으로 끝난 행이 깨졌으면 마지막 행이라도 줄 번호를 적은 오류로 멈춘다.
 """
 
 import json
@@ -30,7 +30,7 @@ def _parse(path: Path) -> tuple[list[dict], bool]:
         try:
             rows.append(json.loads(raw.decode("utf-8")))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            if number == len(lines):
+            if number == len(lines) and not ends_with_newline:
                 return rows, True
             message = f"{path}:{number} 줄이 깨졌다({type(error).__name__}), 파일을 고쳐야 한다"
             raise ValueError(message) from error
@@ -38,12 +38,12 @@ def _parse(path: Path) -> tuple[list[dict], bool]:
 
 
 def read_hypotheses(path: Path) -> list[dict]:
-    """읽기만 한다, 마지막 줄이 깨졌으면 그 줄을 빼고 돌려준다."""
+    """읽기만 한다. 개행 없이 잘린 마지막 줄만 제외한다."""
     return _parse(path)[0]
 
 
 def repair_hypotheses(path: Path) -> list[dict]:
-    """이어 쓰기 전에 부른다, 깨진 끝 줄을 버리고 끝 개행을 맞춰 마지막 완성 줄까지 자른다."""
+    """이어 쓰기 전에 잘린 끝 줄만 버리고 끝 개행을 맞춘다."""
     rows, needs_repair = _parse(path)
     if needs_repair:
         text = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)

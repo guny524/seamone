@@ -68,3 +68,16 @@ def test_blank_lines_are_ignored(tmp_path):
     path = tmp_path / "a.jsonl"
     path.write_text(line(1) + "\n" + line(2), encoding="utf-8")
     assert ids(read_hypotheses(path)) == ["id1", "id2"]
+
+
+@pytest.mark.parametrize("reader", [read_hypotheses, repair_hypotheses])
+@pytest.mark.parametrize("damage", [b"{broken\n", b'{"id":"\xff"}\n'])
+def test_newline_terminated_corrupt_tail_is_rejected_without_rewriting(tmp_path, reader, damage):
+    path = tmp_path / "a.jsonl"
+    original = line(1).encode("utf-8") + damage
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError, match=r"a\.jsonl:2 줄이 깨졌다"):
+        reader(path)
+
+    assert path.read_bytes() == original
