@@ -123,3 +123,11 @@
 ## 2026-11-27 04:07 SQLite 판 의존 고침과 9단계 시작
 - 검사용 메모리 SQLite 연결에 `unixepoch` 과 `json_extract` 대역을 먼저 등록해 CI 의 오래된 SQLite 에서도 같은 판정이 나게 했다, 함수가 없는 연결을 흉내 낸 시험 2개를 더했다(worker), 메인이 `check-architecture` 통과를 확인하고 `e6c645a` 로 push 했다
 - PR #16 CI 를 기다리는 동안 그 위에 `guny524/15-guard-integrity` 브랜치를 만들어 worker 에게 9단계를 맡겼다
+
+## 2026-11-27 04:20 PR #16 merge 와 열린 PR 셋 옮기기
+- `e6c645a` 에서 PR CI run 45880922487 과 패키지 빌드 run 45880922552(ios, macOS 두 종류, Windows, Linux, Android 모두 통과)를 확인하고 PR #16 을 ready 로 바꿔 develop 에 merge 했다(`9ed37ed`, decision D3)
+- 열린 PR 을 새 develop 위로 옮겼다(사용자 답 "worker 가 새 구조로 옮김"), commit 마다 옮기는 rebase 는 중간 커밋이 충돌해, 최종 트리끼리 충돌이 없는 것을 `git merge-tree` 로 확인한 뒤 develop 을 각 브랜치에 merge 했다(이력을 다시 쓰지 않음)
+  - PR #11 첫 전사(`guny524/5-first-transcription`): `71aab5a`, 충돌 없음, 구조 검사 통과
+  - PR #14 연구 JSONL(`dot/research-jsonl-commit-boundary`): `6941d5a`, `AGENTS.md` add/add 충돌을 develop 쪽 규칙 목록에 PR #14 의 JSONL 규칙 한 줄을 같은 꼴로 더해 풀었다, 구조 검사(research 삭제 검사 포함) 통과
+  - PR #13 CER 비교(`dot/cer-shared-reference-20261126`): `18c8d9b`, 충돌 없음, develop 과의 차이는 PR 의 연구 파일 3개뿐, PR base 를 main 에서 develop 으로 바꿨다 [밤사이 결정]: 이 레포의 기준 브랜치는 develop 이고 main 에는 기준 목록이 없어 새 검사가 늘 실패한다
+- 세 브랜치의 CI 결과를 기다린다, PR #11 은 core 의 `VerifiedText` 필드 비공개(8단계) 때문에 UI 코드가 컴파일되지 않을 수 있다(추측)

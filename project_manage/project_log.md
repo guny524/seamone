@@ -291,3 +291,6 @@
 
 ## 2026-11-27 04:03 PR #16 CI 실패와 merge 계획
 - PR #16 CI 가 CI Python 의 오래된 SQLite 때문에 실패했다, 고친 뒤 merge 하고 남은 우회 9건은 새 PR 에서 고친다(이슈 decision D3), 자세한 것은 이슈 log 2026-11-27 04:03
+
+## 2026-11-27 04:20 PR #16 merge
+- runtime crate 분리와 구조 검사 PR #16 을 develop 에 merge 했다(`9ed37ed`), 다섯 플랫폼 패키지 빌드 통과, 열린 PR #11, #13, #14 에 develop 을 merge 해 push 했고 #13 의 base 를 develop 으로 바꿨다, 자세한 것은 이슈 log 2026-11-27 04:20
