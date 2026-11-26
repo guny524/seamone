@@ -18,7 +18,6 @@ import fcntl
 import hashlib
 import io
 import json
-import shutil
 import tarfile
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -30,6 +29,7 @@ import pyarrow.parquet as pq
 import soundfile
 from huggingface_hub import hf_hub_download
 
+from seamone_research import cache
 from seamone_research.cer import normalize
 from seamone_research.paths import EVAL_IDS_PATH, eval_audio_dir, hf_home
 
@@ -154,15 +154,6 @@ def raw_cache_dir(set_name: str) -> Path:
     return hf_home() / "eval-raw" / set_name
 
 
-def remove_inside(root: Path, target: Path) -> None:
-    """target 이 root 안에 있을 때만 지운다, root 자신이거나 밖이면 지우지 않고 오류를 낸다."""
-    resolved_root, resolved_target = root.resolve(), target.resolve()
-    if resolved_target == resolved_root or resolved_root not in resolved_target.parents:
-        message = f"{target} 은 {root} 안이 아니라서 지우지 않는다"
-        raise ValueError(message)
-    shutil.rmtree(resolved_target, ignore_errors=True)
-
-
 @contextlib.contextmanager
 def set_lock(set_name: str) -> Iterator[None]:
     """같은 세트를 준비하는 실행끼리 하나씩 하게 한다, 잠금은 프로세스가 끝나면 풀린다."""
@@ -179,7 +170,7 @@ def set_lock(set_name: str) -> Iterator[None]:
 def drop_raw_cache(set_name: str) -> None:
     target = raw_cache_dir(set_name)
     if target.exists():
-        remove_inside(hf_home() / "eval-raw", target)
+        cache.remove_inside(hf_home() / "eval-raw", target)
 
 
 def _download(spec: EvalSetSpec, filename: str) -> Path:
@@ -364,7 +355,7 @@ def prepare_audio(set_name: str) -> None:
 def _build_audio(set_name: str, spec: EvalSetSpec, ids: Sequence[str]) -> None:
     out_dir = eval_audio_dir(set_name)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "manifest.json").unlink(missing_ok=True)
+    cache.remove_inside(out_dir, out_dir / "manifest.json", file=True, missing_ok=True)
     candidates = {c.id: c for c in _list_candidates(spec)}
     raw = _extract_audio(spec, set(ids))
     references = {}

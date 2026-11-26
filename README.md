@@ -54,6 +54,7 @@ graph LR
 - `app/src-tauri`: 신뢰할 창과 command 권한, 파일 dialog, mobile 문서 URI 접근과 해제, clipboard와 Tauri 이벤트를 맡고 `LibraryService`를 호출한다, Android의 seek할 수 없는 문서 스트림은 runtime이 크기를 제한해 임시 파일로 옮긴 뒤 디코딩한다
 - `app/ui`: 빠른 검수, 조각별 검증, 교정, 일반 편집 화면, 빠른 검수는 원본을 최대 30초씩 이어 재생한다, 검증과 교정 확인은 현재 조각의 HTML audio `ended` event를 확인한다
 - `research`: 앱과 별도인 PyTorch 연구 코드, 앱은 Python을 포함하지 않고 연구 adapter를 활성화하지 않는다
+- research의 직접 삭제 API는 `seamone_research/cache.py`의 `remove_inside`에 모은다. 이 함수는 HF_HOME 아래 전용 eval-raw/seamone_eval cache 안에서 root의 자식만 삭제하고 공유 HF_HOME/hub와 root 밖의 symlink를 거절한다. manifest 파일 삭제는 기존 missing_ok 동작을 유지한다
 - host는 재생을 듣지 않고 `playback_ended`를 바로 호출할 수 있다, runtime은 token과 revision을 검사하지만 실제 청취나 최소 재생 시간은 확인하지 않는다, 이 검수 정책을 바꾸려면 사람 결정이 필요하다
 
 ### 2-1. 데이터와 저장
@@ -111,6 +112,7 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 - UI가 호출할 Tauri 명령 이름은 `crates/seamone-core/src/ipc.rs`에 선언한다. 같은 선언이 UI 명령 타입, native 처리 함수 등록, 빌드 시 권한 이름을 만든다. 새 명령은 허용할 창과 플랫폼의 capability에도 추가해야 권한 시험을 통과한다
 - `make test`: runtime에서 합성 녹음 수명과 저장 복구, WAV·MP3·M4A 변환, 실제 SQLite 저장과 검수 증거를 확인한다. public 서비스와 비공개 저장소의 통과/컴파일 거절 doctest도 실행한다. host는 dev 의존에서만 켜는 runtime `test-support`로 보관함을 준비하고 등록 IPC로 재생 완료, 검수 저장과 내보내기, 오류 위치, 녹음 상태의 JSON과 창 닫기 차단을 확인한다. host의 const assert는 녹음 지원 플랫폼을 제품 컴파일에서도 대조한다. fixture는 runtime에 두며 실제 마이크나 OS 파일 선택기는 열지 않는다. `make test CARGO_FEATURES=desktop-whisper`는 host feature만 켜서 runtime 엔진까지 전달되는지도 확인한다
 - 같은 crate 안의 증거 경계도 `make test`로 확인한다. 실제 Store와 증거 모듈의 소스를 함께 컴파일하는 정상 예제와 compile_fail 예제가 증거 없는 저장 호출, PlaybackProof 직접 생성, 승인 값 직접 생성을 거절하는지 대조한다. 공개 API 목록을 바꾸거나 private 함수를 더해도 저장 입력 타입은 그대로 필요하다
+- `make check-research-deletions`는 research 소스와 시험의 삭제 API를 AST로 확인한다. `make check-architecture`와 research lint가 이 검사를 실행하며 alias import, 단순 callable 별칭, getattr와 __import__의 삭제 우회도 거절한다. 표준 라이브러리만 쓰는 행동 시험으로 실제 삭제 입구의 전용 cache 경계와 공유 hub 보존을 확인한다. 임의의 동적 코드나 외부 라이브러리의 모든 파일 변경을 막는 sandbox는 아니다
 - `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치, HTML audio의 `ended` event와 별도 교정 화면을 확인한다. 앱의 IPC 서비스는 시험용이다. 다운로드 페이지의 화면과 빌드 링크도 확인한다
 - `make site-preview`: [다운로드 안내](site/index.html)를 로컬 `http://127.0.0.1:4173`에서 열어 본다. 포트가 쓰이는 중이면 `make site-preview SITE_PORT=4174`로 바꾼다
 - macOS 패키지 CI는 업로드할 DMG를 읽기 전용으로 열어 체크섬, 앱 식별자, CPU 종류와 마이크 권한 안내를 검사한다. Whisper 빌드에서는 Mach-O와 Info.plist의 최소 macOS 버전을 빌드 설정과 대조한다

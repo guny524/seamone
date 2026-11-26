@@ -18,7 +18,7 @@ TAURI_BUILD_ARGS ?=
 # 앱 껍데기 crate 는 컴파일할 때 화면 산출물 폴더가 있어야 한다, lint 와 test 는 화면을 빌드하지 않으므로 빈 폴더만 만든다.
 UI_DIST = app/ui/dist
 
-.PHONY: install install-ci-tools fmt lint lint-native lint-ios check-imports check-runtime-api check-architecture check-domain check-lint-exceptions test build dev clean
+.PHONY: install install-ci-tools fmt lint lint-native lint-ios check-imports check-runtime-api check-research-deletions check-architecture check-domain check-lint-exceptions test build dev clean
 
 install:
 	rustup toolchain install
@@ -40,7 +40,11 @@ check-lint-exceptions:
 check-runtime-api:
 	$(PYTHON) scripts/check_runtime_api.py
 
-check-architecture: check-imports check-lint-exceptions check-runtime-api
+check-research-deletions:
+	$(PYTHON) scripts/check_research_deletions.py
+	$(PYTHON) scripts/test_research_deletions.py
+
+check-architecture: check-imports check-lint-exceptions check-runtime-api check-research-deletions
 	$(PYTHON) scripts/test_crate_boundaries.py
 	$(PYTHON) scripts/test_lint_exceptions.py
 	$(PYTHON) scripts/test_runtime_api.py
