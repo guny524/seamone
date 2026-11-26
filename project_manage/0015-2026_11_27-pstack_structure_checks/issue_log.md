@@ -35,3 +35,9 @@
   - 녹음 지원 플랫폼 대조가 Linux 시험에서만 돈다
   - 문서가 "증거 없이 검수 결과를 바꾸는 길을 막았다" 고 실제보다 넓게 말한다(재생을 듣지 않고 끝 알림을 보내는 길은 2acdfb0 전부터 남아 있다)
 - 앞 일곱 건과 문구 좁히기를 같은 worker 에게 맡겼다, 최소 재생 시간 확인은 검수 동작을 바꿔 사용자 질문으로 올렸다(프로젝트 board 3절 물을 것)
+
+## 2026-11-27 02:21 3단계(검토 지적 고치기) 보고와 iOS 빌드 실패
+- worker 가 검토 지적 8건을 고쳤다, 변형 16건(창 닫기 차단 제거, `pub use store::Store`, host 에 `libsqlite3-sys`, 기준 목록 늘리기, 매개변수 속성 억제, lint 표 지우기, `clippy.toml` 만들기, `-D warnings` 빼기, 플랫폼 대조 뒤집기, `playback_ended` 를 `Ok(())` 로 등)이 각각 검사에서 실패했다, 최종 검사 35개와 시험 106개 통과(worker 보고, 메인 재확인 전)
+- lint 예외 기준 목록은 PR base 의 파일과 비교하므로 develop 에 기준 파일이 먼저 있어야 한다, 없으면 일부러 실패한다
+- PR #16 의 build run 45862643316 에서 iOS 시뮬레이터만 `app/src-tauri/src/commands.rs:126` 의 E0308(오류 타입 `&str` 와 `String`)로 실패했다, 다른 다섯 산출물은 통과했다, lint 와 test 가 iOS cfg 코드를 컴파일하지 않아 패키지 빌드에서만 드러났다, 이 실수를 막는 모바일 target lint 검사를 4단계로 맡겼다
+- 메인의 잘못: Pi 시험 worktree 에 worker 와 같은 cargo `target` 을 쓰게 해 worker 빌드에 Pi 쪽 코드가 섞였다(E0433), worker 는 격리된 target 사본으로 검증했다, 이후 두 worktree 의 target 을 나눈다
