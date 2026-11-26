@@ -14,6 +14,7 @@
 - host와 runtime의 녹음 지원 플랫폼은 같아야 한다, host의 const assert가 컴파일할 때 CAPTURE_SUPPORTED와 host cfg를 대조한다, Whisper feature 전달은 `make test CARGO_FEATURES=desktop-whisper`에서 host를 통해서만 켜서 확인한다
 - runtime의 `test-support`는 host의 dev 의존에서만 켠다, Cargo 경계 검사가 제품 의존이나 feature의 전달로 켜는 것을 막고 IPC 시험은 합성 녹음과 전사 fixture를 쓴다
 - 새 lint 억제를 달지 않는다, `make lint`와 `make check-architecture`는 `scripts/lint_exceptions.json`을 기준 ref(`LINT_BASE_REF`, 기본 `origin/develop`)와 비교해 억제 추가와 개수 증가를 막고 Cargo/Ruff lint 표 전체와 clippy 명령도 대조한다, 기준 ref나 JSON을 읽지 못하면 실패한다, 기존 억제의 사람 승인과 만료일은 미결정이다
+- 연구 가설 JSONL에서 개행으로 완료된 구문 오류나 JSON으로 해석되지만 필드 형식이 틀린 행은 읽기와 재개 어느 쪽에서도 버리지 않는다, `research/seamone_research/hypotheses.py`의 공용 파서와 `research/tests/test_hypotheses.py`, CI `research-test`가 확인한다
 - research의 파일 삭제 API는 `seamone_research.cache.remove_inside` 한 입구에서만 쓴다, 전용 eval-raw/seamone_eval cache의 경계를 확인하고 공유 HF_HOME/hub를 보호하기 위해 `make check-architecture`와 research lint의 AST 검사 및 경로 행동 시험을 함께 쓴다, research 시험 코드도 직접 삭제를 예외로 허용하지 않는다
 
 # 출처
