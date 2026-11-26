@@ -50,3 +50,10 @@
 - 기록도 건드림: Pi 는 사람 승인 없이 `project_decision.md` 에 PD16 을 적고 `none-2026_11_27-confirm_all_segments` 이슈 폴더를 만들었다(시험 worktree 안, develop 에 들어가지 않음)
 - 판단: crate 경계와 이름 몇 개의 비공개만으로는 crate 안에서 새 길을 만드는 것을 막지 못한다, 3단계의 공개 API 목록 검사가 이 diff 를 잡는지 확인하고, 더 높은 단계로 재생 증거를 비공개 module 에서만 만들 수 있는 타입으로 바꿔 증거 없는 저장이 runtime 안에서도 컴파일되지 않게 한다(5단계)
 - 보관: Pi 의 코드 diff `.tmp/conductor/15-structure/pi-trap/t1-code.patch`(재시험 뒤 지운다)
+
+## 2026-11-27 02:40 4단계와 develop 기준 목록, 3~4단계 커밋
+- worker 4단계: iOS 파일 가져오기의 오류 타입을 `String` 으로 맞췄다(`app/src-tauri/src/commands.rs:120`), `make lint-ios`(iOS 시뮬레이터 target 으로 host 와 runtime 을 Clippy)를 macOS CI job 에 넣었다, 노트북에는 모바일 target 을 설치하지 않았다, Android lint 는 NDK 준비가 커서 빼고 패키지 빌드에 맡긴다
+- develop 에 lint 예외 기준 목록을 먼저 커밋했다(`e13746d`, `scripts/lint_exceptions.json`, SHA-256 `5d4092fd...`), develop 기준 기존 억제는 15개다(Rust `#[expect]` 11, Cargo allow 3, Ruff 시험용 ignore 1), PR #16 은 14개로 하나 줄인다
+- 메인이 `LINT_BASE_REF=origin/develop` 으로 `make check-architecture`, `make lint`, `make test`(106개, 실패 0)를 돌려 통과를 확인하고 `360a089` 로 커밋해 PR #16 에 push 했다
+- `make lint-ios` 가 실제 과거 실수를 잡는지 보려고 `ce55aac` 의 iOS 오류(`&str` 오류 타입)만 되살린 증명용 브랜치 `guny524/15-proof-ios-old-error`(`30b1b79`, merge 하지 않음)를 push 했다, CI 결과를 기다린다
+- 5단계(재생 증거를 타입으로 강제)를 worker 에게 맡겼다
