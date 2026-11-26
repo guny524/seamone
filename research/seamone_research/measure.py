@@ -9,10 +9,12 @@
 """
 
 import argparse
+import fcntl
 import hashlib
 import json
 import time
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -70,11 +72,26 @@ def batched(items: Sequence[Utterance], size: int) -> Iterator[Sequence[Utteranc
         yield items[start : start + size]
 
 
-def append_timing(model: str, record: dict) -> None:
+@contextmanager
+def _model_writer(model: str) -> Iterator[None]:
+    """같은 모델의 가설·설정·timing을 한 프로세스만 바꾼다."""
+    path = hypothesis_dir(model) / ".measure.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Replace/delete would move the lock away from the inode other writers use.
+    with path.open("a", encoding="utf-8") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            message = f"{model}: 다른 프로세스가 이미 측정 중입니다. 종료 후 다시 실행하세요."
+            raise RuntimeError(message) from error
+        yield
+
+
+def _append_timing(model: str, record: dict) -> None:
     path = hypothesis_dir(model) / "timing.json"
     runs = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
     runs.append(record)
-    path.write_text(json.dumps(runs, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    _write_json_atomically(path, runs)
 
 
 def ids_fingerprint(ids: Sequence[str]) -> str:
@@ -158,6 +175,19 @@ def measure_set(
     device: str,
     dtype: str,
 ) -> dict | None:
+    with _model_writer(model):
+        return _measure_set(model, set_name, transcriber, spec, limit, device, dtype)
+
+
+def _measure_set(
+    model: str,
+    set_name: str,
+    transcriber: Transcriber,
+    spec: ModelSpec,
+    limit: int | None,
+    device: str,
+    dtype: str,
+) -> dict | None:
     todo_all = load_eval_set(set_name, limit)
     ids = load_eval_ids()["sets"][set_name]["ids"]
     path = hypothesis_path(model, set_name)
@@ -206,22 +236,23 @@ def measure_model(
     dtype = dtype or spec.dtype
     for set_name in set_names:
         prepare_audio(set_name)
-    transcriber = LazyTranscriber(model, spec, device, dtype)
-    try:
-        for set_name in set_names:
-            record = measure_set(
-                model, set_name, transcriber, spec, limits[set_name], device, dtype
-            )
-            if record is None:
-                print(f"{model} {set_name}: 이미 다 했다")
-                continue
-            record |= {"model": model, "device": device, "dtype": dtype}
-            record |= {"batch_size": spec.batch_size, "load_seconds": transcriber.load_seconds}
-            record |= {"torch": torch.__version__}
-            append_timing(model, record)
-            print(f"{model} {set_name}: {record}")
-    finally:
-        transcriber.close()
+    with _model_writer(model):
+        transcriber = LazyTranscriber(model, spec, device, dtype)
+        try:
+            for set_name in set_names:
+                record = _measure_set(
+                    model, set_name, transcriber, spec, limits[set_name], device, dtype
+                )
+                if record is None:
+                    print(f"{model} {set_name}: 이미 다 했다")
+                    continue
+                record |= {"model": model, "device": device, "dtype": dtype}
+                record |= {"batch_size": spec.batch_size, "load_seconds": transcriber.load_seconds}
+                record |= {"torch": torch.__version__}
+                _append_timing(model, record)
+                print(f"{model} {set_name}: {record}")
+        finally:
+            transcriber.close()
 
 
 def main() -> None:
