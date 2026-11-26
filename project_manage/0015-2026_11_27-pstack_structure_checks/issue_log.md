@@ -119,3 +119,7 @@
 - 동작 변화와 약해진 시험은 없었다
 - PR CI run 45879419850 의 domain 과 lint-test 가 실패했다, CI 의 Python 3.12 에 든 SQLite 가 오래되어 `unixepoch()` 이 없어 `check-review-writes` 가 `store.rs:644` 등의 SQL 을 해석하지 못했다, 노트북 SQLite 는 새것이라 통과했다, 검사가 실행 환경의 SQLite 판에 기대는 결함이다, 패키지 빌드 run 45879419943 은 통과했다
 - 판단 [밤사이 결정]: PR #16 은 동작 변화와 약해진 시험이 없고 develop 보다 확실히 낫다, CI 를 고치면 develop 에 merge 하고 9건은 새 브랜치 `guny524/15-guard-integrity` 의 새 PR 에서 고친다, 그 PR 은 검사 파일을 고치므로 새로 넣는 "검사 파일이 바뀌면 사람이 확인" job 이 실패하는 것이 맞고 사람이 merge 한다
+
+## 2026-11-27 04:07 SQLite 판 의존 고침과 9단계 시작
+- 검사용 메모리 SQLite 연결에 `unixepoch` 과 `json_extract` 대역을 먼저 등록해 CI 의 오래된 SQLite 에서도 같은 판정이 나게 했다, 함수가 없는 연결을 흉내 낸 시험 2개를 더했다(worker), 메인이 `check-architecture` 통과를 확인하고 `e6c645a` 로 push 했다
+- PR #16 CI 를 기다리는 동안 그 위에 `guny524/15-guard-integrity` 브랜치를 만들어 worker 에게 9단계를 맡겼다
