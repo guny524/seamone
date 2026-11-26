@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from check_unsafe_files import BASELINE, ROOT, check, unsafe_lines
+from check_review_writes import functions
 
 
 class UnsafeSyntax(unittest.TestCase):
@@ -46,7 +47,11 @@ class UnsafeBoundary(unittest.TestCase):
 
     def save(self, files):
         (self.root / BASELINE).parent.mkdir(exist_ok=True)
-        (self.root / BASELINE).write_text(json.dumps({'files': files}))
+        records = []
+        for name in files:
+            _, scopes = functions((self.root / name).read_text())
+            records.extend({'path': name, 'function': scope.name, 'body_sha256': scope.digest()} for scope in scopes)
+        (self.root / BASELINE).write_text(json.dumps({'functions': records}))
 
     def errors(self):
         return '\n'.join(check(self.root, 'HEAD'))
@@ -81,6 +86,21 @@ class UnsafeBoundary(unittest.TestCase):
         self.git('mv', 'capture.rs', 'native.rs')
         self.save(['native.rs'])
         self.assertIn('unreviewed snapshot addition', self.errors())
+
+    def test_another_function_in_the_same_file_cannot_inherit_unsafe_permission(self):
+        source = self.root / 'capture.rs'
+        source.write_text(source.read_text() + '\nunsafe fn forge() {}')
+        self.assertIn('unsafe is forbidden here', self.errors())
+        source.write_text('fn capture() { unsafe { changed_native_call(); } }')
+        self.assertIn('reviewed unsafe function capture changed', self.errors())
+
+    def test_capture_evidence_dependencies_and_runtime_include_are_rejected(self):
+        path = self.root / 'crates/seamone-runtime/src/capture.rs'
+        path.parent.mkdir(parents=True)
+        path.write_text('use crate::playback_evidence; use crate::store::Store; fn f() { include!("hidden.inc"); std::mem::transmute_copy(p); }')
+        diagnostic = self.errors()
+        self.assertIn('runtime include! is forbidden', diagnostic)
+        self.assertIn('capture cannot access store/playback evidence', diagnostic)
 
     def test_removing_an_allowance_does_not_allow_remaining_unsafe(self):
         self.save([])

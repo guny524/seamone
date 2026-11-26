@@ -1,6 +1,7 @@
 """Reject direct research filesystem deletion outside the checked cache entry point."""
 
 import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -9,8 +10,8 @@ ROOT = Path(__file__).resolve().parent.parent
 ENTRY_FILE = 'research/seamone_research/cache.py'
 ENTRY_NAME = 'remove_inside'
 ENTRY = f'seamone_research.cache.{ENTRY_NAME}(root, target), defined in {ENTRY_FILE}'
-FILESYSTEM = {'os', 'posix', 'nt', 'shutil', 'pathlib'}
-DELETIONS = {'shutil.move', 'os.remove', 'os.removedirs', 'posix.remove', 'nt.remove'}
+FILESYSTEM = {'os', 'posix', 'nt', 'shutil', 'pathlib', 'subprocess', 'huggingface_hub'}
+DELETIONS = {'shutil.move', 'os.remove', 'os.removedirs', 'posix.remove', 'nt.remove', 'os.rename', 'os.replace'}
 METHODS = {'unlink', 'rmdir', 'rmtree'}
 BUILTINS = {'getattr', '__import__', 'vars', 'list', 'set', 'dict', 'tuple', 'str'}
 COLLECTIONS = {'builtins.list', 'builtins.set', 'builtins.dict', 'builtins.tuple'}
@@ -34,6 +35,8 @@ class DeletionChecker(ast.NodeVisitor):
         self.errors = {}
 
     def symbol(self, node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return 'builtins.str'
         if isinstance(node, ast.Name):
             return self.bindings.get(node.id, 'builtins.' + node.id if node.id in BUILTINS else '?' + node.id)
         if isinstance(node, (ast.List, ast.ListComp)):
@@ -64,12 +67,14 @@ class DeletionChecker(ast.NodeVisitor):
                     return self.symbol(node.func.value) + '.' + name
             if function == 'builtins.vars' and node.args:
                 return self.symbol(node.args[0])
-            if function in COLLECTIONS or function == 'pathlib.Path':
+            if function.startswith('huggingface_hub.'):
+                return 'huggingface_hub.result'
+            if function in COLLECTIONS or function in {'pathlib.Path', 'builtins.str'}:
                 return function
         return '?expression'
 
-    def reject(self, node, reason):
-        if self.path == ENTRY_FILE and self.scope == [ENTRY_NAME]:
+    def reject(self, node, reason, *, always=False):
+        if not always and self.path == ENTRY_FILE and self.scope == [ENTRY_NAME]:
             return
         self.errors[(node.lineno, node.col_offset)] = (
             f'{self.path}:{node.lineno}:{node.col_offset + 1}: {reason}; use {ENTRY}'
@@ -77,6 +82,16 @@ class DeletionChecker(ast.NodeVisitor):
 
     def check_symbol(self, node, symbol):
         base, _, name = symbol.rpartition('.')
+        root = symbol.split('.')[0]
+        if root == 'subprocess' or (root in {'os', 'posix', 'nt'} and (name in {'system', 'popen'} or name.startswith(('exec', 'spawn')))):
+            self.reject(node, f'process execution {symbol} can bypass cache ownership', always=True)
+        if root == 'huggingface_hub' and (name.startswith('delete') or name == 'execute'):
+            self.reject(node, f'shared Hugging Face cache deletion {symbol} is forbidden', always=True)
+        if name in {'delete_revisions', 'delete_cache', 'delete_cached_repo'}:
+            self.reject(node, f'shared cache deletion {symbol} is forbidden', always=True)
+        if name in {'rename', 'replace'} and base not in {'builtins.str', 'dataclasses'}:
+            if not (self.path == ENTRY_FILE and self.scope == ['publish_partial'] and name == 'replace'):
+                self.reject(node, f'direct path replacement {symbol} is forbidden; use cache.publish_partial', always=True)
         if symbol in DELETIONS or name in METHODS or (name == 'remove' and base.startswith('?')):
             self.reject(node, f'direct deletion callable {symbol.lstrip("?")} is forbidden')
 
@@ -121,6 +136,10 @@ class DeletionChecker(ast.NodeVisitor):
             if isinstance(annotation, ast.Subscript):
                 annotation = annotation.value
             inferred = self.symbol(annotation) if annotation else '?parameter'
+            if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
+                parts = (annotation.left, annotation.right)
+                if any(self.symbol(part) == 'builtins.str' for part in parts) and any(isinstance(part, ast.Constant) and part.value is None for part in parts):
+                    inferred = 'builtins.str'
             self.bindings[arg.arg] = inferred
         for arg in (node.args.vararg, node.args.kwarg):
             if arg is not None:
@@ -195,14 +214,25 @@ def violations(source, path):
         entries = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == ENTRY_NAME]
         if len(entries) != 1:
             checker.errors[(1, 0)] = f'{path}:1: define exactly one checked {ENTRY}'
+        publishers = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'publish_partial']
+        if len(publishers) > 1:
+            checker.errors[(1, 1)] = f'{path}:1: define only one checked cache.publish_partial helper'
     return [checker.errors[key] for key in sorted(checker.errors)]
+
+
+def recipe_violations(source):
+    diagnostics = []
+    for number, line in enumerate(source.splitlines(), 1):
+        if (line.startswith('\t') and re.search(r'(?:^|[\s/;|&])(?:rm|rmdir|unlink)(?:\s|$)', line[1:].lstrip('@-+ '))):
+            diagnostics.append(f'research/Makefile:{number}: direct recipe deletion is forbidden; use seamone_research.cache.remove_inside')
+    return diagnostics
 
 
 def main():
     names = subprocess.check_output(
         ['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', 'research'], cwd=ROOT
     ).decode().split('\0')
-    errors = []
+    errors = recipe_violations((ROOT / 'research/Makefile').read_text(encoding='utf-8'))
     for name in sorted(set(names)):
         path = ROOT / name
         if path.suffix == '.py' and path.is_file():

@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from seamone_research import cache
 from seamone_research.cer import NORMALIZATION_VERSION
 from seamone_research.data import EVAL_SETS
 from seamone_research.measure import (
@@ -86,13 +87,13 @@ def test_a_config_that_is_not_an_object_is_treated_as_broken(tmp_path):
 def test_the_config_is_written_through_a_temporary_name(tmp_path, monkeypatch):
     path = tmp_path / "x.config.json"
     seen = []
-    original = path.__class__.replace
+    original = cache.publish_partial
 
     def spy(self, target):
         seen.append(self.name)
         return original(self, target)
 
-    monkeypatch.setattr(path.__class__, "replace", spy)
+    monkeypatch.setattr(cache, "publish_partial", spy)
     ensure_same_config(path, make_config(), has_rows=False)
     assert seen == ["x.config.json.part"]
 

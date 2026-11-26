@@ -2,12 +2,16 @@
 
 import collections
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
 from check_runtime_api import surface
 from rust_tokens import tokens
 from snapshot_baselines import errors as baseline_errors
+from guard_integrity import base_commit
+from check_review_writes import functions, test_files, git
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / 'crates/seamone-runtime/src/playback_evidence.rs'
@@ -63,7 +67,36 @@ def errors(actual, expected):
     return found
 
 
+def caller_errors(root, policy):
+    names = set(filter(None, git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', 'crates/seamone-runtime/src').split('\0')))
+    tests = test_files(root)
+    diagnostics = []
+    for name in sorted(names):
+        path = root / name
+        if path.suffix != '.rs' or not path.is_file():
+            continue
+        source = path.read_text(encoding='utf-8')
+        code, scopes = functions(source, name in tests)
+        for index, token in enumerate(code):
+            if token.text not in {'issue', 'ended', 'authorize'} or index == 0 or code[index - 1].text not in {'.', ':'}:
+                continue
+            enclosing = [scope for scope in scopes if scope.start < token.start < scope.end]
+            scope = min(enclosing, key=lambda scope: scope.end - scope.start) if enclosing else None
+            if scope is not None and scope.testing:
+                continue
+            caller = {'path': name, 'function': scope.name if scope else '<outside function>', 'method': token.text}
+            if caller not in policy:
+                line = source.count('\n', 0, token.start) + 1
+                diagnostics.append(f'{name}:{line}: {caller["function"]} cannot call {token.text}; use LibraryService::playback/playback_ended/review')
+    return diagnostics
+
+
 def main():
+    try:
+        base_commit(ROOT, os.environ.get('LINT_BASE_REF', 'origin/develop'))
+    except (ValueError, subprocess.CalledProcessError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
     diagnostics = baseline_errors(ROOT, 'scripts/playback_api.json')
     if diagnostics:
         print('\n'.join(diagnostics), file=sys.stderr)
@@ -71,6 +104,7 @@ def main():
     try:
         diagnostics = errors(declarations(SOURCE.read_text(encoding='utf-8')),
                              json.loads(SNAPSHOT.read_text(encoding='utf-8'))['declarations'])
+        diagnostics.extend(caller_errors(ROOT, json.loads(SNAPSHOT.read_text(encoding='utf-8'))['callers']))
     except (OSError, ValueError, KeyError, TypeError) as error:
         diagnostics = [f'{SNAPSHOT}: cannot read the evidence boundary: {error}']
     for diagnostic in diagnostics:

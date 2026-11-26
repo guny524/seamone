@@ -12,6 +12,7 @@ import tokenize
 import tomllib
 from pathlib import Path
 
+from guard_integrity import base_commit
 from rust_tokens import attributes
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -195,6 +196,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-ref", default=os.environ.get("LINT_BASE_REF", "origin/develop"))
     args = parser.parse_args()
+    try:
+        base_commit(ROOT, args.base_ref)
+    except (ValueError, subprocess.CalledProcessError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
     try:
         errors = check(ROOT, args.base_ref)
     except (OSError, ValueError, KeyError, tokenize.TokenError) as error:

@@ -9,7 +9,9 @@ from pathlib import Path
 
 from check_lint_exceptions import git
 from snapshot_baselines import errors as baseline_errors
+from guard_integrity import base_commit
 from rust_tokens import tokens
+from check_review_writes import functions
 
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = 'scripts/unsafe_files.json'
@@ -21,29 +23,38 @@ def unsafe_lines(source):
             yield source.count('\n', 0, token.start) + 1
 
 
-def allowed_files(source):
-    allowed = json.loads(source)['files']
-    if not isinstance(allowed, list) or any(
-        not isinstance(name, str) or Path(name).is_absolute()
-        or '..' in Path(name).parts or not name.endswith('.rs') for name in allowed
-    ) or len(set(allowed)) != len(allowed):
-        raise ValueError('files must be unique relative Rust source paths')
-    return set(allowed)
-
-
 def check(root, ref):
+    diagnostics = baseline_errors(root, BASELINE, ref)
     try:
-        diagnostics = baseline_errors(root, BASELINE, ref)
-        allowed = allowed_files((root / BASELINE).read_text(encoding='utf-8'))
+        reviewed = json.loads((root / BASELINE).read_text(encoding='utf-8'))['functions']
         names = set(filter(None, git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\0')))
         for name in sorted(names):
             path = root / name
             if path.suffix != '.rs' or not path.is_file():
                 continue
-            lines = list(unsafe_lines(path.read_text(encoding='utf-8')))
-            if lines and name not in allowed:
-                diagnostics.extend(f'{name}:{line}: unsafe is forbidden here; use the existing native adapter, '
-                                   'do not forge playback authorization' for line in lines)
+            source = path.read_text(encoding='utf-8')
+            code, scopes = functions(source)
+            allowed = []
+            for entry in reviewed:
+                if entry['path'] != name:
+                    continue
+                matches = [scope for scope in scopes if scope.name == entry['function']]
+                if len(matches) == 1 and matches[0].digest() == entry['body_sha256']:
+                    allowed.append(matches[0])
+                else:
+                    diagnostics.append(f'{name}: reviewed unsafe function {entry["function"]} changed; human base review is required')
+            for index, token in enumerate(code):
+                line = source.count('\n', 0, token.start) + 1
+                if token.text == 'unsafe' and not any(scope.start <= token.start < scope.end for scope in allowed):
+                    diagnostics.append(f'{name}:{line}: unsafe is forbidden here; keep it in the exact reviewed capture function')
+                if name.startswith('crates/seamone-runtime/src/') and token.text == 'include' and index + 1 < len(code) and code[index + 1].text == '!':
+                    diagnostics.append(f'{name}:{line}: runtime include! is forbidden; keep Rust code in inspected modules')
+                if name == 'crates/seamone-runtime/src/capture.rs' and (
+                    token.text == 'playback_evidence' or token.text.startswith('transmute')
+                    or token.text == 'Store'
+                    or (token.text == 'store' and (index == 0 or code[index - 1].text != '.'))
+                ):
+                    diagnostics.append(f'{name}:{line}: capture cannot access store/playback evidence or transmute values')
         return diagnostics
     except (OSError, subprocess.CalledProcessError, ValueError, KeyError, TypeError) as error:
         return diagnostics + [f'{BASELINE}: cannot verify unsafe boundary at {ref}: {error}; fetch a readable base ref']
@@ -53,6 +64,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base-ref', default=os.environ.get('LINT_BASE_REF', 'origin/develop'))
     args = parser.parse_args()
+    try:
+        base_commit(ROOT, args.base_ref)
+    except (ValueError, subprocess.CalledProcessError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
     diagnostics = check(ROOT, args.base_ref)
     for diagnostic in diagnostics:
         print(diagnostic, file=sys.stderr)

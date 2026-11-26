@@ -29,11 +29,28 @@ pub(super) struct AuthorizedReview<'a> {
 }
 
 impl<'a> AuthorizedReview<'a> {
-    pub(super) fn request(self) -> &'a ReviewRequest {
-        match self.authority {
+    pub(super) fn request(&self) -> &'a ReviewRequest {
+        match &self.authority {
             Authority::Played(proof) => proof.request,
             Authority::PlaybackNotRequired(request) => request,
         }
+    }
+}
+
+impl AuthorizedReview<'_> {
+    /// A newly created or changed verified snapshot requires completed playback authority.
+    pub(super) fn admit(
+        self,
+        current: &seamone_core::review::ReviewSegment,
+        next: &seamone_core::review::ReviewSegment,
+    ) -> Result<(), String> {
+        if next.verified.is_some()
+            && next.verified != current.verified
+            && !matches!(&self.authority, Authority::Played(_))
+        {
+            return Err("확인 전사의 변경에는 완료된 재생 승인이 필요합니다.".into());
+        }
+        Ok(())
     }
 }
 
@@ -227,6 +244,73 @@ mod tests {
                 .is_err()
         );
         assert_eq!(playbacks.listening.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn proof_free_actions_cannot_attach_a_verified_snapshot() {
+        let fixture = Fixture::new();
+        let (store, segment) = fixture.transcribed();
+        let playbacks = Playbacks::new();
+        let draft = request(
+            &segment,
+            ReviewAction::SaveDraft {
+                text: "교정".into(),
+            },
+        );
+        let authority = playbacks.authorize(&draft, None).unwrap();
+        let mut next = segment.apply(&draft, 16_000).unwrap();
+        playbacks
+            .authorize(&draft, None)
+            .unwrap()
+            .admit(&segment, &next)
+            .unwrap();
+        next.verified = Some(
+            serde_json::from_value(serde_json::json!({
+                "revision": next.revision, "text": next.text, "source": "corrected"
+            }))
+            .unwrap(),
+        );
+        assert_eq!(
+            authority.admit(&segment, &next).unwrap_err(),
+            "확인 전사의 변경에는 완료된 재생 승인이 필요합니다."
+        );
+
+        let yes = request(
+            &segment,
+            ReviewAction::Judge {
+                verdict: Verdict::Yes,
+            },
+        );
+        let reply = playbacks
+            .issue(&store, &segment.id, segment.revision)
+            .unwrap();
+        playbacks.ended(&reply.token).unwrap();
+        let accepted = segment.apply(&yes, 16_000).unwrap();
+        playbacks
+            .authorize(&yes, Some(&reply.token))
+            .unwrap()
+            .admit(&segment, &accepted)
+            .unwrap();
+
+        let same = request(
+            &accepted,
+            ReviewAction::SaveDraft {
+                text: accepted.text.clone(),
+            },
+        );
+        let unchanged = accepted.apply(&same, 16_000).unwrap();
+        playbacks
+            .authorize(&same, None)
+            .unwrap()
+            .admit(&accepted, &unchanged)
+            .unwrap();
+        let invalidate = request(&accepted, ReviewAction::Invalidate);
+        let cleared = accepted.apply(&invalidate, 16_000).unwrap();
+        playbacks
+            .authorize(&invalidate, None)
+            .unwrap()
+            .admit(&accepted, &cleared)
+            .unwrap();
     }
 
     #[test]

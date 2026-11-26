@@ -261,14 +261,14 @@ def _save_wav(path: Path, raw_bytes: bytes) -> float:
     mono = _to_mono_16k(audio, sample_rate)
     partial = path.with_name(path.name + ".part")
     soundfile.write(partial, mono, SAMPLE_RATE, subtype="PCM_16", format="WAV")
-    partial.replace(path)
+    cache.publish_partial(partial, path)
     return len(mono) / SAMPLE_RATE
 
 
 def _write_json_atomically(path: Path, value: object) -> None:
     partial = path.with_name(path.name + ".part")
     partial.write_text(json.dumps(value, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    partial.replace(path)
+    cache.publish_partial(partial, path)
 
 
 def _fleurs_audio(tar_path: Path, wanted: set[str]) -> dict[str, bytes]:

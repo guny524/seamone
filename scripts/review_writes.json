@@ -3,19 +3,38 @@
   "authorized": [
     {
       "path": "crates/seamone-runtime/src/store.rs",
-      "function": "Store::mutate"
+      "function": "Store::mutate",
+      "body_sha256": "e8d565a0909b10ae72ddd7353cb4d5b5a541ca00a30cd8ebd3c682af2f9508a0"
     }
   ],
   "unverified": [
     {
       "path": "crates/seamone-runtime/src/store.rs",
       "function": "Store::commit_transcription",
-      "body_sha256": "04139fc566c6f01de5413a3ef0efb6110ba814763659a447faf6a5c12710138d"
+      "body_sha256": "7e094a32de3bc4b47e525abd89920e66c0c1d2669f2dc58bc09a95a277ad7ae1"
     },
     {
       "path": "crates/seamone-runtime/src/store.rs",
       "function": "flag_overlapping_segments",
-      "body_sha256": "1d6e789665004879ed72e6cada48a5a5209f453497e94897b1b4a69eaa832d2a"
+      "body_sha256": "909e81b752348c44239c27218b8b60eb3240dcd9114a2d311380d35930f5cad6"
+    }
+  ],
+  "migrations": [
+    {
+      "path": "crates/seamone-runtime/src/schema.sql",
+      "sha256": "7dd734271a9cf92757c19ac7846401b6007b8814167dd76da20d7d7197a069ad"
+    },
+    {
+      "path": "crates/seamone-runtime/src/schema-v2.sql",
+      "sha256": "5a256af23c0d51253a5020a74aef8c06cb7e9fb22709e84115d5c6f8a4f29389"
+    },
+    {
+      "path": "crates/seamone-runtime/src/schema-v3.sql",
+      "sha256": "1a5bdbce9500a2f72b7d9d314e47f4a4b1ec983b603b075a23a22e24fe4cc0af"
+    },
+    {
+      "path": "crates/seamone-runtime/src/schema-v4.sql",
+      "sha256": "a1e8bf7b92ac2245f3317b54e06d45b54126fe7752d4851ee56ddb5eb4204149"
     }
   ]
 }

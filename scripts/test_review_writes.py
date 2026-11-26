@@ -97,6 +97,7 @@ class ReviewWrites(unittest.TestCase):
 
     def test_authorized_writer_requires_the_evidence_type(self):
         source = '''impl Store { fn mutate(&mut self, authorization: crate::playback_evidence::AuthorizedReview<'_>) {
+            self.writes.review(&tx, authorization, &current, &next)?;
             self.db.execute("UPDATE segments SET body=?1 WHERE id=?2", params);
             self.db.execute("INSERT INTO training_queue(segment_id,revision) VALUES (?1,?2)", params);
         }}'''
@@ -120,6 +121,30 @@ class ReviewWrites(unittest.TestCase):
             fn bypass() { db.execute("UPDATE segments SET body=?1", params); }
         }}'''
         self.assertIn('Store::mutate::bypass writes segments', self.errors(source, self.policy))
+
+    def test_reviewed_writer_body_cannot_bypass_admission_after_a_check(self):
+        source = '''impl Store { fn mutate(&mut self, authorization: crate::playback_evidence::AuthorizedReview<'_>) {
+            self.writes.review(&tx, authorization, &current, &next)?;
+            self.db.execute("UPDATE segments SET body=?1 WHERE id=?2", params);
+        }}'''
+        _, scopes = functions(source)
+        policy = {'authorized': [{'path': PATH, 'function': 'Store::mutate', 'body_sha256': scopes[0].digest()}], 'unverified': []}
+        self.assertEqual(self.errors(source, policy), '')
+        changed = source.replace('self.db.execute', 'next.verified = forged; self.db.execute')
+        self.assertIn('changed its reviewed authorization and write body', self.errors(changed, policy))
+
+    def test_trigger_and_view_definitions_are_rejected(self):
+        for sql in ("CREATE TRIGGER t AFTER UPDATE ON training_queue BEGIN UPDATE segments SET body='forged'; END",
+                    "CREATE TEMP TRIGGER t AFTER UPDATE ON training_queue BEGIN UPDATE segments SET body='forged'; END",
+                    "CREATE VIEW v AS SELECT body FROM segments"):
+            with self.subTest(sql=sql):
+                self.assertIn('defines a trigger or view', self.errors('fn bypass() { db.execute_batch(r###"' + sql + '"###); }'))
+
+    def test_ufcs_and_additional_sql_methods_cannot_hide_concat_sql(self):
+        for call in ['Connection::execute(&tx, Q, params)', 'tx.query_one(Q, callback)',
+                     'tx.query_row_and_then(Q, params, callback)', 'tx.prepare_with_flags(concat!("UPD","ATE segments SET body=?1"), flags)']:
+            with self.subTest(call=call):
+                self.assertIn('uses dynamic SQL', self.errors('fn bypass() {' + call + ';}'))
 
     def test_dynamic_sql_is_rejected_before_it_can_hide_a_write(self):
         for call in ['db.execute(sql, params)', 'db.prepare(&query)', 'db.execute_batch(format!("{}", query))']:
@@ -151,10 +176,27 @@ class ReviewWrites(unittest.TestCase):
         self.assertIn('writes segments', self.errors('fn f() { db.execute_batch("SELECT 1; UPDATE segments SET body=?1;"); }'))
         self.assertIn('cannot be inspected', self.errors('fn f() { db.execute("UPDATE segments SET", params); }'))
 
+    def test_rust_escapes_in_non_sql_literals_do_not_affect_sql_inspection(self):
+        source = r'''fn normal() {
+            let bom = "\u{FEFF}";
+            let control = "\x7f";
+            let zero = "\0";
+            let quote = "\'";
+            db.query_row("SELECT 1", [], callback);
+        }'''
+        self.assertEqual(self.errors(source), '')
+        escaped = r'''fn bypass() { db.execute("\x55PDATE segments SET body=?1", params); }'''
+        self.assertIn('writes segments', self.errors(escaped))
+        bad = r'''fn bypass() { db.execute("UPDATE segments SET body='\q'", params); }'''
+        diagnostic = self.errors(bad)
+        self.assertIn(PATH + ':1:', diagnostic)
+        self.assertIn('invalid Rust SQL literal', diagnostic)
+
     def test_only_known_migration_includes_are_allowed(self):
         source = 'impl Store { fn open() { db.execute_batch(include_str!("schema-v4.sql")); } }'
-        self.assertEqual(self.errors(source), '')
-        self.assertIn('uses dynamic SQL', self.errors(source.replace('schema-v4.sql', 'other.sql')))
+        policy = {'authorized': [], 'unverified': [], 'migrations': json.loads((ROOT / SNAPSHOT).read_text())['migrations']}
+        self.assertEqual(self.errors(source, policy), '')
+        self.assertIn('uses dynamic SQL', self.errors(source.replace('schema-v4.sql', 'other.sql'), policy))
 
 
 if __name__ == '__main__':

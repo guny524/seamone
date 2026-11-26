@@ -13,10 +13,45 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  LINT_BASE_REF: ${{ github.event.pull_request.base.sha || 'origin/develop' }}
+  LINT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
 
 jobs:
+  guard-base:
+    runs-on: ubuntu-22.04
+    outputs:
+      commit: ${{ steps.base.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - id: base
+        run: |
+          python3 -I - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+          ref = event.get('pull_request', {}).get('base', {}).get('sha') or event.get('before')
+          if ref and set(ref) == {'0'}:
+              ref = git('merge-base', 'HEAD', 'origin/develop')
+          if not ref:
+              raise SystemExit('No event base; head cannot select its own baseline')
+          base = git('rev-parse', '--verify', '--end-of-options', ref + '^{commit}')
+          if base == git('rev-parse', 'HEAD'):
+              raise SystemExit('guard base must differ from HEAD')
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+              output.write('commit=' + base + '\n')
+          print(base)
+          PY
+
   lint-test:
+    needs: guard-base
+    env:
+      LINT_BASE_REF: ${{ needs.guard-base.outputs.commit }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -64,6 +99,9 @@ jobs:
           SEAMONE_CHROME="$chrome_path" make ui-test
 
   domain:
+    needs: guard-base
+    env:
+      LINT_BASE_REF: ${{ needs.guard-base.outputs.commit }}
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -77,6 +115,9 @@ jobs:
       - run: make check-architecture check-domain
 
   macos-native-lint:
+    needs: guard-base
+    env:
+      LINT_BASE_REF: ${{ needs.guard-base.outputs.commit }}
     runs-on: macos-latest
     timeout-minutes: 30
     steps:

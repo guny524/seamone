@@ -8,6 +8,8 @@
 import json
 from pathlib import Path
 
+from seamone_research.cache import publish_partial
+
 
 def encode_row(utterance_id: str, reference: str, hypothesis: str, seconds: float) -> str:
     row = {"id": utterance_id, "ref": reference, "hyp": hypothesis, "seconds": seconds}
@@ -49,5 +51,5 @@ def repair_hypotheses(path: Path) -> list[dict]:
         text = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
         partial = path.with_name(path.name + ".part")
         partial.write_text(text, encoding="utf-8")
-        partial.replace(path)
+        publish_partial(partial, path)
     return rows
