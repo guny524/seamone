@@ -181,3 +181,10 @@
   - 과잉: 커밋 없는 새 브랜치 push 와 사람이 승인해 merge 한 목록 변경 뒤의 develop push 가 빨갛게 된다, 준비된 문의 `execute`, `query_row` 를 동적 SQL 로 거절한다
   - 우회: SQL 앞머리 낱말(`SAVEPOINT`)로 EXPLAIN 을 건너뛴다, `Batch`, `raw_execute`, authorizer 끄기, `ALTER TABLE ... RENAME` 으로 열과 표 이름 바꾸기, `<Connection>::open` 과 `type` alias 로 따로 열기, `cfg_attr(..., path = ...)`, runtime 에 다른 SQLite crate 더하기, 필수 check 가 `guard-rules-review-trusted` 하나뿐이라 다른 검사가 참고용이 됨, `EligibleExample::check` 가 pub 이라 학습 예시를 직접 만들 수 있음(이번 이슈 전부터)
 - 11단계(06:30 까지): 회귀와 과잉부터, 시간이 되면 authorizer, SQL 앞머리, `cfg_attr` path, 다른 SQLite crate 와 필수 check 목록과 `EligibleExample` 은 사람에게 올린다
+
+## 2026-11-27 06:20 11단계와 밤샘 마감
+- worker 11단계(06:17 끝남): research 의 위치 인자 하나인 `replace` 를 경로 교체로 다시 거절(10단계 회귀 고침), 문자열 정규화 `replace` 와 `dataclasses.replace` 는 허용, 동적 builtins 조회 거절, 커밋 없는 새 브랜치 push 는 통과, develop push 는 첫 parent 와 비교하되 merge 된 정책은 develop HEAD 에서 읽음, `prepare` 로 만든 문의 `execute` 와 `query_row` 는 문자열 인자 검사에서 뺌, migration 뒤 authorizer 가 `ALTER`, `DROP`, `CREATE TABLE`, `writable_schema` 거절, authorizer 와 hooks 언급과 `Connection` alias 로 열기, SQL 앞머리로 EXPLAIN 건너뛰기, `Batch` 와 `raw_execute`, `cfg_attr` path 거절
+- 메인이 `make test` 132개(실패 0)와 검사기 시험(guard, review writes, research deletions) 통과를 확인하고 `226d0a2` 로 PR #18 에 push 했다
+- 남긴 것(사람에게 올림): runtime 에 다른 SQLite crate 더하기, 필수 check 목록(branch protection 은 레포 설정), `EligibleExample::check` 가 pub 이라 학습 예시를 직접 만들 수 있는 길(이번 이슈 전부터), 재생 최소 시간
+- 정리: cron 두 개를 지웠다, worker 탭(codex 세션 `01a21898-2b74-7c02-9206-5ad88ae3fe65`, 이어 열기 `codex resume 01a21898-2b74-7c02-9206-5ad88ae3fe65`)과 Pi 탭을 닫았다, 시험용 worktree 셋(`15-pi-trap`, `13-cer-rebase`, `14-jsonl-rebase`)과 그 로컬 브랜치, Pi target 복제본(7.6G), 15-structure-checks 의 공유 `target`(6.3G)을 지웠다, 디스크 여유 32Gi
+- 남긴 것과 지울 조건: `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(PR #18 브랜치)와 그 `.tmp/structure-checks/`(검증 target 5.4G 와 증거 로그)는 PR #18 이 merge 되거나 닫히면 지운다, `.tmp/conductor/15-structure/`(지시서, 보고, Opus 검토, Pi patch)는 이슈 #15 를 닫을 때 지운다

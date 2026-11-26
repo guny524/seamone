@@ -315,3 +315,13 @@
 
 ## 2026-11-27 05:52 PR #18 마지막 검토
 - Opus 마지막 검토가 회귀 하나와 과잉 검사, 남은 우회를 찾았다, 11단계로 회귀와 과잉부터 고치고 남은 우회를 어디까지 막을지는 사람에게 묻는다, 자세한 것은 이슈 log 2026-11-27 05:52
+
+## 2026-11-27 06:20 아침 보고(구조 검사 밤샘 실행)
+- 무엇을 했나: 사용자 지시로 pstack 개념을 레포에 적용했다, 저장소, 음성, 녹음, 받아쓰기, 학습 대기열을 `crates/seamone-runtime` 으로 옮기고(폴더 구조), host 의 직접 접근, 재생 증거 없는 확인 전사, research 의 공유 cache 삭제, 새 lint 억제, iOS 전용 코드 오류를 컴파일, lint, CI 에서 거르게 했다, Pi local LLM 으로 같은 함정을 네 번 시험해 우회가 나올 때마다 막았다
+- merge 된 것: PR #16 "기기 안 저장소와 음성 처리를 runtime crate 로 옮기고 host 의 직접 접근을 검사로 막는다"(`9ed37ed`, 다섯 플랫폼 패키지 빌드 통과)
+- develop 에 직접 넣은 것: lint 예외 기준 목록 `e13746d`, runtime 공개 API, 재생 증거 선언, 확인 전사 쓰기 함수, unsafe 파일 기준 목록 `fdf16ac`, 기록 커밋들
+- 사람 확인을 기다리는 것: PR #18 "검사가 같은 PR 의 검사 파일 수정에 꺼지지 않게 하고 남은 우회를 실행 중 권한과 범위 검사로 막는다"(`34c110d`, `35f64ff`, `226d0a2`), 검사 파일을 고치므로 새 관문 job 이 이 PR 에서 실패하는 것이 맞다
+- 옮긴 것: 열린 PR #11, #13, #14 에 develop 을 merge 해 새 구조 위에서 CI 와 패키지 빌드 통과(셋 다 draft, #13 base 를 develop 으로 바꿈)
+- [밤사이 결정]: 이번 밤 범위(이슈 decision D1), 기존 lint 예외는 새로 더하는 것만 거절(D2), PR #16 먼저 merge 와 남은 우회는 새 PR(D3), PR #13 base 를 develop 으로
+- 쓴 모델: worker Codex `gpt-6.1-sol` high 한 세션(바꾸지 않음), 검토 Claude Opus 5.5 high 다섯 번, 적용 확인 Pi `d0xin-swift-1.5-qwen3.8-27b-uncensored-fp8` 네 번
+- 자세한 것은 이슈 log `0015-2026_11_27-pstack_structure_checks/issue_log.md`
