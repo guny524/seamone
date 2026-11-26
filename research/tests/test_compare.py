@@ -2,6 +2,8 @@ import math
 
 import pytest
 
+import seamone_research.compare as comparison
+import seamone_research.score as scoring
 from seamone_research.cer import CerCounts, ratio_estimate
 from seamone_research.compare import paired_difference, pooled_rate
 
@@ -46,3 +48,33 @@ def test_paired_difference_of_identical_results_is_zero_with_no_spread():
 
     assert delta == 0.0
     assert stderr == 0.0
+
+
+@pytest.mark.parametrize("compare", ["paired", "score"])
+def test_shared_cer_rejects_mismatched_references_with_the_same_id(monkeypatch, compare):
+    module = comparison if compare == "paired" else scoring
+    monkeypatch.setattr(module, "load_eval_ids", lambda: {"sets": {"s": {"ids": ["u"]}}})
+    monkeypatch.setattr(module, "hypothesis_path", lambda model, _set: model)
+    records = {
+        "a": [{"id": "u", "ref": "가나", "hyp": "가나"}],
+        "b": [{"id": "u", "ref": "다라", "hyp": "가나"}],
+    }
+    monkeypatch.setattr(module, "read_hypotheses", records.__getitem__)
+    run = comparison.counts_on_common_prefix if compare == "paired" else scoring.collect
+
+    with pytest.raises(ValueError, match=r"s/u: .*a.*b"):
+        run(["a", "b"], ["s"])
+
+
+def test_shared_cer_accepts_references_equivalent_after_normalization(monkeypatch):
+    monkeypatch.setattr(comparison, "load_eval_ids", lambda: {"sets": {"s": {"ids": ["u", "v"]}}})
+    monkeypatch.setattr(comparison, "hypothesis_path", lambda model, _set: model)
+    records = {
+        "a": [{"id": "u", "ref": "가 나!", "hyp": "가나"}, {"id": "v", "ref": "다", "hyp": "다"}],
+        "b": [{"id": "u", "ref": "가나", "hyp": "가나"}],
+    }
+    monkeypatch.setattr(comparison, "read_hypotheses", records.__getitem__)
+
+    counts_by_model = comparison.counts_on_common_prefix(["a", "b"], ["s"])
+
+    assert counts_by_model == {"a": [counts(0, 2)], "b": [counts(0, 2)]}
