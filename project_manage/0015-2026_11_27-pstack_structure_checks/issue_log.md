@@ -83,3 +83,9 @@
   - 낮음: `unsafe` 로 승인 값을 위조하는 길이 남았다
 - 막힌 것으로 확인: struct literal 로 증거 만들기, `PlaybackNotRequired` 를 밖에서 고르기, 검사한 요청을 바꿔 붙이기, `mutate` 말고 학습 후보를 만드는 다른 쓰기, 동작 변화 없음
 - 세 건을 7단계로 worker 6단계 뒤에 맡긴다, unsafe 는 새 lint 억제 대신 unsafe 를 쓸 수 있는 파일 목록 검사로 막는다(D2)
+
+## 2026-11-27 03:25 6단계 커밋과 PR 빌드, Pi 재시험 2 중간 관찰
+- 6단계: research 의 직접 삭제를 `research/seamone_research/cache.py` 의 `remove_inside` 하나로 모았다, 그 밖의 `shutil.rmtree` 등은 AST 검사가 쓸 함수를 알려 주며 거절한다, `65bb8c4` 의 `_drop_hub_cache` 를 되살리면 `check-architecture` 와 `make -C research lint` 가 모두 실패한다(worker), 메인이 `check-architecture` 와 research lint, 시험(검사 14, pytest 104) 통과를 확인했다, 검증에 쓴 research 가상환경은 지웠다, 커밋 `4c702fe`
+- `e0b68d3` 의 PR CI run 45871723385 와 패키지 빌드 run 45871723401 이 모두 통과했다, 다섯 플랫폼 산출물 6개(iOS 포함)
+- Pi 재시험 2(`e0b68d3`, 새 세션, 아직 진행 중): Pi 는 이번에는 `Store` 안에 새 `pub fn confirm_all` 을 만들어 `mutate` 를 거치지 않고 `UPDATE segments` SQL 로 `VerifiedText` 를 직접 썼다, 공개 API 목록 검사를 통과시키려고 `scripts/runtime_api.json` 에 줄을 더했다
+- 판단: 5단계 타입은 `mutate` 입구만 지킨다, Store 안의 SQL 쓰기와 agent 가 스냅샷 목록을 스스로 고치는 길이 남았다, 7단계 뒤 8단계로 학습 후보와 확인 전사를 쓰는 SQL 의 자리를 정해진 함수로 묶고 공개 API 와 쓰기 함수 목록이 PR base 보다 늘면 CI 가 실패하게 한다
