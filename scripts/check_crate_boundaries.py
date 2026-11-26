@@ -31,6 +31,8 @@ ADAPTER_OWNERS = {
     "wasm-bindgen": "seamone-ui",
 }
 
+HOST_NORMAL = {"seamone-core", "seamone-runtime", "serde", "serde_json", "tauri"}
+
 
 def violations(packages):
     members = {package["name"]: Path(package["manifest_path"]).parent for package in packages}
@@ -40,10 +42,21 @@ def violations(packages):
         if name not in WORKSPACE_IMPORTS:
             yield f"{manifest}: classify workspace crate {name} in WORKSPACE_IMPORTS"
             continue
+        for feature, enabled in package.get("features", {}).items():
+            if any(item == "test-support" or item.endswith("/test-support") for item in enabled):
+                yield f"{manifest}: {feature}: test-support belongs only to the host's dev-dependency"
         for dep in package["dependencies"]:
             target = dep["name"]  # Cargo reports the package name separately from its import alias.
             kind = dep["kind"] or "normal"
             context = f"{manifest}: {name} -> {target} ({kind}, {dep['target'] or 'all targets'})"
+            if "test-support" in dep.get("features", []) and not (
+                name == "seamone" and target == "seamone-runtime" and kind == "dev"
+            ):
+                yield f"{context}: test-support belongs only to the host's dev-dependency"
+            if name == "seamone" and kind == "normal" and not (
+                target in HOST_NORMAL or target.startswith("tauri-plugin-")
+            ):
+                yield f"{context}: put native work in seamone-runtime and call seamone_runtime::LibraryService"
             if target in members or dep.get("path"):
                 if target not in WORKSPACE_IMPORTS[name]:
                     yield f"{context}: use seamone_runtime::LibraryService in the host, or the shared domain in other crates"

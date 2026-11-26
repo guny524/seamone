@@ -13,6 +13,13 @@
 //! use seamone_runtime::LibraryService;
 //! fn open(root: &std::path::Path) { let _ = LibraryService::open(root); }
 //! ```
+//! ```compile_fail,E0432
+//! use seamone_runtime::Store;
+//! ```
+//! ```
+//! use seamone_runtime::LibraryService;
+//! fn guarded(service: &LibraryService) { let _ = service.library(); }
+//! ```
 //! ```compile_fail,E0603
 //! use seamone_runtime::audio::AudioLibrary;
 //! ```
@@ -45,6 +52,8 @@ mod normalize;
 mod store;
 #[cfg(test)]
 mod store_tests;
+#[cfg(feature = "test-support")]
+pub mod test_support;
 mod training;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -234,14 +243,18 @@ impl LibraryService {
     }
     pub fn import_file(
         &self,
-        name: String,
+        source: impl AsRef<Path>,
         input: File,
         can_commit: impl Fn() -> bool,
     ) -> Result<RecordingInfo, String> {
         let _foreground = self.background.foreground.enter();
         let library = self.store()?.audio.clone();
         let mut audio = audio_ingest::decode(&library, input)?;
-        self.store()?.save_audio(name, &mut audio, can_commit)
+        self.store()?.save_audio(
+            audio_ingest::display_name(source.as_ref()),
+            &mut audio,
+            can_commit,
+        )
     }
     /// Copies a document-provider stream to a bounded, seekable file owned by the library.
     pub fn import_stream(

@@ -34,6 +34,7 @@ tauri = { version = "2.12.7", features = [] }
 tauri-plugin-fs = "2.7.1"
 
 [dev-dependencies]
+seamone-runtime = { path = "../../crates/seamone-runtime", features = ["test-support"] }
 tempfile = "3"
 # 시험에서 mock runtime 으로 등록된 command 에 IPC 요청을 보낸다
 tauri = { version = "2.12.7", features = ["test"] }

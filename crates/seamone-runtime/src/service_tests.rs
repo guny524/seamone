@@ -209,6 +209,31 @@ fn document_stream_import_reopens_and_rechecks_permission_before_commit() {
     );
 }
 
+#[test]
+fn opened_file_import_uses_the_runtime_display_name_and_permission_check() {
+    let fixture = Fixture::new();
+    let service = LibraryService::open(&fixture.root.join("app")).unwrap();
+    let open = || std::fs::File::open(&fixture.source).unwrap();
+    assert!(
+        service
+            .import_file("/private/denied.wav", open(), || false)
+            .is_err()
+    );
+    assert_eq!(service.library().unwrap().recordings, []);
+    let long_name = format!("{}.wav", "가".repeat(201));
+    for (path, expected) in [
+        (std::path::PathBuf::from("/"), "가져온 음성".to_string()),
+        (
+            std::path::PathBuf::from("/private").join(&long_name),
+            long_name.chars().take(200).collect(),
+        ),
+    ] {
+        let saved = service.import_file(path, open(), || true).unwrap();
+        assert_eq!(saved.name, expected);
+        assert_eq!(saved.samples, 16_000);
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 #[test]
 fn capture_saves_cancels_and_defers_close_until_unsaved_audio_is_discarded() {

@@ -18,7 +18,7 @@ TAURI_BUILD_ARGS ?=
 # 앱 껍데기 crate 는 컴파일할 때 화면 산출물 폴더가 있어야 한다, lint 와 test 는 화면을 빌드하지 않으므로 빈 폴더만 만든다.
 UI_DIST = app/ui/dist
 
-.PHONY: install install-ci-tools fmt lint lint-native check-imports check-architecture check-domain check-lint-exceptions test build dev clean
+.PHONY: install install-ci-tools fmt lint lint-native lint-ios check-imports check-runtime-api check-architecture check-domain check-lint-exceptions test build dev clean
 
 install:
 	rustup toolchain install
@@ -37,18 +37,27 @@ check-imports:
 check-lint-exceptions:
 	$(PYTHON) scripts/check_lint_exceptions.py
 
-check-architecture: check-imports check-lint-exceptions
+check-runtime-api:
+	$(PYTHON) scripts/check_runtime_api.py
+
+check-architecture: check-imports check-lint-exceptions check-runtime-api
 	$(PYTHON) scripts/test_crate_boundaries.py
 	$(PYTHON) scripts/test_lint_exceptions.py
+	$(PYTHON) scripts/test_runtime_api.py
 
 check-domain:
 	cargo check --locked -p seamone-core --lib --target wasm32v1-none
 
-lint-native: check-imports check-lint-exceptions
+lint-native: check-imports check-lint-exceptions check-runtime-api
 	mkdir -p $(UI_DIST)
 	cargo clippy --locked -p seamone -p seamone-runtime --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings
 
-lint: check-imports check-lint-exceptions
+# iOS target and SDK are prepared on the CI macOS runner, never installed by this target.
+lint-ios: check-imports check-lint-exceptions check-runtime-api
+	mkdir -p $(UI_DIST)
+	cargo clippy --locked -p seamone -p seamone-runtime --target aarch64-apple-ios-sim -- -D warnings
+
+lint: check-imports check-lint-exceptions check-runtime-api
 	mkdir -p $(UI_DIST)
 	cargo fmt --all --check
 	node --check app/ui/tests/review.mjs

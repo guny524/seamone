@@ -3,6 +3,8 @@ mod commands;
 use seamone_runtime::LibraryService;
 use tauri::Manager;
 
+const _: () = assert!(seamone_runtime::CAPTURE_SUPPORTED == cfg!(native_capture));
+
 /// 앱 껍데기가 화면에 내주는 command 를 등록한다, 실제 앱과 시험이 같은 등록을 쓴다.
 fn register_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     macro_rules! handlers {
@@ -181,11 +183,6 @@ mod tests {
         .map(|r| r.deserialize().unwrap())
     }
 
-    #[test]
-    fn capture_support_matches_host_registration() {
-        assert_eq!(seamone_runtime::CAPTURE_SUPPORTED, cfg!(native_capture));
-    }
-
     #[cfg(all(
         feature = "desktop-whisper",
         not(any(target_os = "android", target_os = "ios"))
@@ -200,10 +197,26 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let folder = tempfile::tempdir_in(root).unwrap();
         let app = register_commands(mock_builder())
-            .manage(seamone_runtime::LibraryService::open(folder.path()).unwrap())
+            .manage(seamone_runtime::test_support::open(folder.path()).unwrap())
             .build(mock_context(noop_assets()))
             .unwrap();
         (folder, app)
+    }
+
+    fn review_app_fixture() -> (
+        tempfile::TempDir,
+        tauri::App<tauri::test::MockRuntime>,
+        seamone_core::review::ReviewSegment,
+    ) {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.tmp/native-tests");
+        std::fs::create_dir_all(&root).unwrap();
+        let folder = tempfile::tempdir_in(root).unwrap();
+        let (service, segment) = seamone_runtime::test_support::transcribed(folder.path()).unwrap();
+        let app = register_commands(mock_builder())
+            .manage(service)
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        (folder, app, segment)
     }
 
     #[test]
@@ -325,17 +338,435 @@ mod tests {
 
     #[cfg(native_capture)]
     #[test]
-    fn idle_main_window_closes_through_the_service_event_adapter() {
-        let (_folder, app) = app_fixture();
+    fn main_window_close_waits_for_unsaved_audio_to_be_discarded() {
+        use seamone_core::capture::CaptureStatus;
+        use std::{
+            cell::Cell,
+            rc::Rc,
+            time::{Duration, Instant},
+        };
+        use tauri::{RunEvent, WindowEvent};
+
+        let (folder, app) = app_fixture();
+        let state = app.state::<seamone_runtime::LibraryService>();
+        state.start_recording().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !matches!(state.capture_status(), CaptureStatus::Recording { .. }) {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
         let main = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
             .build()
             .unwrap();
+        let closed = Rc::new(Cell::new(0));
+        let seen = Rc::clone(&closed);
         app.run(move |app, event| {
-            let ready = matches!(event, tauri::RunEvent::Ready);
+            let ready = matches!(event, RunEvent::Ready);
+            let close_request = matches!(&event, RunEvent::WindowEvent { label, event: WindowEvent::CloseRequested { .. }, .. } if label == "main");
             super::app_event(app, event);
             if ready {
                 main.close().unwrap();
             }
+            if close_request {
+                seen.set(seen.get() + 1);
+                if seen.get() == 1 {
+                    let state = app.state::<seamone_runtime::LibraryService>();
+                    let deadline = Instant::now() + Duration::from_secs(2);
+                    loop {
+                        if let CaptureStatus::Interrupted { session_id, reason, .. } = state.capture_status() {
+                            assert!(reason.contains("창을 닫기 전에"));
+                            state.finish_recording(&session_id, false).unwrap();
+                            main.close().unwrap();
+                            break;
+                        }
+                        assert!(Instant::now() < deadline);
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                }
+            }
         });
+        assert_eq!(
+            closed.get(),
+            2,
+            "the first native close request must be prevented"
+        );
+        assert_eq!(
+            seamone_runtime::LibraryService::open(folder.path())
+                .unwrap()
+                .library()
+                .unwrap()
+                .recordings,
+            []
+        );
+    }
+
+    #[test]
+    fn registered_batch_saves_disjoint_ranges_through_trusted_ipc() {
+        use seamone_core::{
+            error_marks::{ErrorMarkBatch, ErrorMarkPage},
+            review::SampleRange,
+        };
+        use serde_json::json;
+        let (_fixture, app, segment) = review_app_fixture();
+        let window = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .unwrap();
+        let other = WebviewWindowBuilder::new(&app, "other", WebviewUrl::default())
+            .build()
+            .unwrap();
+        let batch = ErrorMarkBatch {
+            id: "batch".into(),
+            recording_id: segment.recording_id.clone(),
+            recording_revision: segment.recording_revision,
+            ranges: vec![
+                SampleRange {
+                    start: 0,
+                    end: 4_000,
+                },
+                SampleRange {
+                    start: 8_000,
+                    end: 10_000,
+                },
+            ],
+        };
+        let args = json!({ "batch": batch });
+        assert!(invoke(&other, "save_error_marks", args.clone()).is_err());
+        invoke(&window, "save_error_marks", args.clone()).unwrap();
+        invoke(&window, "save_error_marks", args).unwrap();
+        let page: ErrorMarkPage = serde_json::from_value(
+            invoke(
+                &window,
+                "get_error_marks",
+                json!({"recordingId":segment.recording_id, "offset":0}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            page.marks.iter().map(|mark| mark.range).collect::<Vec<_>>(),
+            batch.ranges
+        );
+    }
+
+    #[cfg(native_capture)]
+    #[test]
+    fn registered_capture_ipc_starts_cancels_and_saves_for_the_main_window() {
+        use seamone_core::{capture::CaptureStatus, review::RecordingInfo};
+        use serde_json::json;
+        use std::time::{Duration, Instant};
+
+        let (_folder, app) = app_fixture();
+        let main = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .unwrap();
+        let other = WebviewWindowBuilder::new(&app, "other", WebviewUrl::default())
+            .build()
+            .unwrap();
+        assert_eq!(
+            invoke(&main, "get_capture_status", json!({})).unwrap(),
+            json!({"state":"idle"})
+        );
+        for (command, payload) in [
+            ("get_capture_status", json!({})),
+            ("start_recording", json!({})),
+            ("finish_recording", json!({"sessionId":"other","save":true})),
+            ("import_audio", json!({"path":"/untrusted.wav"})),
+        ] {
+            assert!(
+                invoke(&other, command, payload)
+                    .unwrap_err()
+                    .as_str()
+                    .unwrap()
+                    .contains("이 창")
+            );
+        }
+        for save in [false, true] {
+            let started: CaptureStatus =
+                serde_json::from_value(invoke(&main, "start_recording", json!({})).unwrap())
+                    .unwrap();
+            let (CaptureStatus::Starting { session_id }
+            | CaptureStatus::Recording { session_id, .. }) = started
+            else {
+                panic!("unexpected capture state: {started:?}");
+            };
+            assert!(invoke(&main, "start_recording", json!({})).is_err());
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                let state = invoke(&main, "get_capture_status", json!({})).unwrap();
+                if state["state"] == "recording" {
+                    assert_eq!(state["session_id"], session_id);
+                    break;
+                }
+                assert!(Instant::now() < deadline, "{state}");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            let args = json!({"sessionId":session_id,"save":save});
+            let result = invoke(&main, "finish_recording", args.clone()).unwrap();
+            assert!(invoke(&main, "finish_recording", args).is_err());
+            let library = invoke(&main, "get_library", json!({})).unwrap();
+            if save {
+                let info: RecordingInfo = serde_json::from_value(result.clone()).unwrap();
+                assert_eq!(info.samples, 16_000);
+                assert_eq!(library["recordings"][0], result);
+            } else {
+                assert_eq!(result, serde_json::Value::Null);
+                assert_eq!(library["recordings"], json!([]));
+            }
+        }
+    }
+
+    #[test]
+    fn registered_correction_ipc_rejects_stale_revision_and_old_playback() {
+        use seamone_core::review::{PlaybackReply, ReviewAction, ReviewRequest, ReviewSegment};
+        use serde_json::json;
+        let (_fixture, app, segment) = review_app_fixture();
+        let window = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .unwrap();
+        let playback: PlaybackReply = serde_json::from_value(
+            invoke(
+                &window,
+                "get_playback",
+                json!({"segmentId":segment.id,"revision":segment.revision}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        invoke(&window, "playback_ended", json!({"token":playback.token})).unwrap();
+        let draft = ReviewRequest {
+            event_id: "event-0".into(),
+            segment_id: segment.id.clone(),
+            expected_revision: segment.revision,
+            action: ReviewAction::SaveDraft {
+                text: "수정 초안".into(),
+            },
+        };
+        let saved: ReviewSegment = serde_json::from_value(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":draft,"proof":null}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let stale = ReviewRequest {
+            event_id: "event-1".into(),
+            ..draft
+        };
+        assert!(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":stale,"proof":null})
+            )
+            .unwrap_err()
+            .as_str()
+            .unwrap()
+            .contains("다른 수정본")
+        );
+        let confirm = ReviewRequest {
+            event_id: "event-2".into(),
+            segment_id: segment.id.clone(),
+            expected_revision: saved.revision,
+            action: ReviewAction::ConfirmCorrection,
+        };
+        assert!(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":confirm,"proof":playback.token})
+            )
+            .is_err()
+        );
+        let playback: PlaybackReply = serde_json::from_value(
+            invoke(
+                &window,
+                "get_playback",
+                json!({"segmentId":segment.id,"revision":saved.revision}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        invoke(&window, "playback_ended", json!({"token":playback.token})).unwrap();
+        let confirmed: ReviewSegment = serde_json::from_value(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":confirm,"proof":playback.token}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(confirmed.verified.unwrap().text, "수정 초안");
+        assert_eq!(
+            invoke(
+                &window,
+                "export_text",
+                json!({"recordingId":segment.recording_id})
+            )
+            .unwrap(),
+            json!("수정 초안")
+        );
+    }
+
+    #[test]
+    fn registered_error_mark_and_preview_require_separate_full_playback_for_correction() {
+        use seamone_core::{
+            error_marks::{ErrorMark, ErrorMarkPage},
+            review::{PlaybackReply, ReviewAction, ReviewRequest, ReviewSegment, SampleRange},
+        };
+        use serde_json::json;
+
+        let (_fixture, app, segment) = review_app_fixture();
+        let window = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .unwrap();
+        let other = WebviewWindowBuilder::new(&app, "other", WebviewUrl::default())
+            .build()
+            .unwrap();
+        let mark = ErrorMark {
+            id: "mark".into(),
+            recording_id: segment.recording_id.clone(),
+            recording_revision: segment.recording_revision,
+            range: SampleRange {
+                start: segment.range.start,
+                end: segment.range.start + 16,
+            },
+        };
+        let preview_args = json!({
+            "recordingId":mark.recording_id,"revision":mark.recording_revision,"range":mark.range
+        });
+        assert!(invoke(&other, "get_recording_playback", preview_args.clone()).is_err());
+        let preview = invoke(&window, "get_recording_playback", preview_args).unwrap();
+        assert!(preview.as_str().is_some_and(|wav| !wav.is_empty()));
+        assert!(invoke(&window, "playback_ended", json!({"token":preview})).is_err());
+        let old: PlaybackReply = serde_json::from_value(
+            invoke(
+                &window,
+                "get_playback",
+                json!({"segmentId":segment.id,"revision":segment.revision}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        invoke(&window, "playback_ended", json!({"token":old.token})).unwrap();
+        assert!(invoke(&other, "save_error_mark", json!({"mark":mark})).is_err());
+        invoke(&window, "save_error_mark", json!({"mark":mark})).unwrap();
+        invoke(&window, "save_error_mark", json!({"mark":mark})).unwrap();
+        let marks: ErrorMarkPage = serde_json::from_value(
+            invoke(
+                &window,
+                "get_error_marks",
+                json!({"recordingId":segment.recording_id,"offset":0}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(marks.marks, vec![mark]);
+        let req = ReviewRequest {
+            event_id: "correct".into(),
+            segment_id: segment.id.clone(),
+            expected_revision: segment.revision + 1,
+            action: ReviewAction::CorrectAndConfirm {
+                text: "고친 말".into(),
+            },
+        };
+        assert!(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":req,"proof":old.token})
+            )
+            .is_err()
+        );
+        let full: PlaybackReply = serde_json::from_value(
+            invoke(
+                &window,
+                "get_playback",
+                json!({"segmentId":segment.id,"revision":req.expected_revision}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let correction = json!({"request":req,"proof":full.token});
+        assert!(invoke(&window, "save_review", correction.clone()).is_err());
+        invoke(&window, "playback_ended", json!({"token":full.token})).unwrap();
+        let unchanged = ReviewRequest {
+            event_id: "unchanged".into(),
+            action: ReviewAction::ConfirmCorrection,
+            ..req
+        };
+        assert!(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":unchanged,"proof":full.token})
+            )
+            .is_err()
+        );
+        let corrected: ReviewSegment =
+            serde_json::from_value(invoke(&window, "save_review", correction).unwrap()).unwrap();
+        assert_eq!(corrected.range, segment.range);
+        assert_eq!(corrected.verified.unwrap().text, "고친 말");
+    }
+
+    #[test]
+    fn registered_review_ipc_checks_playback_revision_replay_and_window_trust() {
+        use seamone_core::review::{
+            PlaybackReply, ReviewAction, ReviewRequest, ReviewSegment, Verdict,
+        };
+        use serde_json::json;
+        let (_fixture, app, segment) = review_app_fixture();
+        let window = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .unwrap();
+        let untrusted = WebviewWindowBuilder::new(&app, "other", WebviewUrl::default())
+            .build()
+            .unwrap();
+        assert!(invoke(&untrusted, "get_library", json!({})).is_err());
+        let req = ReviewRequest {
+            event_id: "event-0".into(),
+            segment_id: segment.id.clone(),
+            expected_revision: segment.revision,
+            action: ReviewAction::Judge {
+                verdict: Verdict::No,
+            },
+        };
+        assert!(invoke(&window, "save_review", json!({"request":req,"proof":null})).is_err());
+        let playback: PlaybackReply = serde_json::from_value(
+            invoke(
+                &window,
+                "get_playback",
+                json!({"segmentId":segment.id,"revision":segment.revision}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":req,"proof":playback.token})
+            )
+            .is_err()
+        );
+        invoke(&window, "playback_ended", json!({"token":playback.token})).unwrap();
+        let rejected: ReviewSegment = serde_json::from_value(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":req,"proof":playback.token}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(rejected.verified.is_none());
+        let duplicate =
+            invoke(&window, "save_review", json!({"request":req,"proof":null})).unwrap();
+        assert_eq!(
+            serde_json::from_value::<ReviewSegment>(duplicate).unwrap(),
+            rejected
+        );
     }
 }

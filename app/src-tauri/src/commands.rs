@@ -117,13 +117,10 @@ fn import_selected<R: Runtime>(
         {
             let source = url
                 .to_file_path()
-                .map_err(|()| "선택한 파일 경로를 읽지 못했습니다.");
+                .map_err(|()| "선택한 파일 경로를 읽지 못했습니다.".to_string());
             let result = source.and_then(|source| {
-                let name = source.file_name().map_or_else(
-                    || "가져온 음성".into(),
-                    |name| name.to_string_lossy().chars().take(200).collect(),
-                );
-                input.and_then(|file| service.import_file(name, file, || trusted(window).is_ok()))
+                input
+                    .and_then(|file| service.import_file(&source, file, || trusted(window).is_ok()))
             });
             let _ = fs.stop_accessing_security_scoped_resource(selection);
             return result;

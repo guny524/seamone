@@ -85,6 +85,7 @@ impl AudioLibrary {
 
     #[cfg(any(
         test,
+        feature = "test-support",
         all(
             feature = "desktop-whisper",
             not(any(target_os = "android", target_os = "ios"))

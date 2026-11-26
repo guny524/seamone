@@ -1,7 +1,7 @@
 //! A single versioned database owns edits, verification snapshots and the durable work queue.
 use crate::audio::{AudioLibrary, StagedAudio};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 use seamone_asr::Transcriber;
 use seamone_core::error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage, overlaps};
 use seamone_core::review::{
@@ -164,7 +164,7 @@ impl Store {
         decode(&text)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn transcribe(
         &mut self,
         id: &str,
@@ -181,6 +181,7 @@ impl Store {
 
     #[cfg(any(
         test,
+        feature = "test-support",
         all(
             feature = "desktop-whisper",
             not(any(target_os = "android", target_os = "ios"))
@@ -204,6 +205,7 @@ impl Store {
 
     #[cfg(any(
         test,
+        feature = "test-support",
         all(
             feature = "desktop-whisper",
             not(any(target_os = "android", target_os = "ios"))

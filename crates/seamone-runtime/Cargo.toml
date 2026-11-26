@@ -10,6 +10,7 @@ publish.workspace = true
 [features]
 default = []
 desktop-whisper = ["seamone-asr/whisper"]
+test-support = []
 
 [dependencies]
 seamone-core.workspace = true
