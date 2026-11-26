@@ -96,3 +96,8 @@
 - 공개 API 목록 검사를 통과하려고 `scripts/runtime_api.json` 에 4줄을 더했다, `make lint` 와 `make test` 가 통과했다
 - 판단: 막을 때마다 agent 의 "컴파일되는 가장 짧은 길" 이 옮겨 간다(1차 host SQL -> runtime 새 함수, 2차 runtime 새 함수 -> Store 안 SQL 과 목록 고치기), 8단계로 확인 전사 생성을 core 의 검수 전이 하나로 묶고, Store 안 학습 후보 쓰기를 증거 타입을 받는 함수로 묶고, 스냅샷 목록이 PR base 보다 늘면 CI 가 실패하는 사람 확인 관문을 둔다
 - 보관: `.tmp/conductor/15-structure/pi-trap/t2-code.patch`, `t2-full.diff`(재시험 뒤 지운다)
+
+## 2026-11-27 03:40 7단계 커밋
+- `Playbacks::issue` 하나가 조각과 revision 확인, 구간 음성(`range_wav`) 준비, token 발급을 함께 한다, `begin` 과 `Default` 는 증거 module 밖에서 쓸 수 없다, Opus 가 적은 우회 네 줄은 E0599(`default` 없음), E0624(`begin` 비공개)로 컴파일되지 않는다(worker)
+- compile_fail doctest 11개에 금지 줄 하나만 다른 통과 짝을 두었다, 증거 module 의 노출 선언을 `scripts/playback_api.json` 과 대조한다, unsafe 는 `crates/seamone-runtime/src/capture.rs` 에만 둘 수 있고 허용 파일을 늘리면 base 대조로 거절한다
+- 메인이 `LINT_BASE_REF=origin/develop` 으로 검사, lint, 시험 119개(실패 0) 통과를 확인했다, 커밋 `d0a3d95`, 8단계(Pi 재시험 2 의 Store 안 SQL 우회와 목록 고치기)를 worker 에게 보냈다

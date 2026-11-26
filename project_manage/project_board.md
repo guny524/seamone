@@ -106,7 +106,7 @@
 ### #15 LLM 실수를 lint, build, compile 에서 거르게 폴더 구조와 검사를 바꾼다 (pstack 개념 적용)
 - 폴더: [0015-2026_11_27-pstack_structure_checks](0015-2026_11_27-pstack_structure_checks/issue_board.md), 상태: 진행, 2026-11-27 01:55 runtime crate 분리와 검사가 draft [PR #16](https://github.com/guny524/seamone/pull/16)(`b2d2990`, `ce55aac`)에 올라 CI 와 다섯 플랫폼 빌드, Opus 5.5 high 구현 검토, Pi local LLM 실수 유도 시험이 돌고 있다
 - 실행 정보: worker Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(브랜치 `guny524/15-structure-checks`), handle `term_80ba4343-14c4-40db-9a12-24b2a7b7c5d0`, 마지막 turn 01:49, 보고 `.tmp/conductor/15-structure/`, Pi 시험 worktree `/Users/min-jo/orca/workspaces/seamone/15-pi-trap`(브랜치 `guny524/15-pi-trap`, push 하지 않고 확인 뒤 지운다), handle `term_41dcdadb-78c9-48e3-bc7f-83a203b8f0d0`
-- 다음 행동(2026-11-27 03:25): `e0b68d3` 은 PR CI 와 패키지 6개 통과, 6단계 `4c702fe` push, worker 7단계(증거 타입 구멍)가 돈다, Pi 재시험 2 가 Store 안 SQL 쓰기와 API 목록 고치기로 또 우회해 8단계(쓰기 자리 고정, 목록의 base 대조)를 붙인다, 그 뒤 merge 와 PR #11, #13, #14 rebase
+- 다음 행동(2026-11-27 03:40): 7단계 `d0a3d95` push(증거 발급 경로 하나, doctest 짝, unsafe 파일 검사), worker 8단계(확인 전사를 core 전이 하나로, Store 안 학습 후보 쓰기를 증거 타입 함수로, 스냅샷 목록의 base 대조)가 돈다, 그 뒤 develop 에 목록 기준 파일, Pi 재시험 3, merge, PR #11, #13, #14 rebase
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
