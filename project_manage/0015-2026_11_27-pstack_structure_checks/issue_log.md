@@ -25,3 +25,13 @@
 - CI 에 새로 넣은 `actions/setup-python` 고정 SHA `ece7cb06` 는 실제 v6.3.0 태그다
 - `check-domain` 은 노트북 전역 Rust 에 `wasm32v1-none` 이 없어 실패했다, worker 가 레포 `.tmp/structure-checks/domain-sdk/` 에만 그 target 라이브러리를 받아 sysroot 로 통과시켰다, CI 의 domain job 은 `rustup target add` 로 받는다
 - 커밋 `b2d2990`(runtime 분리와 검사), `ce55aac`(README 와 AGENTS.md), draft PR #16 https://github.com/guny524/seamone/pull/16
+
+## 2026-11-27 01:58 Opus 구현 검토와 3단계
+- Opus 5.5 high 구현 검토(세션 `98320cd9-874f-4c9b-8268-f404b4c8121a`): 옮긴 코드의 동작 변화는 없음, 결함 8건은 시험이 줄었거나 검사가 문서보다 좁게 막는 곳이다
+  - 창 닫기 연결 시험과 main 창 IPC 성공 경로 시험이 줄었다
+  - compile_fail doctest 가 경로 네 개만 막는다(`pub use store::Store` 로 피해 간다)
+  - host 의존 검사가 금지 목록이라 `libsqlite3-sys` 같은 다른 crate 로 피해 간다
+  - lint 억제 기준 목록을 같은 변경에서 늘려도 막지 않는다, 매개변수 속성과 lint 설정 끄기를 못 찾는다
+  - 녹음 지원 플랫폼 대조가 Linux 시험에서만 돈다
+  - 문서가 "증거 없이 검수 결과를 바꾸는 길을 막았다" 고 실제보다 넓게 말한다(재생을 듣지 않고 끝 알림을 보내는 길은 2acdfb0 전부터 남아 있다)
+- 앞 일곱 건과 문구 좁히기를 같은 worker 에게 맡겼다, 최소 재생 시간 확인은 검수 동작을 바꿔 사용자 질문으로 올렸다(프로젝트 board 3절 물을 것)
