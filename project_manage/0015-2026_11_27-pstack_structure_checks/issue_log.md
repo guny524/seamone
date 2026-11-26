@@ -136,3 +136,4 @@
 - PR #11(`71aab5a`)과 PR #14(`6941d5a`)는 PR CI 와 다섯 플랫폼 패키지 빌드가 모두 통과했다, PR #11 의 UI 코드는 `VerifiedText` 필드 비공개 뒤에도 컴파일된다
 - PR #13(`18c8d9b`)의 PR CI 는 base 를 develop 으로 바꾸기 전에 시작되어 main(`618aecc`)과 비교했고, main 에 `scripts/lint_exceptions.json` 이 없어 `check-lint-exceptions` 가 lint-test, domain, macos-native-lint 에서 실패했다, Opus 6~8단계 검토 8번(main 대상 PR 은 늘 실패)이 실제로 드러난 것이다, base 변경은 PR CI 를 다시 돌리지 않아 PR 을 닫았다 다시 열었다(run 45884662913, 45884662922)
 - Pi 재시험 3 은 증거 module(`playback_evidence.rs`)과 그 선언 목록(`scripts/playback_api.json`), 공개 API 목록을 고치고 있다(진행 중)
+- 04:42 PR #13 을 develop 기준으로 다시 돌린 PR CI run 45884662913 과 패키지 빌드 run 45884662922 가 통과했다, 열린 PR 셋 모두 새 develop 위에서 통과한다, 셋 다 draft 이므로 merge 하지 않았다
