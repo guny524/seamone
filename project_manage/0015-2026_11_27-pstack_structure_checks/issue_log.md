@@ -62,3 +62,16 @@
 - 증명 브랜치 `guny524/15-proof-ios-old-error`(`30b1b79`, `360a089` 에서 iOS 오류 타입 고침 한 줄만 되돌림)의 CI run https://github.com/guny524/seamone/actions/runs/45869322299 에서 `macos-native-lint` 의 `make lint-ios` 가 `app/src-tauri/src/commands.rs:122`, `:126` E0308 로 실패했다(`make: *** [lint-ios] Error 101`), 다른 job 은 통과했다, 옛날에는 15분 넘는 iOS 패키지 빌드에서만 드러난 실수가 lint 단계에서 걸린다
 - 고친 `360a089` 의 push CI run 45869278859 는 통과했다, 증명 브랜치는 원격에서 지웠다
 - PR #16 은 develop 과 `scripts/lint_exceptions.json` add/add 로 충돌한다(develop `e13746d` 가 먼저 같은 파일을 만들었다), 그래서 PR 이벤트 CI 와 패키지 빌드가 돌지 않았다, 5단계가 끝나면 develop 위로 rebase 하고 PR 쪽 목록을 남긴다
+
+## 2026-11-27 02:54 5단계 재생 증거를 타입으로 강제
+- worker 가 먼저 Pi patch 를 `360a089` 에 다시 적용해 확인했다: 공개 API 목록 검사가 `unreviewed public item: pub fn confirm_all` 로 거절했지만, `scripts/runtime_api.json` 에 한 줄을 더하면 검사 40개와 시험 107개가 모두 통과했고 Pi 의 시험은 재생 없이 Yes 를 저장한 조각이 학습 적격이 되는 것까지 확인했다, 목록 검사는 사람이 목록을 보지 않으면 막지 못한다
+- 새 비공개 module `crates/seamone-runtime/src/playback_evidence.rs`: `PlaybackProof` 와 `AuthorizedReview` 는 그 module 안에서만 만들 수 있다, `Playbacks::authorize` 가 core 의 `required_evidence` 대로 재생 token 완료와 조각, revision 일치를 확인한 뒤에만 발급한다, `Store::mutate` 는 raw `ReviewRequest` 대신 `AuthorizedReview` 를 받는다
+- 재생이 필요한 동작은 지금 core 가 정한 그대로다(Judge Yes, Judge No, 교정 확정 둘), 재생이 필요 없는 동작(초안 저장, 오류 표시 지우기, 무효화)은 내부의 다른 variant 로 승인한다, 정책은 바꾸지 않았다
+- Pi patch 와 목록 한 줄을 함께 다시 넣으면 `crates/seamone-runtime/src/lib.rs:202` 에서 `expected AuthorizedReview<'_>, found &ReviewRequest`(E0308)로 컴파일이 실패한다, 같은 crate 안에서 raw 요청 저장, 증거 직접 생성을 막는 compile_fail doctest 3개와 정상 경로 짝 1개를 더했다
+- 이 타입은 token 이 끝났다는 증거이고 실제로 들었는지나 최소 재생 시간은 증명하지 않는다(사용자 질문으로 남김)
+
+## 2026-11-27 02:58 5단계 커밋, develop 위 rebase, Pi 재시험 2 시작
+- 메인이 `LINT_BASE_REF=origin/develop` 으로 검사, lint, 시험 112개(실패 0) 통과를 확인하고 `e0b68d3` 으로 커밋했다
+- PR #16 을 develop 위로 rebase 했다, 기준 목록 add/add 충돌은 커밋 쪽 내용으로 풀었고 rebase 전후 코드 트리가 같음(`project_manage` 를 빼고 diff 0)을 확인했다, `--force-with-lease` 로 push 했다, 새 HEAD 는 `b1b729c`, `1cb6afc`, `4946387`, `e0b68d3`, PR 이 다시 merge 가능해졌고 PR CI 와 패키지 빌드가 돈다
+- Pi 재시험 2: 같은 함정 작업을 새 Pi 세션에 `e0b68d3` 에서 맡겼다, cargo target 은 worker 것을 APFS 로 복제해 따로 쓴다
+- Opus 5.5 high 에게 5단계 커밋만 다시 검토하게 했다, worker 에게 6단계(research 의 직접 삭제 호출을 한 입구로 모으는 AST lint)를 맡겼다
