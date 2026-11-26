@@ -106,7 +106,7 @@
 ### #15 LLM 실수를 lint, build, compile 에서 거르게 폴더 구조와 검사를 바꾼다 (pstack 개념 적용)
 - 폴더: [0015-2026_11_27-pstack_structure_checks](0015-2026_11_27-pstack_structure_checks/issue_board.md), 상태: 진행, 2026-11-27 01:55 runtime crate 분리와 검사가 draft [PR #16](https://github.com/guny524/seamone/pull/16)(`b2d2990`, `ce55aac`)에 올라 CI 와 다섯 플랫폼 빌드, Opus 5.5 high 구현 검토, Pi local LLM 실수 유도 시험이 돌고 있다
 - 실행 정보: worker Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(브랜치 `guny524/15-structure-checks`), handle `term_80ba4343-14c4-40db-9a12-24b2a7b7c5d0`, 마지막 turn 01:49, 보고 `.tmp/conductor/15-structure/`, Pi 시험 worktree `/Users/min-jo/orca/workspaces/seamone/15-pi-trap`(브랜치 `guny524/15-pi-trap`, push 하지 않고 확인 뒤 지운다), handle `term_41dcdadb-78c9-48e3-bc7f-83a203b8f0d0`
-- 다음 행동(2026-11-27 02:58): PR #16 은 `e0b68d3`(재생 증거 타입) 까지 develop 위로 rebase 해 push 했고 PR CI 와 패키지 빌드를 기다린다, Pi 재시험 2 와 Opus 의 5단계 검토가 돈다, worker 는 6단계(research 직접 삭제 lint), 그 뒤 merge 와 PR #11, #13, #14 rebase
+- 다음 행동(2026-11-27 03:02): Opus 가 5단계(`e0b68d3`)에서 runtime 안의 증거 우회 경로를 찾았다(이슈 log 03:00), worker 6단계(research 직접 삭제 lint)가 끝나면 7단계로 그 구멍과 doctest 대조, unsafe 파일 목록 검사를 맡긴다, Pi 재시험 2 와 PR CI, 패키지 빌드가 돈다, 그 뒤 merge 와 PR #11, #13, #14 rebase
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
