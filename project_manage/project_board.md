@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 develop 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-24 04:12 KST
+- 마지막 갱신: 2026-11-27 01:06 KST
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -11,6 +11,8 @@
 - 큰 그림의 결정은 `project_decision.md` PD1~PD12
 
 ## 2. 사용자 지시 원문
+- 2026-11-27 밤샘 지시 원문은 [구조 검사 이슈 board](0015-2026_11_27-pstack_structure_checks/issue_board.md) 1절, 요점: worker Sol high 1, 검토 Opus 5.5 high 1, 1시간 cron, 07:00 까지, pstack 개념으로 LLM 실수를 lint, build, compile 에서 거른다, 폴더 구조 개선 위주
+- 2026-11-27 “그래, 이 프로젝트 안에서만 적용되게 하는 건 괜찮아 ~/llms 나 user space 건들지 말라는 소리야”
 - 2026-11-24 “1시간 마다 cron 돌아 아침 8시까지 $overnight-autopilot”
 - 2026-11-24 “worker 는 왜 2개지? 지금 worker 들 까진 냅두고 종료되면 1개 worker 로 줄여”
 - 2026-11-19 "나는 이거 맥이든 윈도우든 리눅스든 다 돌아가고 핸드폰에서도 됐으면 좋겠어. 그리고 모델은 굳이 오픈소스 모델을 쓸 필요 없지. 우리가 어차피 파인튜닝을 할 거니까 FL로. 근데 이제 처음에 시작할 모델을 뭘로 할지만 정하는 게 좀 필요해. 근데 영어나 뭐 최대한 다양한 언어나 됐으면 좋겠고, 특히 한국어가 잘 돼야 돼."
@@ -24,6 +26,19 @@
 - 2026-11-19 "어쨌든 모르겠고 이제 나한테 물어보지 말고 지금 너 /conversation-rag 보면은 예전에 너 스스로 모델 바꿔서 한 거 있거든. 그러니까 지금은 페이블 5.2로 플랜 세울 때 동안 페이블 5.2 엑스트라 하이로 가고, 그 이후부터는 소넷 맥스로 너가 스스로 바꿔서 계속 진행을 해."
 
 ## 3. 운영 방침
+- 2026-11-27 밤샘 실행(구조 검사 이슈 #15)
+  - 점검 간격: 1시간(사용자), 매시 7분에 건다
+  - 끝낼 시각: 2026-11-27 07:00(사용자), 일이 먼저 끝나면 cron 을 먼저 지운다(기본값)
+  - worker: Codex `gpt-6.1-sol` high 1개(사용자), 한도가 끝나면 Gemini 3.8 Flash 최고 effort(기본값)
+  - 검토: Claude Opus 5.5 high 1개(사용자), 한도가 끝나면 Sonnet high(기본값), 지적은 그 코드를 쓴 worker 가 고친다(기본값)
+  - 적용 확인: Pi 의 local LLM `d0xin-swift-1.5-qwen3.8-27b-uncensored-fp8` 에게 따로 만든 worktree 에서 실수하기 쉬운 일을 시키고 git diff, Orca 화면, conversation-rag 로 본다, 그 worktree 의 수정은 확인 뒤 버린다(사용자)
+  - 바꾸는 범위: 이 레포 안만, `~/llms` 와 사용자 홈의 하네스 설정은 고치지 않는다, pstack 은 설치하지도 파일로 받지도 않는다(사용자)
+  - 열린 초안 PR #11, #13, #14 는 worker 가 새 구조로 rebase 한다, 밤에는 lint 예외를 새로 달지 않는다(2026-11-27 사용자 답)
+  - 밖으로 나가는 일: push, PR, develop merge, PR 댓글은 검사와 검토를 통과하면 한다, 메일과 Slack 은 보내지 않는다(기본값)
+  - 물을 것: 있음 3개
+    - [미답] 밤사이 메인이 고정한 기준 목록 다섯 개(`scripts/lint_exceptions.json`, `runtime_api.json`, `playback_api.json`, `review_writes.json`, `unsafe_files.json`)를 사람이 확인할지: 이 목록이 PR base 의 "사람이 확인한 것" 기준이 되는데 밤에는 메인이 내용을 보고 넣었다, 추천은 아침에 다섯 목록을 훑어보고 이상 없으면 그대로 두는 것
+    - [미답] 기존 lint 예외 15곳(develop 기준: 코드의 `#[expect]` 11곳, `Cargo.toml` 의 clippy allow 3곳, `research/pyproject.toml` 의 시험용 Ruff ignore 1곳, PR #16 이 들어가면 mobile 전용 인자 예외가 없어져 14곳, 처음에 13곳이라 한 것은 잘못 센 것)에 만료일과 사람 승인을 어떻게 달지: 이유는 이미 clippy 설정이 강제하고, pstack 은 예외마다 만료일과 사람 승인을 요구한다, 사람만 정할 수 있다, 추천은 아침에 사용자가 목록을 보고 한 번에 승인하고 만료일은 사용자가 정하는 것, 답이 없으면 새 예외만 거절하는 검사까지 만들고 완료라고 하지 않는다(이슈 #15 decision D2)
+    - [미답] 재생을 끝까지 듣지 않고 확인하는 길을 막을지: 지금도(2acdfb0 이전부터) host 코드가 재생 시작 바로 뒤 재생 끝 알림을 보내면 듣지 않고 확인 전사가 되어 학습 후보가 된다, 막으려면 runtime 이 재생 토큰을 낸 시각과 구간 길이로 최소 경과 시간을 확인해야 하는데 검수 동작(PD13, PD14)이 바뀌어 사람이 정할 일이다, 추천은 이번 밤에는 하지 않고 다음 이슈 후보로 두는 것, 답이 없으면 문서에 남은 길이라고만 적는다(Opus 구현 검토 8번)
 - 2026-11-25 사용자 지시 “여기 노트북에서 깔아서 하는건 지금 load 걸리니까 하지말고”. 이번 검증은 GitHub Actions에서 컴파일·시험·패키지 검사를 실행하고 노트북에서는 앱 설치와 실행을 보류한다
 - 2026-11-24 야간 작업은 소규모 모의실험 검토, 첫 전사 흐름 초안 PR과 설치 파일 확인을 마치고 04:11 KST에 점검 타이머를 종료했다
 - 이미 시작한 작업자 2명은 하던 일을 마친다. 한 명이 끝나면 그 자리를 채우지 않고 이후 작업자를 동시에 최대 1명으로 유지한다. 기본 모델은 Codex Sol high이며 한도를 소진하면 가용한 Gemini Flash의 최고 effort로 넘긴다. 구현 검토는 Claude Opus medium, 한도 소진 시 Sonnet high다. 결함은 해당 코드를 작성한 작업자가 고친다
@@ -89,8 +104,14 @@
 - 인계 기준: `develop`의 병합 커밋 `3ba1047`이 작업분을 포함한다. [녹음과 기기 안 받아쓰기, 빠른 검수·교정 화면 PR (#10)](https://github.com/guny524/seamone/pull/10)
 - 다음 행동: 별도 시험 기기에서 첫 실행, 마이크 입력, 모델 선택과 첫 전사를 확인한다. 모바일에서도 파일 가져오기와 터치 검수를 실제 기기로 확인한다. 사용자 노트북 설치는 3절의 2026-11-25 지시를 따른다
 
+### #15 LLM 실수를 lint, build, compile 에서 거르게 폴더 구조와 검사를 바꾼다 (pstack 개념 적용)
+- 폴더: [0015-2026_11_27-pstack_structure_checks](0015-2026_11_27-pstack_structure_checks/issue_board.md), 상태: 진행, 2026-11-27 01:55 runtime crate 분리와 검사가 draft [PR #16](https://github.com/guny524/seamone/pull/16)(`b2d2990`, `ce55aac`)에 올라 CI 와 다섯 플랫폼 빌드, Opus 5.5 high 구현 검토, Pi local LLM 실수 유도 시험이 돌고 있다
+- 실행 정보: worker Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(브랜치 `guny524/15-structure-checks`), handle `term_80ba4343-14c4-40db-9a12-24b2a7b7c5d0`, 마지막 turn 01:49, 보고 `.tmp/conductor/15-structure/`, Pi 시험 worktree `/Users/min-jo/orca/workspaces/seamone/15-pi-trap`(브랜치 `guny524/15-pi-trap`, push 하지 않고 확인 뒤 지운다), handle `term_41dcdadb-78c9-48e3-bc7f-83a203b8f0d0`
+- 다음 행동(2026-11-27 04:07): SQLite 판 의존을 고친 `e6c645a` 의 PR CI 와 패키지 빌드를 기다린다, 통과하면 PR #16 을 develop 에 merge 한다(decision D3), worker 는 그 위에 쌓은 `guny524/15-guard-integrity` 에서 9단계(검사 자체 지키기와 남은 우회 9건)를 한다, Pi 재시험 3 이 돈다
+
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
+- 2026-11-27 밤: [구조 검사 이슈 (#15)](https://github.com/guny524/seamone/issues/15), 사용자 지시로 이 밤의 유일한 일이다
 - 앱은 [녹음·받아쓰기·수정 화면 이슈 (#5)](https://github.com/guny524/seamone/issues/5)의 첫 녹음·파일 가져오기에서 첫 전사까지를 이어 간다. `develop`에서 새 작업 브랜치를 만들어 모델 선택, 처리 중 표시, 결과 화면, 실패 후 복구와 실제 설치 파일 시험을 순서대로 확인한다
 - [앱 뼈대 이슈 #1](https://github.com/guny524/seamone/issues/1)은 설치 실행 확인이 남았다. [받아쓰기 엔진 속도 이슈 #3](https://github.com/guny524/seamone/issues/3)은 초안 검토와 실측이 남았다. [연합학습 모의실험 이슈 #4](https://github.com/guny524/seamone/issues/4)는 소규모 실행의 검토와 사람 확인 전사를 쓰는 다음 실험 계획이 남았다
 ### 5-2. merge 순서와 얽힘

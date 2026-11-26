@@ -40,17 +40,23 @@
 ```mermaid
 graph LR
   User[사용자] --> UI[Leptos 화면, WASM]
-  UI -->|Tauri IPC, main 로컬 창만| Native[기기 안 Rust 앱]
-  Native -->|기본 마이크 입력 또는 파일 선택과 디코딩| Audio[앱 소유 16kHz mono PCM16 WAV]
-  Native -->|수정본, 검증, 대기열 transaction| DB[SQLite 하나]
-  Native -->|16kHz mono f32, Transcriber| ASR[선택한 Whisper small 엔진]
-  ASR -->|밀리초 구간, 자동 전사문, 선택적 DTW 시간| Native
+  UI -->|Tauri IPC, main 로컬 창만| Host[Tauri 창과 파일 선택]
+  Host -->|LibraryService, 선택한 파일 또는 문서 스트림| Runtime[기기 안 Rust 작업]
+  Runtime -->|기본 마이크 입력과 디코딩| Audio[앱 소유 16kHz mono PCM16 WAV]
+  Runtime -->|수정본, 검증, 대기열 transaction| DB[SQLite 하나]
+  Runtime -->|16kHz mono f32, Transcriber| ASR[선택한 Whisper small 엔진]
+  ASR -->|밀리초 구간, 자동 전사문, 선택적 DTW 시간| Runtime
 ```
 - `crates/seamone-core`: 음성 구간, 자동 전사문, 수정본, 실제 Yes/No 판정, 정답 snapshot, 학습 적격 조건과 검토 화면의 상태 전이, 화면과 native가 함께 쓴다
 - `crates/seamone-asr`: 기존 `Transcriber` interface와 시험용 `FakeTranscriber`, `whisper` feature의 실제 엔진, 시험용 전사문은 제품 화면에 넣지 않는다
-- `app/src-tauri`: CPAL 기본 마이크, native 파일 선택과 기기 내 디코딩, WAV 보관, SQLite migration, 신뢰할 창과 command 권한, 받아쓰기, 검증 저장, 내보내기, 로컬 작업 경계
+- `crates/seamone-runtime`: `LibraryService`가 CPAL 마이크, 입력 디코딩, WAV 보관, SQLite migration, 받아쓰기, 재생 증거, 검수 저장과 학습 대기열을 소유한다, Store와 raw mutate는 crate 밖에 공개하지 않아 host가 Store를 직접 바꿀 수 없다
+- runtime의 비공개 `playback_evidence` 모듈은 `Playbacks::issue`에서 현재 조각과 revision을 대조하고 해당 구간 WAV를 준비한 뒤 token을 발급한다. token만 만드는 begin과 증거 필드는 모듈 비공개이며 Default 생성 경로는 없다. `Store::mutate`는 이 모듈이 발급한 `AuthorizedReview`만 받고 승인 값은 검사한 요청을 불변 참조로 묶는다. Yes와 No 판정, 교정 확정은 완료 알림과 token 범위를 확인한다. 초안 저장과 오류 표시 해제, 검증 취소는 기존 정책대로 재생 없이 승인한다
+- `VerifiedText`의 필드는 core의 검수 전이 밖에서 직접 조립하지 못하고 getter로 읽는다. DB와 IPC의 JSON 모양을 유지하기 위해 Deserialize는 남긴다. 따라서 타입의 필드 비공개만으로 저장 권한을 보장하지 않으며 Store의 확인 전사 쓰기와 학습 대기열 삽입 위치도 검사한다
+- `app/src-tauri`: 신뢰할 창과 command 권한, 파일 dialog, mobile 문서 URI 접근과 해제, clipboard와 Tauri 이벤트를 맡고 `LibraryService`를 호출한다, Android의 seek할 수 없는 문서 스트림은 runtime이 크기를 제한해 임시 파일로 옮긴 뒤 디코딩한다
 - `app/ui`: 빠른 검수, 조각별 검증, 교정, 일반 편집 화면, 빠른 검수는 원본을 최대 30초씩 이어 재생한다, 검증과 교정 확인은 현재 조각의 HTML audio `ended` event를 확인한다
 - `research`: 앱과 별도인 PyTorch 연구 코드, 앱은 Python을 포함하지 않고 연구 adapter를 활성화하지 않는다
+- research의 직접 삭제 API는 `seamone_research/cache.py`의 `remove_inside`에 모은다. 이 함수는 HF_HOME 아래 전용 eval-raw/seamone_eval cache 안에서 root의 자식만 삭제하고 공유 HF_HOME/hub와 root 밖의 symlink를 거절한다. manifest 파일 삭제는 기존 missing_ok 동작을 유지한다
+- host와 runtime 안 호출자는 token을 발급받은 뒤 끝 알림을 바로 보낼 수 있다. runtime은 현재 음성 준비와 완료 알림, token 범위를 확인하지만 실제 청취나 최소 재생 시간은 확인하지 않는다. 이 검수 정책을 바꾸려면 사람 결정이 필요하다
 
 ### 2-1. 데이터와 저장
 - native가 앱 데이터 폴더의 `seamone.sqlite3`와 `audio/<UUID>.wav`를 소유한다, 화면에서 임의 파일 경로를 넘겨 읽을 수 없다
@@ -81,6 +87,7 @@ graph LR
 
 ## 3. 실행과 검증
 ### 3-1. 준비
+- 구조 검사는 Python 3.11 이상을 사용한다, CI는 Python 3.12에서 Cargo/Ruff의 TOML lint 설정까지 검사한다
 - `rustup`을 설치한 뒤 레포 맨 위에서 `make install`을 실행한다, `rust-toolchain.toml`의 Rust와 고정한 tauri-cli, Trunk를 설치한다
 - 로컬 데스크톱 실행에는 해당 OS의 Tauri 개발 환경이 필요하다, 설치 파일은 로컬에서 만들지 않는다
 - Linux 빌드에는 ALSA 개발 패키지(`libasound2-dev`)가 필요하다. macOS는 `Info.plist`의 마이크 사용 목적을 표시하고 처음 녹음할 때 시스템 권한을 요청한다
@@ -98,11 +105,18 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 - 모델 파일은 가져온 음성과 별도다, 이 연구의 PyTorch LoRA adapter는 GGML 엔진에서 불러오지 않는다
 
 ### 3-3. 시험 범위
-- `make check-architecture`는 앱을 빌드하지 않고 Cargo가 읽은 직접 의존성을 검사한다. 도메인은 직렬화와 시험에 필요한 의존성만 쓰고, UI와 받아쓰기 엔진은 공용 도메인을 통해 타입을 공유한다. SQLite·마이크·Tauri는 앱 껍데기, Whisper는 엔진, Leptos는 화면에서 사용한다. 데스크톱·모바일 패키지 빌드도 같은 의존성 검사를 먼저 실행한다. 새 workspace crate를 추가할 때는 `scripts/check_crate_boundaries.py`에 허용할 의존 방향을 지정한다
+- `make check-architecture`는 앱을 빌드하지 않고 Cargo가 읽은 직접 의존성과 검사기의 부정 사례를 확인한다. host는 core와 runtime, runtime은 core와 ASR만 참조한다. SQLite와 마이크, 디코더는 runtime, Tauri는 host, Whisper는 ASR, Leptos는 UI에서 사용한다. UI의 hound는 IPC로 받은 재생 WAV를 읽는 데 쓴다. 데스크톱과 모바일 패키지 빌드도 같은 의존성 검사를 먼저 실행한다. host의 normal 의존은 core, runtime, serde, serde_json, Tauri와 Tauri plugin으로 제한한다. runtime의 공개 선언은 `scripts/runtime_api.json`과 대조하며 목록에 더하기 전에 LibraryService의 증거 확인 경로를 거치는지 검토한다. 새 workspace crate를 추가할 때는 `scripts/check_crate_boundaries.py`에 허용 방향을 지정한다
 - `make check-domain`은 운영체제 표준 라이브러리가 없는 타깃에서 도메인 crate를 단독으로 컴파일한다. CI가 `rustup target add wasm32v1-none`으로 타깃을 준비한다
-- `make lint`는 의존 경계, Rust 서식, native·WASM Clippy, UI 시험 JavaScript의 구문을 검사한다. 특정 코드에서 lint를 면제할 때는 `#[expect(..., reason = "...")]`에 근거를 적는다. 면제할 경고가 사라져도 Clippy에서 알려 준다. macOS CI의 `make lint-native`는 마이크 권한을 요청하는 AVFoundation 코드의 unsafe 블록에도 안전 근거가 있는지 검사한다
+- `make lint-ios`는 macOS CI에서 host와 runtime의 iOS simulator 전용 코드를 Clippy로 컴파일한다. CI가 `aarch64-apple-ios-sim` 타깃을 준비하며 이 명령은 타깃을 설치하거나 앱을 패키징하지 않는다
+- 기준 ref와 비교할 때 Git이 rename으로 확인한 파일의 기존 예외는 새 경로로 잇는다. 새 Cargo member는 기존 workspace lint를 전부 상속해야 한다. 기존 Clippy 필수 명령은 유지하고, 추가한 명령도 `-D warnings`를 쓰며 억제를 더하지 않아야 한다
+- `make lint`는 의존 경계, 새 lint 억제, Rust 서식, native와 WASM Clippy, UI 시험 JavaScript 구문을 검사한다. 기존 억제는 `scripts/lint_exceptions.json`을 기준 ref와 비교해 새 항목과 개수 증가를 거절한다. 기준 ref는 `LINT_BASE_REF`(기본 `origin/develop`)이며 CI는 PR base를 쓰고 전체 history를 받는다. 기준 ref나 JSON이 없으면 실패하므로 기준 브랜치에 검토한 목록을 먼저 준비해야 한다. 매개변수와 closure의 Rust 속성도 찾고 Cargo/Ruff lint 표 전체를 대조해 규칙 삭제와 임계값 변경을 거절한다. 별도의 clippy/Ruff 설정 파일, Cargo rustflags의 `-A`, Clippy 명령의 억제 추가와 `-D warnings` 삭제도 거절한다. 기존 예외의 만료일과 사람 승인 방식은 아직 정하지 않았다. Clippy는 `expect`의 reason과 더 이상 필요하지 않은 억제를 검사한다. macOS CI의 `make lint-native`는 host와 runtime을 함께 검사해 AVFoundation unsafe 블록도 포함한다
 - UI가 호출할 Tauri 명령 이름은 `crates/seamone-core/src/ipc.rs`에 선언한다. 같은 선언이 UI 명령 타입, native 처리 함수 등록, 빌드 시 권한 이름을 만든다. 새 명령은 허용할 창과 플랫폼의 capability에도 추가해야 권한 시험을 통과한다
-- `make test`: 합성 입력으로 녹음 수명과 저장 복구, 합성 WAV·MP3·M4A로 PCM 변환과 실제 SQLite 저장, Tauri mock runtime에서 등록 IPC와 창 닫기를 확인한다. MP3·M4A fixture는 440Hz 합성 음과 오디오 트랙이 없는 영상이다. 테스트는 실제 마이크나 OS 파일 선택기를 열지 않는다
+- `make test`: runtime에서 합성 녹음 수명과 저장 복구, WAV·MP3·M4A 변환, 실제 SQLite 저장과 검수 증거를 확인한다. public 서비스와 비공개 저장소의 통과/컴파일 거절 doctest도 실행한다. host는 dev 의존에서만 켜는 runtime `test-support`로 보관함을 준비하고 등록 IPC로 재생 완료, 검수 저장과 내보내기, 오류 위치, 녹음 상태의 JSON과 창 닫기 차단을 확인한다. host의 const assert는 녹음 지원 플랫폼을 제품 컴파일에서도 대조한다. fixture는 runtime에 두며 실제 마이크나 OS 파일 선택기는 열지 않는다. `make test CARGO_FEATURES=desktop-whisper`는 host feature만 켜서 runtime 엔진까지 전달되는지도 확인한다
+- 같은 crate 안의 증거 경계도 `make test`로 확인한다. 실제 Store와 증거 모듈 소스를 함께 컴파일하는 compile_fail 예제마다 머리말과 본문을 같게 두고 금지 줄 하나만 허용 호출로 바꾼 정상 짝을 둔다. 증거 없는 저장 호출, 증거와 승인 값의 직접 생성, Default 생성과 begin 직접 호출을 확인한다. 오류 번호는 예상 오류를 적은 것이며 rustdoc이 번호를 검증한다는 뜻이 아니다. `scripts/playback_api.json`과 대조하는 검사는 증거 모듈의 노출 선언과 trait 구현, derive, 시험 도우미의 cfg(test) 범위를 고정해 생성 경로 추가를 거절한다
+- `make check-research-deletions`는 research 소스와 시험의 삭제 API를 AST로 확인한다. `make check-architecture`와 research lint가 이 검사를 실행하며 alias import, 단순 callable 별칭, getattr와 __import__의 삭제 우회도 거절한다. 표준 라이브러리만 쓰는 행동 시험으로 실제 삭제 입구의 전용 cache 경계와 공유 hub 보존을 확인한다. 임의의 동적 코드나 외부 라이브러리의 모든 파일 변경을 막는 sandbox는 아니다
+- `make check-unsafe`는 Rust 소스의 unsafe 블록과 함수, impl 등을 찾아 기존 native adapter `crates/seamone-runtime/src/capture.rs` 밖에서는 거절한다. `scripts/unsafe_files.json`을 PR base의 같은 파일과 대조하며 파일 이동도 새 허용 항목이면 사람이 먼저 확인해야 한다. `make check-architecture`와 lint도 실행한다
+- `make check-review-writes`는 runtime Rust 소스의 함수 범위와 SQL 문자열을 읽어 segments body 쓰기와 training_queue INSERT가 `Store::mutate(AuthorizedReview)` 밖에 있으면 거절한다. SQL은 빈 메모리 DB에서 EXPLAIN과 SQLite authorizer로 해석하고 실제 보관함에는 연결하지 않는다. 미검증 전사 초기화와 오류 표시의 검증 해제는 기존 함수 본문 해시를 고정해 허용한다. 동적 SQL 인자는 거절하며 기존 schema include는 유지한다. 전체 macro expansion이나 외부 DB 접근까지 막는 sandbox는 아니다
+- `scripts/runtime_api.json`, `scripts/playback_api.json`, `scripts/review_writes.json`, `scripts/unsafe_files.json`은 `LINT_BASE_REF`의 같은 목록과 비교한다. base에 목록이 없거나 현재 목록의 항목과 개수가 늘면 실패한다. 사람이 확인한 뒤에만 기준 브랜치의 목록을 늘리며, 이 PR의 CI는 사람이 보고 판단한다. 이슈 브랜치에서 목록을 함께 고쳐 검사 통과를 승인할 수 없다
 - `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치, HTML audio의 `ended` event와 별도 교정 화면을 확인한다. 앱의 IPC 서비스는 시험용이다. 다운로드 페이지의 화면과 빌드 링크도 확인한다
 - `make site-preview`: [다운로드 안내](site/index.html)를 로컬 `http://127.0.0.1:4173`에서 열어 본다. 포트가 쓰이는 중이면 `make site-preview SITE_PORT=4174`로 바꾼다
 - macOS 패키지 CI는 업로드할 DMG를 읽기 전용으로 열어 체크섬, 앱 식별자, CPU 종류와 마이크 권한 안내를 검사한다. Whisper 빌드에서는 Mach-O와 Info.plist의 최소 macOS 버전을 빌드 설정과 대조한다

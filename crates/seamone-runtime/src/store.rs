@@ -1,6 +1,7 @@
 //! A single versioned database owns edits, verification snapshots and the durable work queue.
 use crate::audio::{AudioLibrary, StagedAudio};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+#[cfg(any(test, feature = "test-support"))]
 use seamone_asr::Transcriber;
 use seamone_core::error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage, overlaps};
 use seamone_core::review::{
@@ -110,6 +111,7 @@ impl Store {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn import(&mut self, source: &Path) -> Result<RecordingInfo, String> {
         let input = self.audio.open_source(source)?;
         let mut audio = crate::audio_ingest::decode(&self.audio, input)?;
@@ -162,6 +164,7 @@ impl Store {
         decode(&text)
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn transcribe(
         &mut self,
         id: &str,
@@ -176,6 +179,14 @@ impl Store {
         self.commit_transcription(&info, segments, engine_name, model)
     }
 
+    #[cfg(any(
+        test,
+        feature = "test-support",
+        all(
+            feature = "desktop-whisper",
+            not(any(target_os = "android", target_os = "ios"))
+        )
+    ))]
     pub fn prepare_transcription(&self, id: &str) -> Result<(RecordingInfo, Vec<f32>), String> {
         let info = self.recording(id)?;
         let state: String = self
@@ -192,6 +203,14 @@ impl Store {
         Ok((info, self.audio.read_all(id)?))
     }
 
+    #[cfg(any(
+        test,
+        feature = "test-support",
+        all(
+            feature = "desktop-whisper",
+            not(any(target_os = "android", target_os = "ios"))
+        )
+    ))]
     pub fn commit_transcription(
         &mut self,
         info: &RecordingInfo,
@@ -502,7 +521,11 @@ impl Store {
         Ok(self.audio.matches(&segment.recording_id, &hash))
     }
 
-    pub fn mutate(&mut self, request: &ReviewRequest) -> Result<ReviewSegment, String> {
+    pub(super) fn mutate(
+        &mut self,
+        authorization: crate::playback_evidence::AuthorizedReview<'_>,
+    ) -> Result<ReviewSegment, String> {
+        let request = authorization.request();
         if request.event_id.is_empty() || request.event_id.len() > 128 {
             return Err("요청 ID가 잘못됐습니다.".into());
         }

@@ -40,7 +40,7 @@ const INPUT_POLL: Duration = Duration::from_millis(5);
 #[derive(Default)]
 pub struct Recorder {
     state: Mutex<State>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     fake: bool,
 }
 
@@ -148,7 +148,7 @@ impl Recorder {
         library: AudioLibrary,
         foreground: ForegroundGuard,
     ) -> Result<CaptureStatus, String> {
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if self.fake {
             return self.start_using(library, foreground, |_| {
                 let (mut producer, consumer) = RingBuffer::new(48_000);
@@ -317,7 +317,7 @@ impl Recorder {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn fake() -> Self {
         Self {
             fake: true,

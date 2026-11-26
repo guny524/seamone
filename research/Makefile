@@ -33,6 +33,7 @@ eval-ids:
 	uv run python -m seamone_research.data
 
 lint:
+	uv run $(MAKE) -C .. check-research-deletions
 	uv run ruff check .
 	uv run ruff format --check .
 
