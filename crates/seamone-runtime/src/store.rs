@@ -259,7 +259,6 @@ impl Store {
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
-        let encoded = segments.iter().map(encode).collect::<Result<Vec<_>, _>>()?;
         let mut updated = info.clone();
         updated.engine = engine.into();
         updated.model = model.into();
@@ -273,15 +272,7 @@ impl Store {
                 "다른 요청이 이 녹음을 이미 받아썼습니다. 저장한 글을 새로 불러오세요.".into(),
             );
         }
-        let permit = self.writes.unverified(&tx, &segments)?;
-        for (s, body) in segments.iter().zip(encoded) {
-            tx.execute(
-                "INSERT INTO segments(id,recording_id,revision,body) VALUES (?1,?2,?3,?4)",
-                params![s.id, info.id, s.revision, body],
-            )
-            .map_err(|e| e.to_string())?;
-        }
-        drop(permit);
+        self.writes.insert_unverified(&tx, &segments)?;
         tx.commit().map_err(|e| e.to_string())?;
         Ok(segments)
     }
@@ -605,27 +596,12 @@ impl Store {
             tx.commit().map_err(|e| e.to_string())?;
             return Ok(next);
         }
-        let permit = self.writes.review(&tx, authorization, &current, &next)?;
-        let changed = tx
-            .execute(
-                "UPDATE segments SET revision=?1,body=?2 WHERE id=?3 AND revision=?4",
-                params![next.revision, response, next.id, request.expected_revision],
-            )
-            .map_err(|e| e.to_string())?;
-        if changed != 1 {
-            return Err(seamone_core::review::ReviewError::StaleRevision.to_string());
-        }
-        tx.execute("DELETE FROM training_queue WHERE segment_id=?1", [&next.id])
-            .map_err(|e| e.to_string())?;
-        if next.verified.is_some() {
-            tx.execute("INSERT INTO training_queue(segment_id,revision,recording_revision,status) VALUES (?1,?2,?3,'pending')", params![next.id,next.revision,next.recording_revision]).map_err(|e| e.to_string())?;
-        }
+        self.writes.review(&tx, authorization, &next)?;
         tx.execute(
             "INSERT INTO review_events(id,request,response) VALUES (?1,?2,?3)",
             params![request.event_id, canonical, response],
         )
         .map_err(|e| e.to_string())?;
-        drop(permit);
         tx.commit().map_err(|e| e.to_string())?;
         Ok(next)
     }
@@ -818,28 +794,7 @@ fn flag_overlapping_segments(
         }
     }
     drop(stmt);
-    for segment in &mut affected {
-        segment.verified = None;
-    }
-    let _permit = writes.unverified(tx, &affected)?;
-    for mut segment in affected {
-        segment.revision = segment
-            .revision
-            .checked_add(1)
-            .ok_or_else(|| ReviewError::StaleRevision.to_string())?;
-        segment.error_marked_text = Some(segment.text.clone());
-        tx.execute(
-            "UPDATE segments SET revision=?1,body=?2 WHERE id=?3",
-            params![segment.revision, encode(&segment)?, segment.id],
-        )
-        .map_err(|e| e.to_string())?;
-        tx.execute(
-            "DELETE FROM training_queue WHERE segment_id=?1",
-            [&segment.id],
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    writes.clear_verification(tx, affected)
 }
 
 fn insert_error_mark(tx: &Transaction<'_>, mark: &ErrorMark) -> Result<(), String> {
@@ -882,7 +837,7 @@ mod write_tests {
     use super::*;
 
     #[test]
-    fn rejects_unscoped_writes_and_statements_retained_after_a_permit() {
+    fn rejects_unscoped_writes_after_completed_insertions() {
         let fixture = crate::store_tests::Fixture::new();
         let (store, segment) = fixture.transcribed();
         let body = encode(&segment).unwrap();
@@ -895,14 +850,97 @@ mod write_tests {
             .is_err()
         );
         assert!(store.db.query_one("INSERT INTO training_queue(segment_id,revision,recording_revision,status) VALUES ('forged',1,1,'pending') RETURNING revision", [], |row| row.get::<_, i64>(0)).is_err());
-        let permit = store.writes.unverified(&store.db, &[]).unwrap();
-        let mut prepared = store
-            .db
-            .prepare("UPDATE segments SET body=body WHERE id=?1")
-            .unwrap();
-        drop(permit);
-        assert!(prepared.execute([&segment.id]).is_err());
+        let tx = store.db.unchecked_transaction().unwrap();
+        store.writes.insert_unverified(&tx, &[]).unwrap();
+        tx.commit().unwrap();
+        assert!(
+            store
+                .db
+                .execute("UPDATE segments SET body=body WHERE id=?1", [&segment.id])
+                .is_err()
+        );
         assert_eq!(store.segment(&segment.id).unwrap(), segment);
+    }
+
+    #[test]
+    fn unverified_insertion_validates_the_values_it_serializes() {
+        let fixture = crate::store_tests::Fixture::new();
+        let (store, mut segment) = fixture.transcribed();
+        segment.id = "forged".into();
+        segment.verified = Some(
+            serde_json::from_value(serde_json::json!({
+                "revision": segment.revision, "text": segment.text, "source": "corrected"
+            }))
+            .unwrap(),
+        );
+        let tx = store.db.unchecked_transaction().unwrap();
+        assert_eq!(
+            store
+                .writes
+                .insert_unverified(&tx, &[segment.clone()])
+                .unwrap_err(),
+            "미검증 쓰기에 확인 전사가 포함됐습니다."
+        );
+        drop(tx);
+        assert!(store.segment(&segment.id).is_err());
+    }
+
+    #[test]
+    fn review_serializes_only_the_transition_of_the_persisted_authorized_request() {
+        let fixture = crate::store_tests::Fixture::new();
+        let (store, current) = fixture.transcribed();
+        let request = ReviewRequest {
+            event_id: "forged-review".into(),
+            segment_id: current.id.clone(),
+            expected_revision: current.revision,
+            action: seamone_core::review::ReviewAction::SaveDraft {
+                text: "draft".into(),
+            },
+        };
+        let playbacks = crate::playback_evidence::Playbacks::new();
+        let mut next = current.apply(&request, 16_000).unwrap();
+        next.verified = Some(
+            serde_json::from_value(serde_json::json!({
+                "revision": next.revision, "text": next.text, "source": "corrected"
+            }))
+            .unwrap(),
+        );
+        let tx = store.db.unchecked_transaction().unwrap();
+        assert_eq!(
+            store
+                .writes
+                .review(
+                    &tx,
+                    playbacks.authorize_review(&request, None).unwrap(),
+                    &next
+                )
+                .unwrap_err(),
+            "검수 전이와 저장할 전사가 다릅니다."
+        );
+        drop(tx);
+        assert_eq!(store.segment(&current.id).unwrap(), current);
+        assert!(store.next_job().unwrap().is_none());
+    }
+
+    #[test]
+    fn rejects_training_queue_identity_updates_but_allows_claim_state_changes() {
+        let fixture = crate::store_tests::Fixture::new();
+        let (store, _) = fixture.transcribed();
+        for column in ["segment_id", "revision", "recording_revision"] {
+            assert!(
+                store
+                    .db
+                    .execute(&format!("UPDATE training_queue SET {column}={column}"), [])
+                    .is_err()
+            );
+        }
+        store
+            .db
+            .execute(
+                "UPDATE training_queue SET status='retry',claim_owner=NULL",
+                [],
+            )
+            .unwrap();
     }
 
     #[test]

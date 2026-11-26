@@ -126,12 +126,14 @@ text = "shutil.rmtree(path)"
             'import os\nos.rename(hub,trash)',
             'import os\nos.replace(hub,trash)',
             'from pathlib import Path\nPath("hub").rename("trash")',
+            'from pathlib import Path\np=Path("hub")/"file"\np.replace("trash")',
+            'from pathlib import Path\nPath("hub").resolve().replace("trash")',
         ]:
             with self.subTest(source=source):
                 self.assertTrue(self.check(source))
 
     def test_atomic_replacement_is_confined_to_the_publish_helper(self):
-        source = 'def publish_partial(partial,target):\n    partial.replace(target)'
+        source = 'from pathlib import Path\ndef publish_partial(partial: Path,target: Path):\n    partial.replace(target)'
         # This entry file must still define the deletion entry.
         source += '\ndef remove_inside(root,target): pass'
         self.assertEqual(self.check(source, ENTRY_FILE), [])
@@ -139,6 +141,15 @@ text = "shutil.rmtree(path)"
         self.assertEqual(self.check('def parse(text: str | None):\n    return text.replace(","," ")'), [])
         self.assertTrue(recipe_violations('clean:\n\trm -rf $(HF_HOME)/hub\n'))
         self.assertEqual(recipe_violations('lint:\n\tuv run ruff check .\n'), [])
+
+    def test_string_normalization_is_allowed_and_dynamic_execution_is_rejected(self):
+        self.assertEqual(self.check('hyp.lower().replace(" ","")\nrow["ref"].replace(",","")'), [])
+        self.assertEqual(self.check('from pathlib import Path\nPath("file").name.replace("_"," ")\nPath(__file__).resolve().parents[1]'), [])
+        for source in ('eval(code)', 'exec(code)', 'compile(code,"<input>","exec")',
+                       'import builtins\nbuiltins.exec(code)',
+                       '__builtins__["exec"](code)', 'getattr(__builtins__, "eval")(code)'):
+            with self.subTest(source=source):
+                self.assertTrue(self.check(source))
 
     def test_syntax_errors_do_not_skip_the_check(self):
         self.assertTrue(self.check('def invalid('))

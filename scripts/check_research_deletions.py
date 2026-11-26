@@ -13,7 +13,7 @@ ENTRY = f'seamone_research.cache.{ENTRY_NAME}(root, target), defined in {ENTRY_F
 FILESYSTEM = {'os', 'posix', 'nt', 'shutil', 'pathlib', 'subprocess', 'huggingface_hub'}
 DELETIONS = {'shutil.move', 'os.remove', 'os.removedirs', 'posix.remove', 'nt.remove', 'os.rename', 'os.replace'}
 METHODS = {'unlink', 'rmdir', 'rmtree'}
-BUILTINS = {'getattr', '__import__', 'vars', 'list', 'set', 'dict', 'tuple', 'str'}
+BUILTINS = {'getattr', '__import__', 'vars', 'list', 'set', 'dict', 'tuple', 'str', 'eval', 'exec', 'compile'}
 COLLECTIONS = {'builtins.list', 'builtins.set', 'builtins.dict', 'builtins.tuple'}
 
 
@@ -38,7 +38,7 @@ class DeletionChecker(ast.NodeVisitor):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return 'builtins.str'
         if isinstance(node, ast.Name):
-            return self.bindings.get(node.id, 'builtins.' + node.id if node.id in BUILTINS else '?' + node.id)
+            return self.bindings.get(node.id, 'builtins' if node.id == '__builtins__' else 'builtins.' + node.id if node.id in BUILTINS else '?' + node.id)
         if isinstance(node, (ast.List, ast.ListComp)):
             return 'builtins.list'
         if isinstance(node, (ast.Set, ast.SetComp)):
@@ -47,10 +47,16 @@ class DeletionChecker(ast.NodeVisitor):
             return 'builtins.dict'
         if isinstance(node, ast.Attribute):
             base = self.symbol(node.value)
+            if base.startswith('pathlib.Path') and node.attr in {'name', 'stem', 'suffix', 'anchor', 'drive', 'root'}:
+                return 'builtins.str'
             return base if node.attr == '__dict__' else base + '.' + node.attr
         if isinstance(node, ast.Subscript):
+            if self.symbol(node.value) == 'pathlib.Path.parents':
+                return 'pathlib.Path'
             key = literal(node.slice)
             return self.symbol(node.value) + '.' + key if key is not None else '?subscript'
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div) and self.symbol(node.left).startswith('pathlib.Path'):
+            return 'pathlib.Path'
         if isinstance(node, ast.Call):
             function = self.symbol(node.func)
             if function in {'builtins.__import__', 'importlib.import_module'} and node.args:
@@ -67,6 +73,12 @@ class DeletionChecker(ast.NodeVisitor):
                     return self.symbol(node.func.value) + '.' + name
             if function == 'builtins.vars' and node.args:
                 return self.symbol(node.args[0])
+            if function.startswith('pathlib.Path.'):
+                name = function.rsplit('.', 1)[-1]
+                if name in {'resolve', 'absolute', 'expanduser', 'with_name', 'with_suffix', 'joinpath', 'with_stem'}:
+                    return 'pathlib.Path'
+                if name in {'read_text', 'as_posix', 'as_uri'}:
+                    return 'builtins.str'
             if function.startswith('huggingface_hub.'):
                 return 'huggingface_hub.result'
             if function in COLLECTIONS or function in {'pathlib.Path', 'builtins.str'}:
@@ -89,7 +101,9 @@ class DeletionChecker(ast.NodeVisitor):
             self.reject(node, f'shared Hugging Face cache deletion {symbol} is forbidden', always=True)
         if name in {'delete_revisions', 'delete_cache', 'delete_cached_repo'}:
             self.reject(node, f'shared cache deletion {symbol} is forbidden', always=True)
-        if name in {'rename', 'replace'} and base not in {'builtins.str', 'dataclasses'}:
+        if symbol in {'builtins.eval', 'builtins.exec', 'builtins.compile'}:
+            self.reject(node, f'dynamic Python execution {symbol} is forbidden', always=True)
+        if name == 'rename' or (name == 'replace' and root in {'pathlib', 'os', 'posix', 'nt'}):
             if not (self.path == ENTRY_FILE and self.scope == ['publish_partial'] and name == 'replace'):
                 self.reject(node, f'direct path replacement {symbol} is forbidden; use cache.publish_partial', always=True)
         if symbol in DELETIONS or name in METHODS or (name == 'remove' and base.startswith('?')):
@@ -178,7 +192,7 @@ class DeletionChecker(ast.NodeVisitor):
     def visit_Subscript(self, node):
         self.check_symbol(node, self.symbol(node))
         base = self.symbol(node.value)
-        if literal(node.slice) is None and base.split('.')[0] in FILESYSTEM:
+        if literal(node.slice) is None and base in FILESYSTEM | {'pathlib.Path'}:
             self.reject(node, 'dynamic filesystem callable lookup is forbidden')
         self.generic_visit(node)
 
@@ -198,7 +212,7 @@ class DeletionChecker(ast.NodeVisitor):
                 self.reject(node, 'dynamic filesystem attribute lookup is forbidden')
         if isinstance(node.func, ast.Subscript) and literal(node.func.slice) is None:
             base = self.symbol(node.func.value)
-            if base.split('.')[0] in FILESYSTEM:
+            if base in FILESYSTEM | {'pathlib.Path'}:
                 self.reject(node, 'dynamic filesystem callable lookup is forbidden')
         self.generic_visit(node)
 

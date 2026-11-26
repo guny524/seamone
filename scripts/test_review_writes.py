@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import check_review_writes
-from check_review_writes import ROOT, SNAPSHOT, database, functions, violations
+from check_review_writes import ROOT, SNAPSHOT, database, persistence_digest, violations
 
 PATH = 'crates/seamone-runtime/src/store.rs'
 
@@ -41,11 +41,10 @@ class ReviewWrites(unittest.TestCase):
     def setUp(self):
         self.db = database()
         self.addCleanup(self.db.close)
-        self.policy = {'authorized': [{'path': PATH, 'function': 'Store::mutate'}], 'unverified': []}
 
     def errors(self, source, policy=None):
         # Small examples need not define the production writer unless they test that signature.
-        return '\n'.join(violations(source, PATH, policy or {'authorized': [], 'unverified': []}, self.db))
+        return '\n'.join(violations(source, PATH, policy or {'modules': []}, self.db))
 
     def test_inspection_is_identical_with_and_without_optional_sqlite_functions(self):
         connect = sqlite3.connect
@@ -68,7 +67,7 @@ class ReviewWrites(unittest.TestCase):
             db.execute("INSERT INTO training_queue(segment_id,revision) VALUES (?1,unixepoch())", params);
         }'''
         for db in (self.db, older):
-            diagnostic = violations(forbidden, PATH, {'authorized': [], 'unverified': []}, db)
+            diagnostic = violations(forbidden, PATH, {'modules': []}, db)
             self.assertEqual(len(diagnostic), 2)
             self.assertTrue(all('outside the authorized review gate' in error for error in diagnostic))
 
@@ -93,16 +92,28 @@ class ReviewWrites(unittest.TestCase):
         diagnostic = self.errors(source)
         self.assertIn('Store::confirm_all writes segments', diagnostic)
         self.assertIn('Store::confirm_all writes training_queue', diagnostic)
-        self.assertIn('Store::mutate(AuthorizedReview)', diagnostic)
+        self.assertIn('WritePermit', diagnostic)
 
-    def test_authorized_writer_requires_the_evidence_type(self):
-        source = '''impl Store { fn mutate(&mut self, authorization: crate::playback_evidence::AuthorizedReview<'_>) {
-            self.writes.review(&tx, authorization, &current, &next)?;
-            self.db.execute("UPDATE segments SET body=?1 WHERE id=?2", params);
-            self.db.execute("INSERT INTO training_queue(segment_id,revision) VALUES (?1,?2)", params);
+    def test_reviewed_writer_owns_fixed_sql(self):
+        source = '''impl Permit { fn review() {
+            db.execute("UPDATE segments SET body=?1 WHERE id=?2", params);
+            db.execute("INSERT INTO training_queue(segment_id,revision) VALUES (?1,?2)", params);
         }}'''
-        self.assertEqual(self.errors(source, self.policy), '')
-        self.assertIn('must take AuthorizedReview by value', self.errors(source.replace('authorization: crate::playback_evidence::AuthorizedReview', 'request: ReviewRequest'), self.policy))
+        policy = {'modules': [{'path': PATH, 'sha256': persistence_digest(source)}]}
+        self.assertEqual(self.errors(source, policy), '')
+        self.assertIn('reviewed persistence module changed', self.errors(source.replace('body=?1', 'body=?3'), policy))
+
+    def test_persistence_imports_types_and_visibility_are_reviewed_but_test_bodies_can_grow(self):
+        source = '''use actual::Authority;
+        struct Permit;
+        impl Permit { fn review() { db.execute("UPDATE segments SET body=?1", params); } }
+        #[cfg(test)] mod tests { fn normal() {} }'''
+        policy = {'modules': [{'path': PATH, 'sha256': persistence_digest(source)}]}
+        self.assertEqual(self.errors(source, policy), '')
+        for changed in (source.replace('actual::Authority', 'fake::Authority'),
+                        source.replace('struct Permit', 'pub(super) struct Permit')):
+            self.assertIn('reviewed persistence module changed', self.errors(changed, policy))
+        self.assertEqual(self.errors(source.replace('fn normal() {}', 'fn another_case() { hidden_sql(); }'), policy), '')
 
     def test_sqlite_handles_quotes_aliases_ctes_and_replacement(self):
         for sql in ['UPDATE "segments" AS s SET "body"=?1 WHERE id=?2',
@@ -116,22 +127,11 @@ class ReviewWrites(unittest.TestCase):
     def test_constant_sql_outside_a_function_cannot_hide_a_write(self):
         self.assertIn('<outside function> writes segments', self.errors('const SQL: &str = "UPDATE segments SET body=?1";'))
 
-    def test_nested_function_does_not_inherit_authorization(self):
-        source = '''impl Store { fn mutate(&mut self, authorization: crate::playback_evidence::AuthorizedReview<'_>) {
-            fn bypass() { db.execute("UPDATE segments SET body=?1", params); }
-        }}'''
-        self.assertIn('Store::mutate::bypass writes segments', self.errors(source, self.policy))
-
-    def test_reviewed_writer_body_cannot_bypass_admission_after_a_check(self):
-        source = '''impl Store { fn mutate(&mut self, authorization: crate::playback_evidence::AuthorizedReview<'_>) {
-            self.writes.review(&tx, authorization, &current, &next)?;
-            self.db.execute("UPDATE segments SET body=?1 WHERE id=?2", params);
-        }}'''
-        _, scopes = functions(source)
-        policy = {'authorized': [{'path': PATH, 'function': 'Store::mutate', 'body_sha256': scopes[0].digest()}], 'unverified': []}
-        self.assertEqual(self.errors(source, policy), '')
-        changed = source.replace('self.db.execute', 'next.verified = forged; self.db.execute')
-        self.assertIn('changed its reviewed authorization and write body', self.errors(changed, policy))
+    def test_a_nested_write_changes_the_reviewed_persistence_module(self):
+        source = 'impl Permit { fn review() {} }'
+        policy = {'modules': [{'path': PATH, 'sha256': persistence_digest(source)}]}
+        changed = source.replace('fn review() {}', 'fn review() { fn bypass() { db.execute("UPDATE segments SET body=?1", params); } }')
+        self.assertIn('Permit::review::bypass writes segments', self.errors(changed, policy))
 
     def test_trigger_and_view_definitions_are_rejected(self):
         for sql in ("CREATE TRIGGER t AFTER UPDATE ON training_queue BEGIN UPDATE segments SET body='forged'; END",
@@ -151,16 +151,32 @@ class ReviewWrites(unittest.TestCase):
             with self.subTest(call=call):
                 self.assertIn('uses dynamic SQL', self.errors('fn bypass() {' + call + ';}'))
 
-    def test_unverified_writer_body_is_frozen_and_cannot_enqueue(self):
-        source = 'fn clear() { segment.verified = None; db.execute("UPDATE segments SET body=?1", params); }'
-        _, scopes = functions(source)
-        policy = {'authorized': [], 'unverified': [{'path': PATH, 'function': 'clear', 'body_sha256': scopes[0].digest()}]}
-        self.assertEqual(self.errors(source, policy), '')
-        self.assertIn('changed its reviewed unverified-only body', self.errors(source.replace('None', 'Some(label)'), policy))
-        changed = source.replace('UPDATE segments SET body=?1', 'INSERT INTO training_queue(segment_id) VALUES (?1)')
-        _, scopes = functions(changed)
-        policy['unverified'][0]['body_sha256'] = scopes[0].digest()
-        self.assertIn('writes training_queue', self.errors(changed, policy))
+    def test_queue_identity_updates_cannot_retarget_an_existing_training_job(self):
+        for column in ('segment_id', 'revision', 'recording_revision'):
+            source = f'fn retarget() {{ db.execute("UPDATE training_queue SET {column}=?1", params); }}'
+            with self.subTest(column=column):
+                self.assertIn('writes training_queue', self.errors(source))
+
+    def test_connection_opening_sql_references_and_hidden_source_are_rejected(self):
+        for source in (
+            'fn bypass() { let c = rusqlite::Connection::open(path); }',
+            'use rusqlite::Connection as Db; fn bypass() { Db::open_in_memory(); }',
+            'fn bypass() { let run = Connection::execute; }',
+            'fn bypass() { stringify!(UPDATE segments SET body = ?); }',
+            'fn bypass() { include_str!("hidden.sql"); }',
+            '#[path="../hidden.rs"] mod ext;',
+            'macro_rules! dispatch { ($x:expr,$m:ident) => { $x.$m() } }',
+        ):
+            with self.subTest(source=source):
+                self.assertTrue(self.errors(source))
+        for source in (
+            'impl Store { fn open() { Connection::open(path); } }',
+            '#[cfg(test)] #[path="../fixture.rs"] mod fixture;',
+            '#[cfg(test)] mod fixtures { #[path="../fixture.rs"] mod child; }',
+            '#[cfg(test)] fn fixture() { Connection::open_in_memory(); include_str!("fixture.sql"); }',
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(self.errors(source), '')
 
     def test_reads_state_updates_comments_and_literal_examples_remain_allowed(self):
         source = '''fn work() {
@@ -194,7 +210,7 @@ class ReviewWrites(unittest.TestCase):
 
     def test_only_known_migration_includes_are_allowed(self):
         source = 'impl Store { fn open() { db.execute_batch(include_str!("schema-v4.sql")); } }'
-        policy = {'authorized': [], 'unverified': [], 'migrations': json.loads((ROOT / SNAPSHOT).read_text())['migrations']}
+        policy = {'modules': [], 'migrations': json.loads((ROOT / SNAPSHOT).read_text())['migrations']}
         self.assertEqual(self.errors(source, policy), '')
         self.assertIn('uses dynamic SQL', self.errors(source.replace('schema-v4.sql', 'other.sql'), policy))
 

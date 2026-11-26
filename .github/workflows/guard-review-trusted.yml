@@ -1,0 +1,63 @@
+name: guard-review-trusted
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guard-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  guard-base:
+    uses: ./.github/workflows/guard-base.yml
+
+  guard-rules-review-trusted:
+    needs: guard-base
+    runs-on: ubuntu-22.04
+    env:
+      LINT_BASE_REF: ${{ needs.guard-base.outputs.commit }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Require human review of guard changes
+        run: |
+          python3 -I - <<'PY'
+          import os, pathlib, subprocess, tomllib
+          root = pathlib.Path(os.environ.get('SOURCE_ROOT', pathlib.Path.cwd()))
+          def git(*args):
+              return subprocess.check_output(['git', *args], cwd=root, text=True, stderr=subprocess.PIPE)
+          base = git('rev-parse', '--verify', '--end-of-options', os.environ['LINT_BASE_REF'] + '^{commit}').strip()
+          if base == git('rev-parse', 'HEAD').strip():
+              raise SystemExit('guard base must differ from HEAD')
+          head = os.environ.get('PR_HEAD_SHA') or git('rev-parse', 'HEAD').strip()
+          ancestor = git('merge-base', base, head).strip()
+          names = set(git('diff', '--name-only', '--no-renames', ancestor, head, '--').splitlines())
+          names.update(git('ls-files', '--others', '--exclude-standard').splitlines())
+          protected = sorted(name for name in names if name.startswith(('scripts/', '.github/', '.cargo/')) or '/.cargo/' in name or name in {'Makefile','research/Makefile','AGENTS.md','rust-toolchain.toml'})
+          def manifest(ref, name):
+              try:
+                  return tomllib.loads(git('show', ref + ':' + name))
+              except subprocess.CalledProcessError:
+                  return {}
+          for name in sorted(names):
+              if pathlib.Path(name).name != 'Cargo.toml':
+                  continue
+              old, new = manifest(ancestor, name), manifest(head, name)
+              if old.get('lints') != new.get('lints'):
+                  protected.append(name + ' [lints]')
+              if old.get('workspace', {}).get('lints') != new.get('workspace', {}).get('lints'):
+                  protected.append(name + ' [workspace.lints]')
+          for name in protected:
+              print(name + ': 검사와 규칙 파일이 바뀌었다, 사람이 확인한 뒤 merge 한다')
+          raise SystemExit(int(bool(protected)))
+          PY

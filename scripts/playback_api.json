@@ -3,9 +3,9 @@
   "declarations": [
     "# [ cfg ( test ) ] pub ( super ) fn mutate_after_playback ( store : & mut Store , request : & ReviewRequest , ) - > Result < seamone_core : : review : : ReviewSegment , String >",
     "pub ( super ) fn admit ( self , current : & seamone_core : : review : : ReviewSegment , next : & seamone_core : : review : : ReviewSegment , ) - > Result < ( ) , String >",
-    "pub ( super ) fn authorize < ' a > ( & self , request : & ' a ReviewRequest , token : Option < & str > , ) - > Result < AuthorizedReview < ' a > , String >",
-    "pub ( super ) fn ended ( & self , token : & str ) - > Result < ( ) , String >",
-    "pub ( super ) fn issue ( & self , store : & Store , id : & str , revision : u64 , ) - > Result < PlaybackReply , String >",
+    "pub ( super ) fn authorize_review < ' a > ( & self , request : & ' a ReviewRequest , token : Option < & str > , ) - > Result < AuthorizedReview < ' a > , String >",
+    "pub ( super ) fn issue_playback_token ( & self , store : & Store , id : & str , revision : u64 , ) - > Result < PlaybackReply , String >",
+    "pub ( super ) fn mark_playback_ended ( & self , token : & str ) - > Result < ( ) , String >",
     "pub ( super ) fn new ( ) - > Self",
     "pub ( super ) fn request ( & self ) - > & ' a ReviewRequest",
     "pub ( super ) struct AuthorizedReview < ' a >",
@@ -16,17 +16,17 @@
     {
       "path": "crates/seamone-runtime/src/lib.rs",
       "function": "LibraryService::playback",
-      "method": "issue"
+      "method": "issue_playback_token"
     },
     {
       "path": "crates/seamone-runtime/src/lib.rs",
       "function": "LibraryService::playback_ended",
-      "method": "ended"
+      "method": "mark_playback_ended"
     },
     {
       "path": "crates/seamone-runtime/src/lib.rs",
       "function": "LibraryService::review",
-      "method": "authorize"
+      "method": "authorize_review"
     }
   ]
 }

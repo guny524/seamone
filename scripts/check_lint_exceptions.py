@@ -94,9 +94,9 @@ def clippy_commands(source):
 def command_errors(path, commands):
     for line in commands:
         if not re.search(r"(?:^|\s)-D\s*warnings(?:\s|$)", line) or re.search(
-            r"(?:^|\s)(?:-A|--allow)(?:\S*|\s)", line
+            r"(?:^|\s)(?:-A|--allow|--cap-lints)(?:\S*|\s)", line
         ):
-            yield f"{path}: clippy must keep -D warnings and must not add -A/--allow: {line}"
+            yield f"{path}: clippy must keep -D warnings and must not add -A/--allow/--cap-lints: {line}"
 
 
 def config_snapshots(root, names, read):
@@ -109,7 +109,7 @@ def contains_allow(value):
         return any(contains_allow(item) for item in value.values())
     if isinstance(value, list):
         return any(contains_allow(item) for item in value)
-    return isinstance(value, str) and bool(re.search(r"(?:^|[\s\x1f])(?:-A|--allow)", value))
+    return isinstance(value, str) and bool(re.search(r"(?:^|[\s\x1f])(?:-A|--allow|--cap-lints)", value))
 
 
 def relocated(root, commit, entries):
@@ -188,7 +188,7 @@ def check(root, ref):
         if path.name in ("config", "config.toml") and path.parent.name == ".cargo":
             data = tomllib.loads(path.read_text(encoding="utf-8"))
             if contains_allow(data):
-                errors.append(f"{path.relative_to(root)}: -A/--allow rustflags are forbidden")
+                errors.append(f"{path.relative_to(root)}: -A/--allow/--cap-lints rustflags are forbidden")
     return errors
 
 

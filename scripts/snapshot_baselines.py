@@ -12,7 +12,7 @@ SNAPSHOTS = {
     'scripts/runtime_api.json': ('public',),
     'scripts/playback_api.json': ('declarations', 'callers'),
     'scripts/unsafe_files.json': ('functions',),
-    'scripts/review_writes.json': ('authorized', 'unverified', 'migrations'),
+    'scripts/review_writes.json': ('modules', 'migrations'),
 }
 
 

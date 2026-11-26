@@ -1,101 +1,79 @@
-{
-  "name": "guard-integrity",
-  "on": {
-    "push": {},
-    "pull_request": {},
-    "pull_request_target": {}
-  },
-  "permissions": {
-    "contents": "read"
-  },
-  "concurrency": {
-    "group": "guard-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}",
-    "cancel-in-progress": true
-  },
-  "jobs": {
-    "guard-base": {
-      "runs-on": "ubuntu-22.04",
-      "outputs": {
-        "commit": "${{ steps.base.outputs.commit }}"
-      },
-      "steps": [
-        {
-          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-          "with": {
-            "fetch-depth": 0,
-            "ref": "${{ github.event.pull_request.head.sha || github.sha }}",
-            "persist-credentials": false
-          }
-        },
-        {
-          "uses": "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
-          "with": {
-            "python-version": "3.12"
-          }
-        },
-        {
-          "id": "base",
-          "run": "python3 -I - <<'PY'\nimport json, os, subprocess\nfrom pathlib import Path\ndef git(*args):\n    return subprocess.check_output(['git', *args], text=True).strip()\nevent = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())\nref = event.get('pull_request', {}).get('base', {}).get('sha') or event.get('before')\nif ref and set(ref) == {'0'}:\n    ref = git('merge-base', 'HEAD', 'origin/develop')\nif not ref:\n    raise SystemExit('No event base; head cannot select its own baseline')\nbase = git('rev-parse', '--verify', '--end-of-options', ref + '^{commit}')\nif base == git('rev-parse', 'HEAD'):\n    raise SystemExit('guard base must differ from HEAD')\nwith Path(os.environ['GITHUB_OUTPUT']).open('a') as output:\n    output.write('commit=' + base + '\\n')\nprint(base)\nPY\n"
-        }
-      ]
-    },
-    "base-guards": {
-      "if": "github.event_name != 'pull_request_target'",
-      "needs": "guard-base",
-      "runs-on": "ubuntu-22.04",
-      "env": {
-        "LINT_BASE_REF": "${{ needs.guard-base.outputs.commit }}"
-      },
-      "steps": [
-        {
-          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-          "with": {
-            "fetch-depth": 0,
-            "ref": "${{ github.event.pull_request.head.sha || github.sha }}",
-            "persist-credentials": false
-          }
-        },
-        {
-          "uses": "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
-          "with": {
-            "python-version": "3.12"
-          }
-        },
-        {
-          "run": "rustup toolchain install"
-        },
-        {
-          "name": "Run frozen base guards",
-          "run": "python3 -I - <<'PY'\nimport os, pathlib, shutil, subprocess, sys, tempfile\nsource = pathlib.Path(os.environ.get('SOURCE_ROOT', pathlib.Path.cwd()))\nbase = os.environ['LINT_BASE_REF']\ndef git(root, *args):\n    return subprocess.check_output(['git', *args], cwd=root, text=True, stderr=subprocess.PIPE)\nbase = git(source, 'rev-parse', '--verify', '--end-of-options', base + '^{commit}').strip()\nif base == git(source, 'rev-parse', 'HEAD').strip():\n    raise SystemExit('guard base must differ from HEAD')\nscratch = source / '.tmp/base-guards'\nscratch.mkdir(parents=True, exist_ok=True)\nwith tempfile.TemporaryDirectory(dir=scratch) as directory:\n    root = pathlib.Path(directory)\n    subprocess.run(['git', 'clone', '--shared', '--no-checkout', str(source), str(root)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)\n    git(root, 'read-tree', 'HEAD')\n    names = set(filter(None, git(source, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\\0')))\n    for name in sorted(names):\n        if name.startswith('scripts/'):\n            continue\n        path = source / name\n        if path.is_file():\n            target = root / name\n            target.parent.mkdir(parents=True, exist_ok=True)\n            shutil.copyfile(path, target)\n    scripts = root / 'scripts'\n    scripts.mkdir(exist_ok=True)\n    for name in git(source, 'ls-tree', '-r', '--name-only', base, '--', 'scripts').splitlines():\n        if pathlib.Path(name).suffix in {'.py', '.json'}:\n            (scripts / pathlib.Path(name).name).write_text(git(source, 'show', base + ':' + name))\n    checks = sorted(path for path in scripts.glob('check_*.py') if path.stem != 'check_macos_dmg')\n    if not checks:\n        raise SystemExit('No base guards; never fall back to head scripts')\n    env = os.environ.copy()\n    env['LINT_BASE_REF'] = base\n    failed = False\n    bootstrap = 'import runpy,sys; sys.path.insert(0,sys.argv[1]); sys.argv=sys.argv[2:]; runpy.run_path(sys.argv[0],run_name=\"__main__\")'\n    for check in checks:\n        print('base ' + base + ': ' + check.name, flush=True)\n        result = subprocess.run([sys.executable, '-I', '-c', bootstrap, str(scripts), str(check)], cwd=root, env=env)\n        failed |= result.returncode != 0\n    raise SystemExit(int(failed))\nPY\n"
-        }
-      ]
-    },
-    "guard-rules-review": {
-      "needs": "guard-base",
-      "runs-on": "ubuntu-22.04",
-      "env": {
-        "LINT_BASE_REF": "${{ needs.guard-base.outputs.commit }}"
-      },
-      "steps": [
-        {
-          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-          "with": {
-            "fetch-depth": 0,
-            "ref": "${{ github.event.pull_request.head.sha || github.sha }}",
-            "persist-credentials": false
-          }
-        },
-        {
-          "uses": "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
-          "with": {
-            "python-version": "3.12"
-          }
-        },
-        {
-          "name": "Require human review of guard changes",
-          "run": "python3 -I - <<'PY'\nimport os, pathlib, subprocess, tomllib\nroot = pathlib.Path(os.environ.get('SOURCE_ROOT', pathlib.Path.cwd()))\ndef git(*args):\n    return subprocess.check_output(['git', *args], cwd=root, text=True, stderr=subprocess.PIPE)\nbase = git('rev-parse', '--verify', '--end-of-options', os.environ['LINT_BASE_REF'] + '^{commit}').strip()\nif base == git('rev-parse', 'HEAD').strip():\n    raise SystemExit('guard base must differ from HEAD')\nnames = set(git('diff', '--name-only', '--no-renames', base, '--').splitlines())\nnames.update(git('ls-files', '--others', '--exclude-standard').splitlines())\nprotected = sorted(name for name in names if name.startswith(('scripts/', '.github/')) or name in {'Makefile','research/Makefile','AGENTS.md'})\nif 'Cargo.toml' in names:\n    old = tomllib.loads(git('show', base + ':Cargo.toml')).get('workspace', {}).get('lints')\n    new = tomllib.loads((root/'Cargo.toml').read_text()).get('workspace', {}).get('lints')\n    if old != new: protected.append('Cargo.toml [workspace.lints]')\nfor name in protected:\n    print(name + ': 검사와 규칙 파일이 바뀌었다, 사람이 확인한 뒤 merge 한다')\nraise SystemExit(int(bool(protected)))\nPY\n"
-        }
-      ]
-    }
-  }
-}
+name: guard-integrity
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guard-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard-base:
+    uses: ./.github/workflows/guard-base.yml
+
+  base-guards:
+    needs: guard-base
+    runs-on: ubuntu-22.04
+    env:
+      LINT_BASE_REF: ${{ needs.guard-base.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          # pull_request의 github.sha는 해당 이벤트의 PR merge commit이다
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+      - name: Run frozen base guards
+        run: |
+          python3 -I - <<'PY'
+          import os, pathlib, shutil, subprocess, sys, tempfile
+          source = pathlib.Path(os.environ.get('SOURCE_ROOT', pathlib.Path.cwd()))
+          base = os.environ['LINT_BASE_REF']
+          def git(root, *args):
+              return subprocess.check_output(['git', *args], cwd=root, text=True, stderr=subprocess.PIPE)
+          base = git(source, 'rev-parse', '--verify', '--end-of-options', base + '^{commit}').strip()
+          if base == git(source, 'rev-parse', 'HEAD').strip():
+              raise SystemExit('guard base must differ from HEAD')
+          scratch = source / '.tmp/base-guards'
+          scratch.mkdir(parents=True, exist_ok=True)
+          with tempfile.TemporaryDirectory(dir=scratch) as directory:
+              root = pathlib.Path(directory)
+              subprocess.run(['git', 'clone', '--shared', '--no-checkout', str(source), str(root)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+              git(root, 'read-tree', 'HEAD')
+              names = set(filter(None, git(source, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\0')))
+              for name in sorted(names):
+                  if name.startswith('scripts/'):
+                      continue
+                  path = source / name
+                  if path.is_file():
+                      target = root / name
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copyfile(path, target)
+              scripts = root / 'scripts'
+              scripts.mkdir(exist_ok=True)
+              for name in git(source, 'ls-tree', '-r', '--name-only', base, '--', 'scripts').splitlines():
+                  if pathlib.Path(name).suffix in {'.py', '.json'}:
+                      (scripts / pathlib.Path(name).name).write_text(git(source, 'show', base + ':' + name))
+              checks = sorted(path for path in scripts.glob('check_*.py') if path.stem != 'check_macos_dmg')
+              if not checks:
+                  raise SystemExit('No base guards; never fall back to head scripts')
+              env = os.environ.copy()
+              env['LINT_BASE_REF'] = base
+              failed = False
+              bootstrap = 'import runpy,sys; sys.path.insert(0,sys.argv[1]); sys.argv=sys.argv[2:]; runpy.run_path(sys.argv[0],run_name="__main__")'
+              for check in checks:
+                  print('base ' + base + ': ' + check.name, flush=True)
+                  result = subprocess.run([sys.executable, '-I', '-c', bootstrap, str(scripts), str(check)], cwd=root, env=env)
+                  failed |= result.returncode != 0
+              raise SystemExit(int(failed))
+          PY

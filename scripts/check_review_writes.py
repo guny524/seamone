@@ -18,7 +18,7 @@ from guard_integrity import base_commit
 ROOT = Path(__file__).resolve().parent.parent
 RUNTIME = ROOT / 'crates/seamone-runtime/src'
 SNAPSHOT = 'scripts/review_writes.json'
-GATE = 'Store::mutate(AuthorizedReview)'
+GATE = 'WritePermit'
 SQL_METHODS = {'execute', 'execute_batch', 'prepare', 'prepare_cached', 'prepare_with_flags', 'prepare_cached_with_flags', 'query_row', 'query_one', 'query_row_and_then'}
 
 
@@ -128,6 +128,30 @@ def functions(source, test_only=False):
     return code, found
 
 
+def test_regions(code):
+    """Body ranges of test-only inline modules; their cfg attributes remain reviewed."""
+    regions = []
+    for index, token in enumerate(code):
+        if token.text != 'mod' or not test_attribute(item_attributes(code, index)):
+            continue
+        end = index + 2
+        if end < len(code) and code[end].text == '{':
+            depth = 1
+            end += 1
+            while end < len(code) and depth:
+                depth += (code[end].text == '{') - (code[end].text == '}')
+                end += 1
+            regions.append((token.start, code[end - 1].end))
+    return regions
+
+
+def persistence_digest(source):
+    code, _ = functions(source)
+    testing = test_regions(code)
+    canonical = [token.text for token in code if not any(start <= token.start < stop for start, stop in testing)]
+    return hashlib.sha256(json.dumps(canonical, ensure_ascii=False).encode()).hexdigest()
+
+
 def string_value(token):
     value = token.text
     raw = re.fullmatch(r'r(#+)?"(.*)"\1', value, re.S)
@@ -204,7 +228,10 @@ def writes(db, sql):
             found.add('trigger/view definition')
         if action == sqlite3.SQLITE_INSERT and table in {'segments', 'training_queue'}:
             found.add(table)
-        if action == sqlite3.SQLITE_UPDATE and table == 'segments' and (column or '').lower() == 'body':
+        if action == sqlite3.SQLITE_UPDATE and (
+            (table == 'segments' and (column or '').lower() == 'body')
+            or (table == 'training_queue' and (column or '').lower() in {'segment_id', 'revision', 'recording_revision'})
+        ):
             found.add(table)
         return sqlite3.SQLITE_OK
 
@@ -237,8 +264,13 @@ def writes(db, sql):
 
 def violations(source, path, policy, db, test_only=False):
     code, scopes = functions(source, test_only)
-    authorized = {item['function'] for item in policy['authorized'] if item['path'] == path}
-    unverified = {item['function']: item['body_sha256'] for item in policy['unverified'] if item['path'] == path}
+    reviewed_modules = {item['path']: item['sha256'] for item in policy.get('modules', [])}
+    reviewed = path in reviewed_modules and persistence_digest(source) == reviewed_modules[path]
+    testing = test_regions(code)
+    connections = {'Connection'}
+    for index, token in enumerate(code[:-2]):
+        if token.text in connections and code[index + 1].text == 'as':
+            connections.add(code[index + 2].text)
     diagnostics = []
     decoded_arguments = {}
 
@@ -250,32 +282,37 @@ def violations(source, path, policy, db, test_only=False):
         line = source.count('\n', 0, token.start) + 1
         diagnostics.append(f'{path}:{line}: {reason}; use {GATE} for verified writes and training_queue insertion')
 
-    for name in authorized | unverified.keys():
-        matches = [scope for scope in scopes if scope.name == name]
-        if len(matches) != 1:
-            diagnostics.append(f'{path}: define exactly one reviewed writer {name}; use {GATE}')
-            continue
-        scope = matches[0]
-        if name in authorized and not re.search(
-            r'\bauthorization : crate : : playback_evidence : : AuthorizedReview <',
-            ' '.join(token.text for token in scope.header)
-        ):
-            reject(scope.header[0], f'{name} must take AuthorizedReview by value')
-        if name in authorized:
-            entry = next(item for item in policy['authorized'] if item['path'] == path and item['function'] == name)
-            if entry.get('body_sha256') and scope.digest() != entry['body_sha256']:
-                reject(scope.header[0], f'{name} changed its reviewed authorization and write body')
-            body = ' '.join(token.text for token in scope.body)
-            if body.count('self . writes . review ( & tx , authorization , & current , & next ) ?') != 1:
-                reject(scope.header[0], f'{name} must admit the exact current and next snapshots before writing')
-        if name in unverified and scope.digest() != unverified[name]:
-            reject(scope.header[0], f'{name} changed its reviewed unverified-only body')
+    if path in reviewed_modules and not reviewed:
+        diagnostics.append(f'{path}: reviewed persistence module changed; review its private types, authority and fixed SQL')
 
     for index, token in enumerate(code):
         scope = owner(token)
         name = scope.name if scope else '<outside function>'
-        if scope is not None and scope.testing:
+        if test_only or (scope is not None and scope.testing) or any(start <= token.start < stop for start, stop in testing):
             continue
+        is_open = (token.text.startswith('open') and index >= 3
+                   and [item.text for item in code[index - 2:index]] == [':', ':']
+                   and code[index - 3].text in connections)
+        if is_open and (path != 'crates/seamone-runtime/src/store.rs' or name != 'Store::open'):
+            reject(token, f'{name} cannot open a SQLite connection outside Store::open')
+        if token.text == 'path' and index >= 2 and [item.text for item in code[index - 2:index]] == ['#', '[']:
+            target = index + 1
+            while target < len(code) and code[target].text not in {'mod', 'fn', 'struct', 'enum', 'impl'}:
+                target += 1
+            if not test_attribute(item_attributes(code, target)):
+                reject(token, f'{name} cannot use #[path] outside test-only code')
+        if token.text in {'stringify', 'include_str'} and index + 1 < len(code) and code[index + 1].text == '!':
+            migration = (token.text == 'include_str' and name == 'Store::open'
+                         and path == 'crates/seamone-runtime/src/store.rs'
+                         and index + 3 < len(code)
+                         and string_value(code[index + 3]) in {Path(item['path']).name for item in policy.get('migrations', [])})
+            if not migration:
+                reject(token, f'{name} cannot use {token.text}! outside reviewed migrations')
+        if token.text == '.' and index + 1 < len(code) and code[index + 1].text == '$':
+            reject(token, f'{name} cannot dispatch a method through a macro variable')
+        if (token.text in SQL_METHODS and index > 0 and code[index - 1].text in {'.', ':'}
+                and index + 1 < len(code) and code[index + 1].text != '('):
+            reject(token, f'{name} cannot use a SQL method reference')
         # Dynamic SQL expressions must not hide writes from the literal inspection.
         if (token.text in SQL_METHODS and index > 0 and code[index - 1].text in {'.', ':'}
                 and index + 2 < len(code) and code[index + 1].text == '('):
@@ -329,9 +366,7 @@ def violations(source, path, policy, db, test_only=False):
         if 'trigger/view definition' in critical:
             reject(token, f'{name} defines a trigger or view that can hide verified writes')
             continue
-        if name in authorized:
-            continue
-        if critical == {'segments'} and name in unverified and scope.digest() == unverified[name]:
+        if reviewed:
             continue
         reject(token, f'{name} writes {", ".join(sorted(critical))} outside the authorized review gate')
     return diagnostics

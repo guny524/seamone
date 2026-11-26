@@ -66,7 +66,7 @@ impl Playbacks {
     }
 
     /// Preparing the exact current audio is the only way to issue a token.
-    pub(super) fn issue(
+    pub(super) fn issue_playback_token(
         &self,
         store: &Store,
         id: &str,
@@ -106,7 +106,7 @@ impl Playbacks {
         Ok(token)
     }
 
-    pub(super) fn ended(&self, token: &str) -> Result<(), String> {
+    pub(super) fn mark_playback_ended(&self, token: &str) -> Result<(), String> {
         let mut listening = self.listening.lock().map_err(|e| e.to_string())?;
         let item = listening
             .get_mut(token)
@@ -115,7 +115,7 @@ impl Playbacks {
         Ok(())
     }
 
-    pub(super) fn authorize<'a>(
+    pub(super) fn authorize_review<'a>(
         &self,
         request: &'a ReviewRequest,
         token: Option<&str>,
@@ -146,13 +146,17 @@ pub(super) fn mutate_after_playback(
 ) -> Result<seamone_core::review::ReviewSegment, String> {
     let playbacks = Playbacks::new();
     let token = if request.action.required_evidence().requires_playback() {
-        let reply = playbacks.issue(store, &request.segment_id, request.expected_revision)?;
-        playbacks.ended(&reply.token)?;
+        let reply = playbacks.issue_playback_token(
+            store,
+            &request.segment_id,
+            request.expected_revision,
+        )?;
+        playbacks.mark_playback_ended(&reply.token)?;
         Some(reply.token)
     } else {
         None
     };
-    store.mutate(playbacks.authorize(request, token.as_deref())?)
+    store.mutate(playbacks.authorize_review(request, token.as_deref())?)
 }
 
 #[cfg(test)]
@@ -191,25 +195,25 @@ mod tests {
             let (store, segment) = fixture.transcribed();
             let playbacks = Playbacks::new();
             let request = request(&segment, action);
-            assert!(playbacks.authorize(&request, None).is_err());
+            assert!(playbacks.authorize_review(&request, None).is_err());
             let token = playbacks
-                .issue(&store, &segment.id, segment.revision)
+                .issue_playback_token(&store, &segment.id, segment.revision)
                 .unwrap()
                 .token;
-            assert!(playbacks.authorize(&request, Some(&token)).is_err());
-            playbacks.ended(&token).unwrap();
-            let authorized = playbacks.authorize(&request, Some(&token)).unwrap();
+            assert!(playbacks.authorize_review(&request, Some(&token)).is_err());
+            playbacks.mark_playback_ended(&token).unwrap();
+            let authorized = playbacks.authorize_review(&request, Some(&token)).unwrap();
             assert_eq!(authorized.request(), &request);
             let stale = ReviewRequest {
                 expected_revision: segment.revision + 1,
                 ..request.clone()
             };
-            assert!(playbacks.authorize(&stale, Some(&token)).is_err());
+            assert!(playbacks.authorize_review(&stale, Some(&token)).is_err());
             let other = ReviewRequest {
                 segment_id: "other".into(),
                 ..request
             };
-            assert!(playbacks.authorize(&other, Some(&token)).is_err());
+            assert!(playbacks.authorize_review(&other, Some(&token)).is_err());
         }
     }
 
@@ -220,18 +224,18 @@ mod tests {
         let playbacks = Playbacks::new();
         assert!(
             playbacks
-                .issue(&store, "missing", segment.revision)
+                .issue_playback_token(&store, "missing", segment.revision)
                 .is_err()
         );
         assert_eq!(
             playbacks
-                .issue(&store, &segment.id, segment.revision + 1)
+                .issue_playback_token(&store, &segment.id, segment.revision + 1)
                 .unwrap_err(),
             seamone_core::review::ReviewError::StaleRevision.to_string()
         );
         assert!(playbacks.listening.lock().unwrap().is_empty());
         let reply = playbacks
-            .issue(&store, &segment.id, segment.revision)
+            .issue_playback_token(&store, &segment.id, segment.revision)
             .unwrap();
         assert_ne!(reply.wav_base64, "");
         assert_eq!(reply.segment_id, segment.id);
@@ -240,7 +244,7 @@ mod tests {
         std::fs::write(path, b"unreadable WAV").unwrap();
         assert!(
             playbacks
-                .issue(&store, &segment.id, segment.revision)
+                .issue_playback_token(&store, &segment.id, segment.revision)
                 .is_err()
         );
         assert_eq!(playbacks.listening.lock().unwrap().len(), 1);
@@ -257,10 +261,10 @@ mod tests {
                 text: "교정".into(),
             },
         );
-        let authority = playbacks.authorize(&draft, None).unwrap();
+        let authority = playbacks.authorize_review(&draft, None).unwrap();
         let mut next = segment.apply(&draft, 16_000).unwrap();
         playbacks
-            .authorize(&draft, None)
+            .authorize_review(&draft, None)
             .unwrap()
             .admit(&segment, &next)
             .unwrap();
@@ -282,12 +286,12 @@ mod tests {
             },
         );
         let reply = playbacks
-            .issue(&store, &segment.id, segment.revision)
+            .issue_playback_token(&store, &segment.id, segment.revision)
             .unwrap();
-        playbacks.ended(&reply.token).unwrap();
+        playbacks.mark_playback_ended(&reply.token).unwrap();
         let accepted = segment.apply(&yes, 16_000).unwrap();
         playbacks
-            .authorize(&yes, Some(&reply.token))
+            .authorize_review(&yes, Some(&reply.token))
             .unwrap()
             .admit(&segment, &accepted)
             .unwrap();
@@ -300,14 +304,14 @@ mod tests {
         );
         let unchanged = accepted.apply(&same, 16_000).unwrap();
         playbacks
-            .authorize(&same, None)
+            .authorize_review(&same, None)
             .unwrap()
             .admit(&accepted, &unchanged)
             .unwrap();
         let invalidate = request(&accepted, ReviewAction::Invalidate);
         let cleared = accepted.apply(&invalidate, 16_000).unwrap();
         playbacks
-            .authorize(&invalidate, None)
+            .authorize_review(&invalidate, None)
             .unwrap()
             .admit(&accepted, &cleared)
             .unwrap();
@@ -327,10 +331,13 @@ mod tests {
         ] {
             let request = request(&segment, action);
             assert_eq!(
-                playbacks.authorize(&request, None).unwrap().request(),
+                playbacks
+                    .authorize_review(&request, None)
+                    .unwrap()
+                    .request(),
                 &request
             );
         }
-        assert!(playbacks.ended("unknown").is_err());
+        assert!(playbacks.mark_playback_ended("unknown").is_err());
     }
 }

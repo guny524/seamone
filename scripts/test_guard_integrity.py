@@ -1,14 +1,14 @@
-"""Check event bases, human review boundaries and running frozen code against head."""
+"""Exercise the actual CI programs with branch, force-push and merge histories."""
 
 import json
 import os
-import sys
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from guard_integrity import ROOT, base_commit, protected_changes, resolve_base, run_base_guards
+from guard_integrity import ROOT, base_commit, workflow_program
 
 
 class GuardIntegrity(unittest.TestCase):
@@ -34,6 +34,7 @@ if __name__ == '__main__': raise SystemExit(main())
         self.git('add', '.')
         self.commit()
         self.base = self.git('rev-parse', 'HEAD').strip()
+        self.git('update-ref', 'refs/remotes/origin/develop', self.base)
         self.commit()
 
     def git(self, *args):
@@ -41,61 +42,101 @@ if __name__ == '__main__': raise SystemExit(main())
 
     def commit(self):
         self.git('-c', 'user.name=Architecture Test', '-c', 'user.email=test@invalid',
-                 '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-qm', 'fixture')
+                 '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-qam', 'fixture')
 
-    def test_pull_request_and_push_use_their_own_base_commits(self):
-        self.assertEqual(resolve_base(self.root, {'pull_request': {'base': {'sha': self.base}}}), self.base)
-        self.assertEqual(resolve_base(self.root, {'before': self.base}), self.base)
-        self.git('update-ref', 'refs/remotes/origin/develop', self.base)
-        self.assertEqual(resolve_base(self.root, {'before': '0' * 40}), self.base)
-        with self.assertRaisesRegex(ValueError, 'differ from HEAD'):
-            base_commit(self.root, 'HEAD')
-
-    def test_ci_base_program_emits_a_commit_line_and_rejects_head(self):
-        workflow = json.loads((ROOT / '.github/workflows/guard-integrity.yml').read_text())
-        step = workflow['jobs']['guard-base']['steps'][-1]['run']
-        program = step.split("\n", 1)[1].rsplit("\nPY", 1)[0]
-        event, output = self.root / 'event.json', self.root / 'output'
+    def run_program(self, file, step, **variables):
         environment = os.environ.copy()
-        environment.update(GITHUB_EVENT_PATH=str(event), GITHUB_OUTPUT=str(output))
-        event.write_text(json.dumps({'before': self.base}))
-        result = subprocess.run([sys.executable, '-I', '-c', program], cwd=self.root,
-                                env=environment, capture_output=True, text=True)
+        environment.update(SOURCE_ROOT=str(self.root), **variables)
+        return subprocess.run([sys.executable, '-I', '-c', workflow_program(file, step)],
+                              cwd=self.root, env=environment, capture_output=True, text=True)
+
+    def event_base(self, event):
+        path, output = self.root / '.git/event.json', self.root / '.git/output'
+        path.write_text(json.dumps(event))
+        output.write_text('')
+        result = self.run_program('.github/workflows/guard-base.yml', 'Select event base',
+                                  GITHUB_EVENT_PATH=str(path), GITHUB_OUTPUT=str(output))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(output.read_text(), 'commit=' + self.base + '\n')
-        event.write_text(json.dumps({'before': self.git('rev-parse', 'HEAD').strip()}))
-        result = subprocess.run([sys.executable, '-I', '-c', program], cwd=self.root,
-                                env=environment, capture_output=True, text=True)
+        return output.read_text().removeprefix('commit=').rstrip('\n')
+
+    def test_local_new_branch_passes_but_ci_refuses_a_self_comparison(self):
+        self.assertEqual(base_commit(self.root, 'HEAD', ci=False), self.git('rev-parse', 'HEAD').strip())
+        with self.assertRaisesRegex(ValueError, 'differ from HEAD in CI'):
+            base_commit(self.root, 'HEAD', ci=True)
+        path = self.root / '.git/event.json'
+        path.write_text(json.dumps({'ref': 'refs/heads/develop', 'before': self.git('rev-parse', 'HEAD').strip()}))
+        result = self.run_program('.github/workflows/guard-base.yml', 'Select event base',
+                                  GITHUB_EVENT_PATH=str(path), GITHUB_OUTPUT=str(self.root / '.git/output'))
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('guard base must differ from HEAD', result.stderr)
+        self.assertIn('guard base must differ from HEAD in CI', result.stderr)
+
+    def test_pr_develop_and_feature_pushes_keep_the_reviewed_base(self):
+        self.assertEqual(self.event_base({'pull_request': {'base': {'sha': self.base}}}), self.base)
+        self.assertEqual(self.event_base({'ref': 'refs/heads/develop', 'before': self.base}), self.base)
+        previous = self.git('rev-parse', 'HEAD').strip()
+        self.commit()
+        self.assertEqual(self.event_base({'ref': 'refs/heads/topic', 'before': previous}), self.base)
+        self.assertEqual(self.event_base({'ref': 'refs/heads/topic', 'before': '0' * 40}), self.base)
+
+    def test_unavailable_before_falls_back_to_the_develop_merge_base(self):
+        self.assertEqual(self.event_base({'ref': 'refs/heads/develop', 'before': '1' * 40}), self.base)
 
     def test_frozen_guard_ignores_disabled_head_script_and_expanded_head_policy(self):
-        (self.root / 'scripts/check_probe.py').write_text('def main(): return 0')
+        (self.root / 'scripts/check_probe.py').write_text('raise SystemExit(0)')
         (self.root / 'scripts/policy.json').write_text('{"marker":"head"}')
-        self.assertEqual(run_base_guards(self.root, self.base), 0)
+        result = self.run_program('.github/workflows/guard-integrity.yml', 'Run frozen base guards', LINT_BASE_REF=self.base)
+        self.assertEqual(result.returncode, 0, result.stderr)
         (self.root / 'input.rs').write_text('bad')
-        self.assertEqual(run_base_guards(self.root, self.base), 1)
+        result = self.run_program('.github/workflows/guard-integrity.yml', 'Run frozen base guards', LINT_BASE_REF=self.base)
+        self.assertEqual(result.returncode, 1, result.stderr)
 
     def test_ci_review_does_not_execute_a_disabled_head_integrity_helper(self):
         (self.root / 'scripts/guard_integrity.py').write_text('raise SystemExit(0)')
-        workflow = json.loads((ROOT / '.github/workflows/guard-integrity.yml').read_text())
-        step = workflow['jobs']['guard-rules-review']['steps'][-1]['run']
-        program = step.split("\n", 1)[1].rsplit("\nPY", 1)[0]
-        environment = os.environ.copy()
-        environment.update(LINT_BASE_REF=self.base, SOURCE_ROOT=str(self.root))
-        result = subprocess.run([sys.executable, '-I', '-c', program], env=environment, capture_output=True, text=True)
+        result = self.run_program('.github/workflows/guard-review-trusted.yml', 'Require human review of guard changes', LINT_BASE_REF=self.base)
         self.assertEqual(result.returncode, 1)
         self.assertIn('scripts/guard_integrity.py: 검사와 규칙 파일이 바뀌었다', result.stdout)
 
-    def test_protected_paths_require_human_review_but_package_metadata_does_not(self):
-        self.assertEqual(protected_changes(self.root, self.base), [])
+    def test_a_behind_pr_only_reviews_its_own_diff_and_frozen_checks_use_the_merge(self):
+        head = self.git('rev-parse', 'HEAD').strip()
+        self.git('checkout', '-qb', 'develop-fixture', self.base)
+        (self.root / 'approved.rs').write_text('approved')
+        (self.root / 'scripts/check_probe.py').write_text('from pathlib import Path\nassert (Path(__file__).resolve().parent.parent/"approved.rs").read_text()=="approved"\n')
+        self.git('add', '.')
+        self.commit()
+        base = self.git('rev-parse', 'HEAD').strip()
+        self.git('checkout', '--detach', head)
+        review = self.run_program('.github/workflows/guard-review-trusted.yml', 'Require human review of guard changes', LINT_BASE_REF=base, PR_HEAD_SHA=head)
+        self.assertEqual(review.returncode, 0, review.stdout + review.stderr)
+        self.git('-c', 'user.name=Architecture Test', '-c', 'user.email=test@invalid',
+                 '-c', 'commit.gpgsign=false', 'merge', '--no-edit', base)
+        frozen = self.run_program('.github/workflows/guard-integrity.yml', 'Run frozen base guards', LINT_BASE_REF=base)
+        self.assertEqual(frozen.returncode, 0, frozen.stdout + frozen.stderr)
+
+    def test_package_metadata_is_allowed_and_lint_policy_needs_review(self):
         (self.root / 'Cargo.toml').write_text('[workspace.package]\nversion="2"\n[workspace.lints.rust]\nunsafe_code="deny"\n')
-        self.assertEqual(protected_changes(self.root, self.base), [])
+        self.commit()
+        result = self.run_program('.github/workflows/guard-review-trusted.yml', 'Require human review of guard changes', LINT_BASE_REF=self.base)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         (self.root / 'Cargo.toml').write_text('[workspace.lints.rust]\nunsafe_code="allow"\n')
-        (self.root / 'Makefile').write_text('lint:\n\ttrue\n')
-        found = protected_changes(self.root, self.base)
-        self.assertIn('Cargo.toml [workspace.lints]', found)
-        self.assertIn('Makefile', found)
+        self.commit()
+        result = self.run_program('.github/workflows/guard-review-trusted.yml', 'Require human review of guard changes', LINT_BASE_REF=self.base)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('Cargo.toml [workspace.lints]', result.stdout)
+
+    def test_cargo_configuration_toolchain_and_crate_lints_require_review(self):
+        cargo = self.root / '.cargo/config.toml'
+        cargo.parent.mkdir()
+        cargo.write_text('[build]\nrustflags=["--cap-lints=allow"]\n')
+        (self.root / 'rust-toolchain.toml').write_text('[toolchain]\nchannel="stable"\n')
+        crate = self.root / 'crates/demo/Cargo.toml'
+        crate.parent.mkdir(parents=True)
+        crate.write_text('[lints.rust]\nunsafe_code="allow"\n')
+        self.git('add', '.')
+        self.commit()
+        result = self.run_program('.github/workflows/guard-review-trusted.yml', 'Require human review of guard changes', LINT_BASE_REF=self.base)
+        self.assertEqual(result.returncode, 1)
+        for name in ('.cargo/config.toml', 'rust-toolchain.toml', 'crates/demo/Cargo.toml [lints]'):
+            self.assertIn(name, result.stdout)
 
 
 if __name__ == '__main__':

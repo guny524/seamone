@@ -1,0 +1,59 @@
+name: guard-base
+
+on:
+  workflow_call:
+    outputs:
+      commit:
+        description: Reviewed base commit for this event
+        value: ${{ jobs.select.outputs.commit }}
+
+permissions:
+  contents: read
+
+jobs:
+  select:
+    runs-on: ubuntu-22.04
+    outputs:
+      commit: ${{ steps.base.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Select event base
+        id: base
+        run: |
+          python3 -I - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True, stderr=subprocess.PIPE).strip()
+          def resolve(ref):
+              if not ref or set(ref) == {'0'}:
+                  return None
+              try:
+                  return git('rev-parse', '--verify', '--end-of-options', ref + '^{commit}')
+              except subprocess.CalledProcessError:
+                  return None
+          event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+          if 'pull_request' in event:
+              base = resolve(event['pull_request']['base']['sha'])
+              if base is None:
+                  raise SystemExit('Cannot read the pull request base commit')
+          else:
+              ref = event.get('ref', '')
+              if not ref.startswith('refs/heads/'):
+                  raise SystemExit('Guard checks only run for branch pushes')
+              base = resolve(event.get('before')) if ref == 'refs/heads/develop' else None
+              if base is None:
+                  base = git('merge-base', 'HEAD', 'origin/develop')
+          if base == git('rev-parse', 'HEAD'):
+              raise SystemExit('guard base must differ from HEAD in CI')
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+              output.write('commit=' + base + '\n')
+          print(base)
+          PY

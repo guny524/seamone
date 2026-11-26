@@ -43,17 +43,21 @@ class PlaybackBoundary(unittest.TestCase):
             path = root / 'crates/seamone-runtime/src/lib.rs'
             path.parent.mkdir(parents=True)
             subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
-            source = '''impl LibraryService { fn playback() { self.listening.issue(store,id,rev); } }
-            #[cfg(test)] mod tests { fn helper() { p.issue(store,id,rev); p.ended(token); p.authorize(req,token); } }
-            fn bypass() { p.issue(store,id,rev); p.ended(token); p.authorize(req,token); }
+            source = '''impl LibraryService { fn playback() { self.listening.issue_playback_token(store,id,rev); } }
+            #[cfg(test)] mod tests { fn helper() { p.issue_playback_token(store,id,rev); p.mark_playback_ended(token); p.authorize_review(req,token); } }
+            fn bypass() { p.issue_playback_token(store,id,rev); p.mark_playback_ended(token); p.authorize_review(req,token); }
             '''
             path.write_text(source)
-            policy = [{'path': str(path.relative_to(root)), 'function': 'LibraryService::playback', 'method': 'issue'}]
+            policy = [{'path': str(path.relative_to(root)), 'function': 'LibraryService::playback', 'method': 'issue_playback_token'}]
             errors = caller_errors(root, policy)
             self.assertEqual(len(errors), 3)
             self.assertTrue(all('bypass' in error for error in errors))
             path.write_text(source.replace('fn bypass()', '#[cfg(test)] fn bypass()'))
             self.assertEqual(caller_errors(root, policy), [])
+            path.write_text('fn normal() { let _ = self.ended; other.issue(); other.authorize(); }')
+            self.assertEqual(caller_errors(root, policy), [])
+            path.write_text('fn bypass() { call!(p, mark_playback_ended); }')
+            self.assertIn('cannot call mark_playback_ended', '\n'.join(caller_errors(root, policy)))
 
     def test_private_helpers_comments_and_literals_do_not_expand_access(self):
         initial = 'pub(super) fn issue() {}'

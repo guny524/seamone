@@ -1,24 +1,5 @@
 {
-  "description": "Only AuthorizedReview may write verified segment bodies or enqueue training. Existing unverified initialization and label clearing bodies are frozen separately.",
-  "authorized": [
-    {
-      "path": "crates/seamone-runtime/src/store.rs",
-      "function": "Store::mutate",
-      "body_sha256": "e8d565a0909b10ae72ddd7353cb4d5b5a541ca00a30cd8ebd3c682af2f9508a0"
-    }
-  ],
-  "unverified": [
-    {
-      "path": "crates/seamone-runtime/src/store.rs",
-      "function": "Store::commit_transcription",
-      "body_sha256": "7e094a32de3bc4b47e525abd89920e66c0c1d2669f2dc58bc09a95a277ad7ae1"
-    },
-    {
-      "path": "crates/seamone-runtime/src/store.rs",
-      "function": "flag_overlapping_segments",
-      "body_sha256": "909e81b752348c44239c27218b8b60eb3240dcd9114a2d311380d35930f5cad6"
-    }
-  ],
+  "description": "The private persistence module owns validated serialization and fixed SQL. Its production types, authority and implementation are reviewed together; callers never receive an open permit.",
   "migrations": [
     {
       "path": "crates/seamone-runtime/src/schema.sql",
@@ -35,6 +16,12 @@
     {
       "path": "crates/seamone-runtime/src/schema-v4.sql",
       "sha256": "a1e8bf7b92ac2245f3317b54e06d45b54126fe7752d4851ee56ddb5eb4204149"
+    }
+  ],
+  "modules": [
+    {
+      "path": "crates/seamone-runtime/src/write_guard.rs",
+      "sha256": "814d3feaf66eef55a5c2be0535998e8f3166e5fc92331deca0c6911dbc59d978"
     }
   ]
 }

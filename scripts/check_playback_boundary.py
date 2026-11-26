@@ -60,7 +60,7 @@ def errors(actual, expected):
     found = []
     for declaration in current - reviewed:
         found.append(f'playback_evidence.rs: unreviewed evidence declaration: {declaration}; '
-                     'issue tokens only through Playbacks::issue with current audio, '
+                     'issue tokens only through Playbacks::issue_playback_token with current audio, '
                      'review scripts/playback_api.json before changing this boundary')
     if reviewed - current:
         found.append('scripts/playback_api.json: an evidence declaration changed or disappeared; review the callers')
@@ -78,7 +78,7 @@ def caller_errors(root, policy):
         source = path.read_text(encoding='utf-8')
         code, scopes = functions(source, name in tests)
         for index, token in enumerate(code):
-            if token.text not in {'issue', 'ended', 'authorize'} or index == 0 or code[index - 1].text not in {'.', ':'}:
+            if token.text not in {'issue_playback_token', 'mark_playback_ended', 'authorize_review'} or (index > 0 and code[index - 1].text == 'fn'):
                 continue
             enclosing = [scope for scope in scopes if scope.start < token.start < scope.end]
             scope = min(enclosing, key=lambda scope: scope.end - scope.start) if enclosing else None
