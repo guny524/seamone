@@ -397,8 +397,11 @@ fn ReviewPanel(workspace: Workspace) -> impl IntoView {
                         <CorrectionTimeline range=s.range revision=s.recording_revision marks=workspace.marks wav cursor/>
                     })}
                 </Show>
+                <Show when=move || workspace.quick.preparation_pending()>
+                    <p role="status">"이전 음성 준비를 정리하고 있습니다."</p>
+                </Show>
                 <div class="segment-transport">
-                    <button class="primary" disabled=move || workspace.flow.get().busy() on:click=move |_| workspace.play()>
+                    <button class="primary" disabled=move || workspace.flow.get().busy() || workspace.quick.preparation_pending() on:click=move |_| workspace.play()>
                         {move || if workspace.flow.get().listened() { "다시 재생" } else { "구간 재생" }}
                         <span class="desktop-shortcut">" (Space)"</span>
                     </button>

@@ -317,6 +317,9 @@ impl Workspace {
     }
 
     pub fn play(self) {
+        if untrack(|| self.quick.preparation_pending()) {
+            return;
+        }
         let mut ticket = None;
         self.flow.update(|flow| ticket = flow.play());
         let Some(ticket) = ticket else {
@@ -414,13 +417,7 @@ impl Workspace {
     }
 
     pub fn stop_session(session: String) {
-        spawn_local(async move {
-            let _ = api::call::<seamone_core::playback::Status>(
-                Command::ControlPlayback,
-                json!({"session":session,"action":{"kind":"stop"}}),
-            )
-            .await;
-        });
+        api::stop_playback(session);
     }
 
     pub fn playback_error(self, ticket: &Ticket, message: String) {

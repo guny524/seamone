@@ -26,3 +26,13 @@ pub async fn call<T: DeserializeOwned>(
         .map_err(|e| e.as_string().unwrap_or_else(|| format!("{e:?}")))?;
     serde_wasm_bindgen::from_value(value).map_err(|e| e.to_string())
 }
+
+pub fn stop_playback(session: String) {
+    leptos::task::spawn_local(async move {
+        let _ = call::<seamone_core::playback::Status>(
+            Command::ControlPlayback,
+            serde_json::json!({"session":session,"action":{"kind":"stop"}}),
+        )
+        .await;
+    });
+}

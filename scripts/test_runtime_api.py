@@ -1,5 +1,6 @@
 """Check every public declaration shape, including fields and grouped exports."""
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,10 @@ from check_runtime_api import inventory, surface
 
 
 class RuntimeApi(unittest.TestCase):
+    def test_repository_public_surface_matches_the_current_snapshot_without_approving_base(self):
+        expected = json.loads(check_runtime_api.SNAPSHOT.read_text(encoding='utf-8'))['public']
+        self.assertEqual(inventory(), expected)
+
     def test_public_shapes_and_fields(self):
         source = '''pub use store::{Store, Other as Alias};
         pub mod service;

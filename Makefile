@@ -104,6 +104,8 @@ lint-code:
 lint-format:
 	cargo fmt --all --check
 	node --check app/ui/tests/review.mjs
+	node --check app/ui/tests/fixture.mjs
+	node --check app/ui/tests/fixture.test.mjs
 
 lint-workspace-code:
 	mkdir -p $(UI_DIST)
@@ -115,6 +117,7 @@ lint-wasm-code:
 test:
 	mkdir -p $(UI_DIST)
 	cargo test --workspace $(WORKSPACE_FEATURE_ARGS) $(TEST_PATTERN)
+	$(MAKE) test-ui-fixture
 
 .PHONY: test-runtime-doc
 test-runtime-doc:
@@ -153,3 +156,10 @@ desktop-proof:
 .PHONY: playback-device-proof
 playback-device-proof:
 	cargo test --locked -p seamone-runtime --lib real_output_device_confirms_the_tone_with_its_clock -- --ignored --nocapture
+
+.PHONY: test-ui-state test-ui-fixture
+test-ui-state:
+	cargo test --locked -p seamone-ui
+
+test-ui-fixture:
+	node --test app/ui/tests/fixture.test.mjs
