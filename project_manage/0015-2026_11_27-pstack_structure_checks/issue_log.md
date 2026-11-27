@@ -289,3 +289,8 @@
 ## 2026-11-27 15:47 PR #23 CI 와 관문 workflow 가 돌지 않던 원인
 - PR #23 의 `6d4ea4c` CI 는 lint, 시험, base-guards, 다섯 빌드 가운데 넷이 통과했고 `desktop (linux-x86_64)` 만 `check-imports` 의 `ModuleNotFoundError: No module named 'tomllib'` 로 실패했다(build run 45952498514), `build.yml` 의 job 에 Python 판 고정이 없어서다, worker 에게 고침과 재발 방지 시험을 맡겼다
 - `guard-rules-review-trusted` 는 PR #23 의 check 목록에 없었다, `pull_request_target` 이 default branch(main)의 workflow 파일로 도는데 그 파일이 develop 에만 있어 한 번도 돌지 않았다, 관문이 꺼져 있었고 필수 check 가 나타나지 않아 그동안의 merge 는 모두 관리자 우회였다, default branch 를 develop 으로 바꿨다(decision D9)
+
+## 2026-11-27 15:57 PR #23 의 Linux 빌드 고침
+- worker(15:56 끝남): `build.yml` 의 desktop, android, ios 와 `ci.yml` 의 research-test 에 ci 와 같은 SHA 고정 `actions/setup-python` 과 Python 3.12 를 첫 make 앞에 두었다, `scripts/test_lint_execution.py` 가 make 를 부르는 모든 workflow job 에서 Python 판 고정의 누락, 잘못된 판, tag 참조, 늦은 설정, 조건부 설정을 거절한다, desktop 의 고정 세 줄을 빼면 실패하는 것을 증명했다
+- 터미널 화면이 좁아져 깨지면서 대기 script 가 작업 중 표시를 못 읽어 idle 로 두 번 잘못 알렸다, 보고 파일의 끝남 표식만 기다려 받았다
+- 메인이 `make test-architecture` 통과와 두 workflow 의 YAML 문법을 확인하고 PR #23 에 push 했다, 이 push 에서 관문 workflow(`guard-rules-review-trusted`)가 default branch develop 기준으로 실제로 도는지 본다
