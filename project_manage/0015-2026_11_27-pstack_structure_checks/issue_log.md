@@ -294,3 +294,9 @@
 - worker(15:56 끝남): `build.yml` 의 desktop, android, ios 와 `ci.yml` 의 research-test 에 ci 와 같은 SHA 고정 `actions/setup-python` 과 Python 3.12 를 첫 make 앞에 두었다, `scripts/test_lint_execution.py` 가 make 를 부르는 모든 workflow job 에서 Python 판 고정의 누락, 잘못된 판, tag 참조, 늦은 설정, 조건부 설정을 거절한다, desktop 의 고정 세 줄을 빼면 실패하는 것을 증명했다
 - 터미널 화면이 좁아져 깨지면서 대기 script 가 작업 중 표시를 못 읽어 idle 로 두 번 잘못 알렸다, 보고 파일의 끝남 표식만 기다려 받았다
 - 메인이 `make test-architecture` 통과와 두 workflow 의 YAML 문법을 확인하고 PR #23 에 push 했다, 이 push 에서 관문 workflow(`guard-rules-review-trusted`)가 default branch develop 기준으로 실제로 도는지 본다
+
+## 2026-11-27 16:08 PR #23 merge
+- PR #23 의 `2d40b14` 에서 Linux 를 포함한 다섯 플랫폼 빌드, lint, 시험, base-guards 가 모두 통과했다, default branch 를 develop 으로 바꾼 뒤 처음으로 `guard-rules-review-trusted`(run 45955128353)가 실제로 돌았고 `.github/workflows/build.yml`, `ci.yml`, `AGENTS.md`, `Makefile`, `scripts/check_crate_boundaries.py` 를 "검사와 규칙 파일이 바뀌었다, 사람이 확인한 뒤 merge 한다" 로 잡아 설계대로 실패했다
+- D4 의 확인자로서 메인이 Opus 검토(세션 `7a7e4e8c`)와 고침, 메인의 시험 대조(175개, 구조 시험, 정책 대조)를 근거로 merge 했다(`feba022`), worker 탭, worktree, 로컬과 원격 브랜치를 정리했다(디스크 여유 37Gi)
+- 재생 확인의 근본 해결(D6, D7)은 PR #22, #23 으로 develop 에 들어갔다, 남은 것은 사람 몫의 실기기 시험(이슈 board 7-9)
+- 16:11 PR #23 merge 커밋 `feba022` 의 develop push CI(ci, guard-integrity)가 통과했다
