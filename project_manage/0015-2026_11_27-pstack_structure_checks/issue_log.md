@@ -223,3 +223,10 @@
 - 남은 다섯 건: Ruff 위층의 `include`, `extend`, `line-length` 와 `research/Makefile` 의 Ruff 실행 명령을 대조하지 않음, f-string 과 bytes 문장이 주석 검사를 피함, `test-runtime-doc` target 이 어디서도 돌지 않음, CI 구성 시험이 서식 step 을 요구하지 않음, u64 를 f64 로 바꾸는 손 변환이 두 crate 에 복제됨
 - 확인: 1 LSB 상한은 입력 크기가 수백 아래일 때 성립한다(정상 범위 ±1, 넘쳐도 ±8 정도), ±1000 의 고주파 성분이 든 float WAV 는 몇 LSB 달라질 수 있다, 새 계산이 더 정확해 코드는 그대로 두고 결정 기록에 조건을 붙인다, "247,691 샘플 가운데 97개" 는 worker 의 일회성 측정이라 레포 시험으로 다시 만들 수 없다
 - 두 번째 worker 세션(`01a21b55-6ab5-7ef0-8282-5dd07426d266`, cache 살아 있음)을 이어 열어 다섯 건을 맡겼다
+
+## 2026-11-27 14:30 13단계(재생 확인 PR 1)와 PR #22
+- worker(14:21 끝남): `playback_evidence.rs` 를 `git mv` 로 폴더 module 로 옮기고 player, output(renderer, heard, engine, native, fake)으로 나눴다, 출력 thread 가 CPAL stream 을 소유하고 callback 은 lock 없는 rtrb queue 와 미리 할당한 buffer 만 쓴다, 장치 시계로 버퍼 끝을 지난 source 범위만 합집합에 넣는다, 장치 오류와 잘못된 시각, Stop 뒤 재열기 실패는 session 을 무효로 한다
+- IPC: `playback_ended` 를 없앴다(host 시험이 `Command playback_ended not found` 확인), `control_playback`, `get_playback_status`, `play_recording` 을 더했다, 교정과 판정 화면은 runtime 상태의 heard 로만 확인한다, 빠른 검수와 web-sys feature 는 PR 2
+- `PlayedRun` 과 `Heard` 를 output module 밖에서 만들면 E0603(compile_fail 과 통과 짝), 구조 검사가 callback 안의 lock, 할당, 외부 atomics 쓰기를 거절한다
+- 메인이 `make test` 154개(실패 0, 실제 장치 시험 1개 ignored)를 확인하고 `3150bb5` 로 커밋해 draft PR #22 https://github.com/guny524/seamone/pull/22 를 열었다(PR #21 위), Opus 5.5 high 검토를 맡겼다
+- 사람 시험으로 남김: `make playback-device-proof`(기본 출력 장치로 1초 400 Hz tone, 장치 시계로 들은 범위 확인), macOS, Windows, Linux 실제 기기
