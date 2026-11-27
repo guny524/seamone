@@ -66,12 +66,6 @@ max-complexity = 15
 max-args = 8
 max-statements = 50
 
-[tool.ruff.lint.per-file-ignores]
-"tests/*.py" = [
-    "PLR2004",  # assert result == 42 처럼 magic number 를 바로 비교
-    "E501",     # 기대값을 그대로 적은 긴 줄
-]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

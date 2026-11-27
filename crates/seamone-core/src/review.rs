@@ -17,21 +17,25 @@ pub struct SampleRange {
 
 impl SampleRange {
     /// Convert the existing transcriber milliseconds at the native boundary. End is exclusive.
-    pub fn from_millis(start: u64, end: u64, samples: u64) -> Result<Self, ReviewError> {
-        let start = start.checked_mul(16).ok_or(ReviewError::InvalidRange)?;
-        let end = end.checked_mul(16).ok_or(ReviewError::InvalidRange)?;
+    /// # Errors
+    /// Returns `InvalidRange` when converting either millisecond offset overflows.
+    pub fn from_millis(start: u64, end: u64, samples: u64) -> Result<Self, Error> {
+        let start = start.checked_mul(16).ok_or(Error::InvalidRange)?;
+        let end = end.checked_mul(16).ok_or(Error::InvalidRange)?;
         Ok(Self {
             start: start.min(samples),
             end: end.min(samples),
         })
     }
 
-    pub fn validate(self, samples: u64) -> Result<(), ReviewError> {
+    /// # Errors
+    /// Returns `InvalidRange` for empty, reversed, out-of-source or overlong playback spans.
+    pub fn validate(self, samples: u64) -> Result<(), Error> {
         if self.end > samples
             || self.start >= self.end
             || self.end - self.start > MAX_PLAYBACK_SAMPLES
         {
-            return Err(ReviewError::InvalidRange);
+            return Err(Error::InvalidRange);
         }
         Ok(())
     }
@@ -94,7 +98,7 @@ impl VerifiedText {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReviewSegment {
+pub struct Segment {
     pub id: String,
     pub recording_id: String,
     pub recording_revision: u64,
@@ -115,7 +119,7 @@ pub struct ReviewSegment {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ReviewAction {
+pub enum Action {
     Judge { verdict: Verdict },
     SaveDraft { text: String },
     CorrectAndConfirm { text: String },
@@ -125,13 +129,13 @@ pub enum ReviewAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReviewEvidence {
+pub enum Evidence {
     None,
     Playback,
     PlaybackAndMatchingSource,
 }
 
-impl ReviewEvidence {
+impl Evidence {
     #[must_use]
     pub const fn requires_playback(self) -> bool {
         match self {
@@ -141,35 +145,33 @@ impl ReviewEvidence {
     }
 }
 
-impl ReviewAction {
+impl Action {
     #[must_use]
-    pub const fn required_evidence(&self) -> ReviewEvidence {
+    pub const fn required_evidence(&self) -> Evidence {
         match self {
             Self::Judge {
                 verdict: Verdict::Yes,
             }
             | Self::CorrectAndConfirm { .. }
-            | Self::ConfirmCorrection => ReviewEvidence::PlaybackAndMatchingSource,
+            | Self::ConfirmCorrection => Evidence::PlaybackAndMatchingSource,
             Self::Judge {
                 verdict: Verdict::No,
-            } => ReviewEvidence::Playback,
-            Self::SaveDraft { .. } | Self::DismissErrorMark | Self::Invalidate => {
-                ReviewEvidence::None
-            }
+            } => Evidence::Playback,
+            Self::SaveDraft { .. } | Self::DismissErrorMark | Self::Invalidate => Evidence::None,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReviewRequest {
+pub struct Request {
     pub event_id: String,
     pub segment_id: String,
     pub expected_revision: u64,
-    pub action: ReviewAction,
+    pub action: Action,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ReviewError {
+pub enum Error {
     StaleRevision,
     InvalidRange,
     InvalidText,
@@ -180,7 +182,7 @@ pub enum ReviewError {
     UnchangedErrorMarked,
 }
 
-impl fmt::Display for ReviewError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::StaleRevision => "다른 수정본이 저장됐습니다. 목록을 새로 불러와 다시 확인하세요.",
@@ -195,9 +197,9 @@ impl fmt::Display for ReviewError {
     }
 }
 
-impl core::error::Error for ReviewError {}
+impl core::error::Error for Error {}
 
-impl ReviewSegment {
+impl Segment {
     #[must_use]
     pub fn display_timing(&self) -> Option<&[TimedText]> {
         self.machine_timing.as_deref().filter(|timing| {
@@ -221,14 +223,14 @@ impl ReviewSegment {
     }
 
     #[must_use]
-    pub fn correction_error(&self, text: &str) -> Option<ReviewError> {
+    pub fn correction_error(&self, text: &str) -> Option<Error> {
         if self.rejected_text_unchanged(text) {
-            return Some(ReviewError::UnchangedRejected);
+            return Some(Error::UnchangedRejected);
         }
         self.error_marked_text
             .as_ref()
             .filter(|marked| marked.trim() == text.trim())
-            .map(|_| ReviewError::UnchangedErrorMarked)
+            .map(|_| Error::UnchangedErrorMarked)
     }
 
     #[must_use]
@@ -237,24 +239,23 @@ impl ReviewSegment {
     }
 
     /// Listening is enforced by the review controller. Storage performs exact-revision CAS.
-    pub fn apply(&self, request: &ReviewRequest, samples: u64) -> Result<Self, ReviewError> {
+    /// # Errors
+    /// Rejects stale revisions, invalid state transitions, invalid text or invalid audio spans.
+    pub fn apply(&self, request: &Request, samples: u64) -> Result<Self, Error> {
         if request.segment_id != self.id || request.expected_revision != self.revision {
-            return Err(ReviewError::StaleRevision);
+            return Err(Error::StaleRevision);
         }
-        if matches!(&request.action, ReviewAction::SaveDraft { text } if text == &self.text) {
+        if matches!(&request.action, Action::SaveDraft { text } if text == &self.text) {
             return Ok(self.clone());
         }
         let mut next = self.clone();
-        next.revision = self
-            .revision
-            .checked_add(1)
-            .ok_or(ReviewError::StaleRevision)?;
+        next.revision = self.revision.checked_add(1).ok_or(Error::StaleRevision)?;
         next.verified = None;
         match &request.action {
-            ReviewAction::Judge { verdict } => {
+            Action::Judge { verdict } => {
                 self.range.validate(samples)?;
                 if self.verdict.is_some() || self.needs_review() || self.text != self.machine_text {
-                    return Err(ReviewError::InvalidTransition);
+                    return Err(Error::InvalidTransition);
                 }
                 next.verdict = Some(*verdict);
                 next.needs_correction = *verdict == Verdict::No;
@@ -267,13 +268,13 @@ impl ReviewSegment {
                     });
                 }
             }
-            ReviewAction::SaveDraft { text } => {
+            Action::SaveDraft { text } => {
                 validate_text(text)?;
                 next.text.clone_from(text);
                 next.needs_correction = true;
             }
-            ReviewAction::ConfirmCorrection | ReviewAction::CorrectAndConfirm { .. } => {
-                let text = if let ReviewAction::CorrectAndConfirm { text } = &request.action {
+            Action::ConfirmCorrection | Action::CorrectAndConfirm { .. } => {
+                let text = if let Action::CorrectAndConfirm { text } = &request.action {
                     text
                 } else {
                     &self.text
@@ -284,7 +285,7 @@ impl ReviewSegment {
                     return Err(error);
                 }
                 if !self.needs_review() || self.verified.is_some() {
-                    return Err(ReviewError::InvalidTransition);
+                    return Err(Error::InvalidTransition);
                 }
                 next.needs_correction = true;
                 next.text.clone_from(text);
@@ -294,12 +295,12 @@ impl ReviewSegment {
                     source: LabelSource::Corrected,
                 });
             }
-            ReviewAction::DismissErrorMark => {
+            Action::DismissErrorMark => {
                 if self.verified.is_some() || next.error_marked_text.take().is_none() {
-                    return Err(ReviewError::InvalidTransition);
+                    return Err(Error::InvalidTransition);
                 }
             }
-            ReviewAction::Invalidate => {
+            Action::Invalidate => {
                 next.verdict = None;
                 if self.rejected_text_unchanged(&self.text) {
                     next.text.clone_from(&self.machine_text);
@@ -313,9 +314,11 @@ impl ReviewSegment {
     }
 }
 
-pub fn validate_text(text: &str) -> Result<(), ReviewError> {
+/// # Errors
+/// Returns `InvalidText` for blank text or text exceeding the byte limit.
+pub fn validate_text(text: &str) -> Result<(), Error> {
     if text.trim().is_empty() || text.len() > MAX_TEXT_BYTES {
-        return Err(ReviewError::InvalidText);
+        return Err(Error::InvalidText);
     }
     Ok(())
 }
@@ -323,22 +326,20 @@ pub fn validate_text(text: &str) -> Result<(), ReviewError> {
 /// Constructed only after checking a current verified revision and its immutable source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EligibleExample {
-    segment: ReviewSegment,
+    segment: Segment,
 }
 
 impl EligibleExample {
-    pub fn check(
-        segment: &ReviewSegment,
-        samples: u64,
-        source_exists: bool,
-    ) -> Result<Self, ReviewError> {
+    /// # Errors
+    /// Rejects missing audio, invalid spans, stale revisions or text without a current valid label.
+    pub fn check(segment: &Segment, samples: u64, source_exists: bool) -> Result<Self, Error> {
         if !source_exists {
-            return Err(ReviewError::MissingSource);
+            return Err(Error::MissingSource);
         }
         segment.range.validate(samples)?;
-        let label = segment.verified.as_ref().ok_or(ReviewError::NotVerified)?;
+        let label = segment.verified.as_ref().ok_or(Error::NotVerified)?;
         if label.revision != segment.revision || label.text != segment.text {
-            return Err(ReviewError::StaleRevision);
+            return Err(Error::StaleRevision);
         }
         validate_text(&label.text)?;
         let valid = match label.source {
@@ -352,7 +353,7 @@ impl EligibleExample {
             }
         };
         if !valid {
-            return Err(ReviewError::NotVerified);
+            return Err(Error::NotVerified);
         }
         Ok(Self {
             segment: segment.clone(),
@@ -360,7 +361,7 @@ impl EligibleExample {
     }
 
     #[must_use]
-    pub fn segment(&self) -> &ReviewSegment {
+    pub fn segment(&self) -> &Segment {
         &self.segment
     }
 }
@@ -394,7 +395,7 @@ pub struct PlaybackReply {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SegmentPage {
-    pub segments: Vec<ReviewSegment>,
+    pub segments: Vec<Segment>,
     pub next_offset: Option<u32>,
 }
 
@@ -402,8 +403,8 @@ pub struct SegmentPage {
 mod tests {
     use super::*;
 
-    pub fn segment() -> ReviewSegment {
-        ReviewSegment {
+    pub fn segment() -> Segment {
+        Segment {
             id: "s".into(),
             recording_id: "r".into(),
             recording_revision: 1,
@@ -421,8 +422,8 @@ mod tests {
             verified: None,
         }
     }
-    fn request(s: &ReviewSegment, action: ReviewAction) -> ReviewRequest {
-        ReviewRequest {
+    fn request(s: &Segment, action: Action) -> Request {
+        Request {
             event_id: "e".into(),
             segment_id: s.id.clone(),
             expected_revision: s.revision,
@@ -434,13 +435,13 @@ mod tests {
         let s = segment();
         assert_eq!(
             EligibleExample::check(&s, 1600, true),
-            Err(ReviewError::NotVerified)
+            Err(Error::NotVerified)
         );
         let no = s
             .apply(
                 &request(
                     &s,
-                    ReviewAction::Judge {
+                    Action::Judge {
                         verdict: Verdict::No,
                     },
                 ),
@@ -452,7 +453,7 @@ mod tests {
             .apply(
                 &request(
                     &s,
-                    ReviewAction::Judge {
+                    Action::Judge {
                         verdict: Verdict::Yes,
                     },
                 ),
@@ -470,7 +471,7 @@ mod tests {
             .apply(
                 &request(
                     &current,
-                    ReviewAction::Judge {
+                    Action::Judge {
                         verdict: Verdict::Yes,
                     },
                 ),
@@ -490,7 +491,7 @@ mod tests {
             .apply(
                 &request(
                     &current,
-                    ReviewAction::SaveDraft {
+                    Action::SaveDraft {
                         text: "안녕하세요".into(),
                     },
                 ),
@@ -498,7 +499,7 @@ mod tests {
             )
             .unwrap();
         let corrected = draft
-            .apply(&request(&draft, ReviewAction::ConfirmCorrection), 1600)
+            .apply(&request(&draft, Action::ConfirmCorrection), 1600)
             .unwrap()
             .verified
             .unwrap();
@@ -516,7 +517,7 @@ mod tests {
             .apply(
                 &request(
                     &s,
-                    ReviewAction::SaveDraft {
+                    Action::SaveDraft {
                         text: "안녕하세요".into(),
                     },
                 ),
@@ -525,7 +526,7 @@ mod tests {
             .unwrap();
         assert!(draft.verified.is_none());
         let confirmed = draft
-            .apply(&request(&draft, ReviewAction::ConfirmCorrection), 1600)
+            .apply(&request(&draft, Action::ConfirmCorrection), 1600)
             .unwrap();
         assert_eq!(
             confirmed.verified.as_ref().unwrap().source,
@@ -536,7 +537,7 @@ mod tests {
             .apply(
                 &request(
                     &confirmed,
-                    ReviewAction::SaveDraft {
+                    Action::SaveDraft {
                         text: "다시 수정".into(),
                     },
                 ),
@@ -551,15 +552,15 @@ mod tests {
         let s = segment();
         let mut req = request(
             &s,
-            ReviewAction::Judge {
+            Action::Judge {
                 verdict: Verdict::Yes,
             },
         );
         req.expected_revision = 0;
-        assert_eq!(s.apply(&req, 1600), Err(ReviewError::StaleRevision));
+        assert_eq!(s.apply(&req, 1600), Err(Error::StaleRevision));
         assert_eq!(
             SampleRange::from_millis(u64::MAX, u64::MAX, 100),
-            Err(ReviewError::InvalidRange)
+            Err(Error::InvalidRange)
         );
         assert_eq!(
             SampleRange::from_millis(1, 200, 100).unwrap(),
@@ -585,7 +586,7 @@ mod tests {
                 bad.apply(
                     &request(
                         &bad,
-                        ReviewAction::Judge {
+                        Action::Judge {
                             verdict: Verdict::Yes
                         }
                     ),
@@ -608,7 +609,7 @@ mod tests {
         });
         assert_eq!(
             EligibleExample::check(&s, 1600, true),
-            Err(ReviewError::NotVerified)
+            Err(Error::NotVerified)
         );
     }
 
@@ -625,7 +626,7 @@ mod tests {
         });
         assert_eq!(
             EligibleExample::check(&s, 1600, true),
-            Err(ReviewError::NotVerified)
+            Err(Error::NotVerified)
         );
     }
 }

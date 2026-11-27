@@ -3,9 +3,7 @@ use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkPage},
     ipc::Command,
-    review::{
-        LibraryPage, PlaybackReply, RecordingInfo, ReviewAction, ReviewRequest, ReviewSegment,
-    },
+    review::{Action, LibraryPage, PlaybackReply, RecordingInfo, Request, Segment},
     review_flow::{ReviewFlow, ReviewMode, Ticket},
 };
 use serde_json::json;
@@ -21,7 +19,7 @@ pub struct Playback {
 pub struct Workspace {
     pub library: RwSignal<Option<LibraryPage>>,
     pub recording: RwSignal<Option<String>>,
-    pub segments: RwSignal<Vec<ReviewSegment>>,
+    pub segments: RwSignal<Vec<Segment>>,
     pub marks: RwSignal<Vec<ErrorMark>>,
     pub quick: QuickReview,
     pub flow: RwSignal<ReviewFlow>,
@@ -36,7 +34,7 @@ pub struct Workspace {
     navigation: RwSignal<u64>,
 }
 
-async fn load_segments(recording: &str) -> Result<Vec<ReviewSegment>, String> {
+async fn load_segments(recording: &str) -> Result<Vec<Segment>, String> {
     let mut offset = 0;
     let mut segments = Vec::new();
     loop {
@@ -205,11 +203,9 @@ impl Workspace {
         self.busy.set(true);
         self.status.set("기기 안에서 받아쓰는 중입니다.".into());
         spawn_local(async move {
-            let result = api::call::<Vec<ReviewSegment>>(
-                Command::TranscribeRecording,
-                json!({"recordingId":id}),
-            )
-            .await;
+            let result =
+                api::call::<Vec<Segment>>(Command::TranscribeRecording, json!({"recordingId":id}))
+                    .await;
             self.busy.set(false);
             self.status.set(String::new());
             if self.navigation.get_untracked() != navigation {
@@ -243,7 +239,7 @@ impl Workspace {
         });
     }
 
-    pub fn start(self, mode: ReviewMode, segments: &[ReviewSegment]) {
+    pub fn start(self, mode: ReviewMode, segments: &[Segment]) {
         self.playback.set(None);
         self.proof.set(None);
         self.error.set(String::new());
@@ -307,7 +303,7 @@ impl Workspace {
         }
     }
 
-    pub fn current(self) -> Option<ReviewSegment> {
+    pub fn current(self) -> Option<Segment> {
         let frame = self.flow.get().frame()?.clone();
         self.segments
             .get()
@@ -353,7 +349,6 @@ impl Workspace {
     }
 
     pub fn ended(self, playback: Playback) {
-        // The DOM audio node captures its own ticket, including session and revision.
         if !self
             .flow
             .with_untracked(|flow| flow.playing(&playback.ticket))
@@ -386,16 +381,16 @@ impl Workspace {
         }
     }
 
-    pub fn save(self, action: ReviewAction) {
+    pub fn save(self, action: Action) {
         let Some(segment) = untrack(|| self.current()) else {
             return;
         };
         match &action {
-            ReviewAction::CorrectAndConfirm { text } if !segment.can_confirm_correction(text) => {
+            Action::CorrectAndConfirm { text } if !segment.can_confirm_correction(text) => {
                 return;
             }
-            // A saved-revision confirmation also requires an unchanged editor.
-            ReviewAction::ConfirmCorrection
+
+            Action::ConfirmCorrection
                 if segment.text != self.draft.get_untracked()
                     || !segment.can_confirm_correction(&segment.text) =>
             {
@@ -403,12 +398,12 @@ impl Workspace {
             }
             _ => {}
         }
-        let reset_rejected = matches!(action, ReviewAction::Invalidate)
-            && segment.rejected_text_unchanged(&segment.text);
-        let dismiss_mark = matches!(action, ReviewAction::DismissErrorMark);
+        let reset_rejected =
+            matches!(action, Action::Invalidate) && segment.rejected_text_unchanged(&segment.text);
+        let dismiss_mark = matches!(action, Action::DismissErrorMark);
         let confirms_correction = matches!(
             action,
-            ReviewAction::ConfirmCorrection | ReviewAction::CorrectAndConfirm { .. }
+            Action::ConfirmCorrection | Action::CorrectAndConfirm { .. }
         );
         let submits_judgment = action.required_evidence().requires_playback();
         let mut ticket = None;
@@ -418,7 +413,7 @@ impl Workspace {
             return;
         };
         self.playback.set(None);
-        let request = ReviewRequest {
+        let request = Request {
             event_id: api::event_id(),
             segment_id: ticket.frame.id.clone(),
             expected_revision: ticket.frame.revision,
@@ -426,7 +421,7 @@ impl Workspace {
         };
         let proof = self.proof.get_untracked();
         spawn_local(async move {
-            let result = api::call::<ReviewSegment>(
+            let result = api::call::<Segment>(
                 Command::SaveReview,
                 json!({"request":request,"proof":proof}),
             )

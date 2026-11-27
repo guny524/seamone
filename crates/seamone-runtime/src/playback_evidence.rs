@@ -2,7 +2,7 @@
 
 use crate::store::Store;
 use base64::{Engine, engine::general_purpose::STANDARD};
-use seamone_core::review::{PlaybackReply, ReviewError, ReviewRequest};
+use seamone_core::review::{Error, PlaybackReply, Request};
 use std::{collections::HashMap, sync::Mutex};
 use uuid::Uuid;
 
@@ -15,12 +15,12 @@ struct Listening {
 /// Opaque proof tied to the exact immutable request that passed playback validation.
 /// Its fields and construction stay inside this module, including in crate-local callers.
 pub(super) struct PlaybackProof<'a> {
-    request: &'a ReviewRequest,
+    request: &'a Request,
 }
 
 enum Authority<'a> {
     Played(PlaybackProof<'a>),
-    PlaybackNotRequired(&'a ReviewRequest),
+    PlaybackNotRequired(&'a Request),
 }
 
 /// The only input accepted by `Store::mutate`, neither variant can be forged by siblings.
@@ -29,7 +29,7 @@ pub(super) struct AuthorizedReview<'a> {
 }
 
 impl<'a> AuthorizedReview<'a> {
-    pub(super) fn request(&self) -> &'a ReviewRequest {
+    pub(super) fn request(&self) -> &'a Request {
         match &self.authority {
             Authority::Played(proof) => proof.request,
             Authority::PlaybackNotRequired(request) => request,
@@ -41,8 +41,8 @@ impl AuthorizedReview<'_> {
     /// A newly created or changed verified snapshot requires completed playback authority.
     pub(super) fn admit(
         self,
-        current: &seamone_core::review::ReviewSegment,
-        next: &seamone_core::review::ReviewSegment,
+        current: &seamone_core::review::Segment,
+        next: &seamone_core::review::Segment,
     ) -> Result<(), String> {
         if next.verified.is_some()
             && next.verified != current.verified
@@ -74,7 +74,7 @@ impl Playbacks {
     ) -> Result<PlaybackReply, String> {
         let segment = store.segment(id)?;
         if segment.revision != revision {
-            return Err(ReviewError::StaleRevision.to_string());
+            return Err(Error::StaleRevision.to_string());
         }
         let recording = store.recording(&segment.recording_id)?;
         let wav = store
@@ -117,7 +117,7 @@ impl Playbacks {
 
     pub(super) fn authorize_review<'a>(
         &self,
-        request: &'a ReviewRequest,
+        request: &'a Request,
         token: Option<&str>,
     ) -> Result<AuthorizedReview<'a>, String> {
         let authority = if request.action.required_evidence().requires_playback() {
@@ -142,8 +142,8 @@ impl Playbacks {
 #[cfg(test)]
 pub(super) fn mutate_after_playback(
     store: &mut Store,
-    request: &ReviewRequest,
-) -> Result<seamone_core::review::ReviewSegment, String> {
+    request: &Request,
+) -> Result<seamone_core::review::Segment, String> {
     let playbacks = Playbacks::new();
     let token = if request.action.required_evidence().requires_playback() {
         let reply = playbacks.issue_playback_token(
@@ -163,13 +163,10 @@ pub(super) fn mutate_after_playback(
 mod tests {
     use super::Playbacks;
     use crate::store_tests::Fixture;
-    use seamone_core::review::{ReviewAction, ReviewRequest, Verdict};
+    use seamone_core::review::{Action, Request, Verdict};
 
-    fn request(
-        segment: &seamone_core::review::ReviewSegment,
-        action: ReviewAction,
-    ) -> ReviewRequest {
-        ReviewRequest {
+    fn request(segment: &seamone_core::review::Segment, action: Action) -> Request {
+        Request {
             event_id: "event".into(),
             segment_id: segment.id.clone(),
             expected_revision: segment.revision,
@@ -180,16 +177,16 @@ mod tests {
     #[test]
     fn playback_required_actions_reject_missing_unfinished_and_wrong_scope_tokens() {
         for action in [
-            ReviewAction::Judge {
+            Action::Judge {
                 verdict: Verdict::Yes,
             },
-            ReviewAction::Judge {
+            Action::Judge {
                 verdict: Verdict::No,
             },
-            ReviewAction::CorrectAndConfirm {
+            Action::CorrectAndConfirm {
                 text: "교정".into(),
             },
-            ReviewAction::ConfirmCorrection,
+            Action::ConfirmCorrection,
         ] {
             let fixture = Fixture::new();
             let (store, segment) = fixture.transcribed();
@@ -204,12 +201,12 @@ mod tests {
             playbacks.mark_playback_ended(&token).unwrap();
             let authorized = playbacks.authorize_review(&request, Some(&token)).unwrap();
             assert_eq!(authorized.request(), &request);
-            let stale = ReviewRequest {
+            let stale = Request {
                 expected_revision: segment.revision + 1,
                 ..request.clone()
             };
             assert!(playbacks.authorize_review(&stale, Some(&token)).is_err());
-            let other = ReviewRequest {
+            let other = Request {
                 segment_id: "other".into(),
                 ..request
             };
@@ -231,7 +228,7 @@ mod tests {
             playbacks
                 .issue_playback_token(&store, &segment.id, segment.revision + 1)
                 .unwrap_err(),
-            seamone_core::review::ReviewError::StaleRevision.to_string()
+            seamone_core::review::Error::StaleRevision.to_string()
         );
         assert!(playbacks.listening.lock().unwrap().is_empty());
         let reply = playbacks
@@ -257,7 +254,7 @@ mod tests {
         let playbacks = Playbacks::new();
         let draft = request(
             &segment,
-            ReviewAction::SaveDraft {
+            Action::SaveDraft {
                 text: "교정".into(),
             },
         );
@@ -281,7 +278,7 @@ mod tests {
 
         let yes = request(
             &segment,
-            ReviewAction::Judge {
+            Action::Judge {
                 verdict: Verdict::Yes,
             },
         );
@@ -298,7 +295,7 @@ mod tests {
 
         let same = request(
             &accepted,
-            ReviewAction::SaveDraft {
+            Action::SaveDraft {
                 text: accepted.text.clone(),
             },
         );
@@ -308,7 +305,7 @@ mod tests {
             .unwrap()
             .admit(&accepted, &unchanged)
             .unwrap();
-        let invalidate = request(&accepted, ReviewAction::Invalidate);
+        let invalidate = request(&accepted, Action::Invalidate);
         let cleared = accepted.apply(&invalidate, 16_000).unwrap();
         playbacks
             .authorize_review(&invalidate, None)
@@ -323,11 +320,11 @@ mod tests {
         let (_store, segment) = fixture.transcribed();
         let playbacks = Playbacks::new();
         for action in [
-            ReviewAction::SaveDraft {
+            Action::SaveDraft {
                 text: "초안".into(),
             },
-            ReviewAction::DismissErrorMark,
-            ReviewAction::Invalidate,
+            Action::DismissErrorMark,
+            Action::Invalidate,
         ] {
             let request = request(&segment, action);
             assert_eq!(

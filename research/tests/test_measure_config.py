@@ -99,7 +99,7 @@ def test_the_config_is_written_through_a_temporary_name(tmp_path, monkeypatch):
 
 
 def test_the_config_holds_a_hash_of_the_whole_id_list_whatever_the_limit(tmp_path):
-    assert make_config()["ids_count"] == 3
+    assert make_config()["ids_count"] == len(IDS)
     assert make_config(IDS)["ids_sha256"] == make_config(list(IDS))["ids_sha256"]
     assert make_config(IDS)["ids_sha256"] != make_config(IDS[::-1])["ids_sha256"]
     assert make_config(IDS)["ids_sha256"] != make_config(IDS[:2])["ids_sha256"]

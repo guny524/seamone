@@ -1,7 +1,7 @@
 //! The input thread owns the stream from open through release. IPC only handles session state.
 use crate::{
     audio::{AudioLibrary, AudioWriter, StagedAudio},
-    normalize::{Normalizer, channel_average, check_input, finite},
+    normalize::{InputRate, Normalizer, channel_average, check_input, finite},
     training::ForegroundGuard,
 };
 use cpal::{
@@ -10,7 +10,7 @@ use cpal::{
 };
 use rtrb::{Consumer, Producer, RingBuffer};
 use seamone_core::{
-    capture::{CaptureStatus, MAX_RECORDING_SECONDS},
+    capture::{MAX_RECORDING_SECONDS, Status},
     review::{RecordingInfo, SAMPLE_RATE},
 };
 use std::{
@@ -36,6 +36,7 @@ const STALLED: &str =
 const QUEUE_FRAMES: usize = 65_536;
 const INPUT_TIMEOUT: Duration = Duration::from_secs(3);
 const INPUT_POLL: Duration = Duration::from_millis(5);
+const FRAMES_BEFORE_CONTROL_CHECK: u16 = 1_024;
 
 #[derive(Default)]
 pub struct Recorder {
@@ -67,14 +68,14 @@ struct Control {
     fault: AtomicU8,
     has_audio: AtomicBool,
     seconds: AtomicU32,
-    status: Mutex<CaptureStatus>,
+    status: Mutex<Status>,
 }
 
 impl Control {
     fn new() -> Self {
         let id = uuid::Uuid::new_v4().to_string();
         Self {
-            status: Mutex::new(CaptureStatus::Starting {
+            status: Mutex::new(Status::Starting {
                 session_id: id.clone(),
             }),
             id,
@@ -85,13 +86,13 @@ impl Control {
         }
     }
 
-    fn status(&self) -> CaptureStatus {
+    fn status(&self) -> Status {
         let status = self
             .status
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         match &*status {
-            CaptureStatus::Recording { session_id, .. } => CaptureStatus::Recording {
+            Status::Recording { session_id, .. } => Status::Recording {
                 session_id: session_id.clone(),
                 elapsed_seconds: self.seconds.load(Ordering::Relaxed),
             },
@@ -99,7 +100,7 @@ impl Control {
         }
     }
 
-    fn set_status(&self, status: CaptureStatus) {
+    fn set_status(&self, status: Status) {
         *self
             .status
             .lock()
@@ -129,13 +130,13 @@ impl Recorder {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    pub fn status(&self) -> CaptureStatus {
+    pub fn status(&self) -> Status {
         let state = self.state();
         let Some(session) = &state.session else {
-            return CaptureStatus::Idle;
+            return Status::Idle;
         };
         if matches!(session.pending, Pending::Finishing) {
-            CaptureStatus::Finishing {
+            Status::Finishing {
                 session_id: session.control.id.clone(),
             }
         } else {
@@ -147,7 +148,7 @@ impl Recorder {
         &self,
         library: AudioLibrary,
         foreground: ForegroundGuard,
-    ) -> Result<CaptureStatus, String> {
+    ) -> Result<Status, String> {
         #[cfg(any(test, feature = "test-support"))]
         if self.fake {
             return self.start_using(library, foreground, |_| {
@@ -158,8 +159,7 @@ impl Recorder {
                 Ok(Some(Input {
                     stream: (),
                     consumer,
-                    rate: 48_000,
-                    channels: 2,
+                    rate: check_input(48_000, 2)?,
                 }))
             });
         }
@@ -171,14 +171,14 @@ impl Recorder {
         library: AudioLibrary,
         foreground: ForegroundGuard,
         open: impl FnOnce(Arc<Control>) -> Result<Option<Input<S>>, String> + Send + 'static,
-    ) -> Result<CaptureStatus, String> {
+    ) -> Result<Status, String> {
         let mut state = self.state();
         if state.closed {
             return Err(WINDOW_CLOSED.into());
         }
         if state.session.as_ref().is_some_and(|session| {
             !matches!(session.pending, Pending::Input(_))
-                || !matches!(session.control.status(), CaptureStatus::Failed { .. })
+                || !matches!(session.control.status(), Status::Failed { .. })
         }) {
             return Err("진행 중인 녹음을 저장하거나 취소하세요.".into());
         }
@@ -190,7 +190,7 @@ impl Recorder {
                 let result = record(&library, &worker, MAX_RECORDING_SECONDS, open);
                 drop(foreground);
                 if let Err(message) = &result {
-                    worker.set_status(CaptureStatus::Failed {
+                    worker.set_status(Status::Failed {
                         message: message.clone(),
                     });
                 }
@@ -221,14 +221,9 @@ impl Recorder {
                 return Err("이 녹음을 이미 마무리하고 있습니다.".into());
             }
             let status = session.control.status();
-            if save
-                && matches!(
-                    status,
-                    CaptureStatus::Starting { .. } | CaptureStatus::Failed { .. }
-                )
-            {
+            if save && matches!(status, Status::Starting { .. } | Status::Failed { .. }) {
                 return Err(match status {
-                    CaptureStatus::Failed { message } => message,
+                    Status::Failed { message } => message,
                     _ => "마이크가 시작될 때까지 기다리세요.".into(),
                 });
             }
@@ -269,7 +264,7 @@ impl Recorder {
             if let (Err(error), Ok(Some(audio))) = (&result, staged)
                 && !control.discarded()
             {
-                control.set_status(CaptureStatus::Interrupted {
+                control.set_status(Status::Interrupted {
                     session_id: id.into(),
                     elapsed_seconds: u32::try_from(audio.samples / SAMPLE_RATE)
                         .unwrap_or(MAX_RECORDING_SECONDS),
@@ -295,7 +290,7 @@ impl Recorder {
             let control = &session.control;
             if control.has_audio.load(Ordering::Acquire)
                 && !control.discarded()
-                && !matches!(control.status(), CaptureStatus::Failed { .. })
+                && !matches!(control.status(), Status::Failed { .. })
             {
                 let _ = control.request.compare_exchange(
                     RUNNING,
@@ -334,9 +329,8 @@ impl Drop for Recorder {
 
 struct Input<S> {
     stream: S,
-    consumer: Consumer<f32>,
-    rate: u32,
-    channels: u16,
+    consumer: Consumer<f64>,
+    rate: InputRate,
 }
 
 fn record<S>(
@@ -353,17 +347,16 @@ fn record<S>(
         stream,
         mut consumer,
         rate,
-        channels,
     }) = open(Arc::clone(control))?
     else {
         return Ok(None);
     };
-    let mut converter = Normalizer::new(rate, usize::from(channels))?;
+    let mut converter = Normalizer::new(rate);
     let mut write = |sample| output.write(sample);
     let started = Instant::now();
     let mut last_input = started;
     let mut frames = 0;
-    let limit = u64::from(rate) * u64::from(max_seconds);
+    let limit = u64::from(rate.hz()) * u64::from(max_seconds);
     let mut interruption = None;
     while control.request.load(Ordering::Acquire) == RUNNING
         && frames < limit
@@ -374,8 +367,7 @@ fn record<S>(
             break;
         }
         let mut count = 0;
-        // Yield to stop and fault checks even when the producer keeps the ring full.
-        for _ in 0..(limit - frames).min(1024) {
+        for _ in 0..(limit - frames).min(u64::from(FRAMES_BEFORE_CONTROL_CHECK)) {
             let Ok(sample) = consumer.pop() else { break };
             converter.push(sample, &mut write)?;
             count += 1;
@@ -383,14 +375,14 @@ fn record<S>(
         if count > 0 {
             if frames == 0 {
                 control.has_audio.store(true, Ordering::Release);
-                control.set_status(CaptureStatus::Recording {
+                control.set_status(Status::Recording {
                     session_id: control.id.clone(),
                     elapsed_seconds: 0,
                 });
             }
             frames += count;
             control.seconds.store(
-                u32::try_from(frames / u64::from(rate)).unwrap_or(MAX_RECORDING_SECONDS),
+                u32::try_from(frames / u64::from(rate.hz())).unwrap_or(MAX_RECORDING_SECONDS),
                 Ordering::Relaxed,
             );
             last_input = Instant::now();
@@ -406,7 +398,6 @@ fn record<S>(
         return Ok(None);
     }
     interruption = interruption.or_else(|| control.input_fault());
-    // Draining after release keeps the last accepted samples in the saved recording.
     while frames < limit && !control.discarded() {
         let Ok(sample) = consumer.pop() else { break };
         converter.push(sample, &mut write)?;
@@ -427,13 +418,13 @@ fn record<S>(
     if matches!(request, RUNNING | PAUSE_TO_CLOSE) {
         let session_id = control.id.clone();
         let status = match interruption.or((request == PAUSE_TO_CLOSE).then_some(CLOSE_PAUSED)) {
-            Some(reason) => CaptureStatus::Interrupted {
+            Some(reason) => Status::Interrupted {
                 session_id,
-                elapsed_seconds: u32::try_from(frames / u64::from(rate))
+                elapsed_seconds: u32::try_from(frames / u64::from(rate.hz()))
                     .unwrap_or(MAX_RECORDING_SECONDS),
                 reason: reason.into(),
             },
-            None => CaptureStatus::LimitReached { session_id },
+            None => Status::LimitReached { session_id },
         };
         control.set_status(status);
     }
@@ -462,9 +453,7 @@ fn open_native_input(control: Arc<Control>) -> Result<Option<Input<NativeStream>
         format!("기본 마이크 설정을 읽지 못했습니다. 입력 장치와 권한을 확인하세요. {e}")
     })?;
     let config = supported.config();
-    let rate = config.sample_rate.0;
-    let channels = config.channels;
-    check_input(rate, usize::from(channels))?;
+    let rate = check_input(config.sample_rate.0, usize::from(config.channels))?;
     let (producer, consumer) = RingBuffer::new(QUEUE_FRAMES);
     macro_rules! build {
         ($sample:ty) => {
@@ -495,18 +484,17 @@ fn open_native_input(control: Arc<Control>) -> Result<Option<Input<NativeStream>
         stream,
         consumer,
         rate,
-        channels,
     }))
 }
 
 fn input_stream<T: Sample + SizedSample>(
     device: &Device,
     config: &StreamConfig,
-    mut producer: Producer<f32>,
+    mut producer: Producer<f64>,
     control: Arc<Control>,
 ) -> Result<Stream, cpal::BuildStreamError>
 where
-    f32: FromSample<T>,
+    f64: FromSample<T>,
 {
     let channels = usize::from(config.channels);
     let channel_count = config.channels;
@@ -525,7 +513,7 @@ where
                 }
                 let sum = frame
                     .iter()
-                    .map(|&sample| f64::from(finite(sample.to_sample::<f32>())))
+                    .map(|&sample| finite(sample.to_sample::<f64>()))
                     .sum();
                 let mono = channel_average(sum, channel_count);
                 if producer.push(mono).is_err() {

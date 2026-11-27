@@ -13,6 +13,7 @@ desktop-whisper = ["seamone-asr/whisper"]
 test-support = []
 
 [dependencies]
+num-traits = "0.2.19"
 seamone-core.workspace = true
 seamone-asr = { path = "../seamone-asr" }
 serde = { workspace = true, features = ["std"] }

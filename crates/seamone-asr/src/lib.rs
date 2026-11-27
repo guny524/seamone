@@ -46,6 +46,8 @@ pub const MODEL_PROVENANCE: &str =
 /// - 화자 칸(`speaker`)은 `None` 으로 둔다
 pub trait Transcriber {
     /// 음성을 받아써 전사 조각의 목록을 돌려준다.
+    /// # Errors
+    /// Returns invalid input, unavailable model or inference failure as described by the engine contract.
     fn transcribe(
         &mut self,
         audio: &[f32],
@@ -78,6 +80,8 @@ impl std::error::Error for TranscribeError {}
 
 /// 모든 엔진이 받아쓰기 전에 부르는 입력 검사, 빈 음성과 숫자가 아닌 표본과 빈 언어 힌트를 거절한다.
 /// 엔진이 받지 못하는 언어인지는 엔진마다 다르므로 이 검사가 아니라 엔진이 가린다.
+/// # Errors
+/// Rejects empty audio, non-finite samples or an empty language hint.
 pub fn check_input(audio: &[f32], language: Option<&str>) -> Result<(), TranscribeError> {
     if audio.is_empty() {
         return Err(TranscribeError::InvalidInput("음성이 비어 있다".to_owned()));

@@ -1,11 +1,11 @@
 use crate::{LibraryService, store_tests::Fixture};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkBatch},
-    review::{ReviewAction, ReviewRequest, SampleRange, Verdict},
+    review::{Action, Request, SampleRange, Verdict},
 };
 
-fn request(segment: &seamone_core::review::ReviewSegment, action: ReviewAction) -> ReviewRequest {
-    ReviewRequest {
+fn request(segment: &seamone_core::review::Segment, action: Action) -> Request {
+    Request {
         event_id: uuid::Uuid::new_v4().to_string(),
         segment_id: segment.id.clone(),
         expected_revision: segment.revision,
@@ -20,7 +20,7 @@ fn review_requires_completed_current_playback_and_replays_once() {
     let service = LibraryService::new(store);
     let request = request(
         &segment,
-        ReviewAction::Judge {
+        Action::Judge {
             verdict: Verdict::No,
         },
     );
@@ -62,7 +62,7 @@ fn preview_and_error_mark_require_new_full_playback_for_correction() {
     );
     let mut request = request(
         &segment,
-        ReviewAction::CorrectAndConfirm {
+        Action::CorrectAndConfirm {
             text: "고친 말".into(),
         },
     );
@@ -73,8 +73,8 @@ fn preview_and_error_mark_require_new_full_playback_for_correction() {
         .unwrap();
     assert!(service.review(&request, Some(&full.token)).is_err());
     service.playback_ended(&full.token).unwrap();
-    let unchanged = ReviewRequest {
-        action: ReviewAction::ConfirmCorrection,
+    let unchanged = Request {
+        action: Action::ConfirmCorrection,
         event_id: "unchanged".into(),
         ..request.clone()
     };
@@ -93,12 +93,12 @@ fn correction_rejects_stale_revisions_and_preserves_verified_export() {
     service.playback_ended(&playback.token).unwrap();
     let draft = request(
         &segment,
-        ReviewAction::SaveDraft {
+        Action::SaveDraft {
             text: "수정 초안".into(),
         },
     );
     let saved = service.review(&draft, None).unwrap();
-    let stale = ReviewRequest {
+    let stale = Request {
         event_id: "stale".into(),
         ..draft
     };
@@ -108,7 +108,7 @@ fn correction_rejects_stale_revisions_and_preserves_verified_export() {
             .unwrap_err()
             .contains("다른 수정본")
     );
-    let confirm = request(&saved, ReviewAction::ConfirmCorrection);
+    let confirm = request(&saved, Action::ConfirmCorrection);
     assert!(service.review(&confirm, Some(&playback.token)).is_err());
     let playback = service.playback(&saved.id, saved.revision).unwrap();
     service.playback_ended(&playback.token).unwrap();
@@ -171,7 +171,6 @@ fn batch_saves_disjoint_ranges_idempotently() {
 
 #[test]
 fn document_stream_import_reopens_and_rechecks_permission_before_commit() {
-    // A document-provider pipe permits Read without Seek.
     struct Stream<'a>(&'a [u8]);
     impl std::io::Read for Stream<'_> {
         fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
@@ -237,21 +236,20 @@ fn opened_file_import_uses_the_runtime_display_name_and_permission_check() {
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 #[test]
 fn capture_saves_cancels_and_defers_close_until_unsaved_audio_is_discarded() {
-    use seamone_core::capture::CaptureStatus;
+    use seamone_core::capture::Status;
     use std::time::{Duration, Instant};
     let fixture = Fixture::new();
     let mut service = LibraryService::open(&fixture.root.join("app")).unwrap();
     service.recorder = crate::capture::Recorder::fake();
     for save in [false, true] {
         let started = service.start_recording().unwrap();
-        let (CaptureStatus::Starting { session_id } | CaptureStatus::Recording { session_id, .. }) =
-            started
+        let (Status::Starting { session_id } | Status::Recording { session_id, .. }) = started
         else {
             panic!("{started:?}")
         };
         assert!(service.start_recording().is_err());
         let deadline = Instant::now() + Duration::from_secs(2);
-        while !matches!(service.capture_status(), CaptureStatus::Recording { .. }) {
+        while !matches!(service.capture_status(), Status::Recording { .. }) {
             assert!(Instant::now() < deadline);
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -272,14 +270,14 @@ fn capture_saves_cancels_and_defers_close_until_unsaved_audio_is_discarded() {
     }
     service.start_recording().unwrap();
     let deadline = Instant::now() + Duration::from_secs(2);
-    while !matches!(service.capture_status(), CaptureStatus::Recording { .. }) {
+    while !matches!(service.capture_status(), Status::Recording { .. }) {
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(5));
     }
     assert!(!service.request_close());
     let deadline = Instant::now() + Duration::from_secs(2);
     let session_id = loop {
-        if let CaptureStatus::Interrupted {
+        if let Status::Interrupted {
             session_id, reason, ..
         } = service.capture_status()
         {

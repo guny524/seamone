@@ -43,7 +43,6 @@ class ReviewWrites(unittest.TestCase):
         self.addCleanup(self.db.close)
 
     def errors(self, source, policy=None):
-        # Small examples need not define the production writer unless they test that signature.
         return '\n'.join(violations(source, PATH, policy or {'modules': []}, self.db))
 
     def test_inspection_is_identical_with_and_without_optional_sqlite_functions(self):

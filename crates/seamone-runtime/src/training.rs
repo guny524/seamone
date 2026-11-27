@@ -10,24 +10,26 @@ use std::sync::{
 /// 학습 엔진은 저장소에서 원본과 확인된 수정본을 대조한 뒤 넘겨주는 예시를 받는다.
 ///
 /// ```
-/// use seamone_core::review::{EligibleExample, ReviewSegment};
+/// use seamone_core::review::{EligibleExample, Segment};
 /// use seamone_runtime::LocalTrainer;
 ///
-/// fn train(trainer: &mut dyn LocalTrainer, example: &EligibleExample, draft: &ReviewSegment, audio: &[f32]) {
+/// fn train(trainer: &mut dyn LocalTrainer, example: &EligibleExample, draft: &Segment, audio: &[f32]) {
 ///     let _ = trainer.train(example, audio);
 /// }
 /// ```
 ///
 /// ```compile_fail,E0308
-/// use seamone_core::review::{EligibleExample, ReviewSegment};
+/// use seamone_core::review::{EligibleExample, Segment};
 /// use seamone_runtime::LocalTrainer;
 ///
-/// fn train(trainer: &mut dyn LocalTrainer, example: &EligibleExample, draft: &ReviewSegment, audio: &[f32]) {
+/// fn train(trainer: &mut dyn LocalTrainer, example: &EligibleExample, draft: &Segment, audio: &[f32]) {
 ///     let _ = trainer.train(draft, audio);
 /// }
 /// ```
 pub trait LocalTrainer: Send {
     /// Produces a local candidate, never activates a production model or sends data.
+    /// # Errors
+    /// 학습 입력을 처리하거나 결과를 만드는 데 실패하면 오류를 돌려준다
     fn train(&mut self, example: &EligibleExample, audio: &[f32]) -> Result<String, String>;
 }
 
@@ -76,7 +78,7 @@ impl BackgroundWork {
                 let Some(store) = store.upgrade() else {
                     break;
                 };
-                // A failed or preempted job stays pending for a later wake/restart.
+
                 while run_next(&store, &activity, trainer.as_mut()).unwrap_or(false) {}
             }
         });

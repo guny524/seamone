@@ -1,10 +1,8 @@
 use seamone_core::{
     AppInfo,
-    capture::CaptureStatus,
+    capture::Status,
     error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage},
-    review::{
-        LibraryPage, PlaybackReply, RecordingInfo, ReviewRequest, ReviewSegment, SampleRange,
-    },
+    review::{LibraryPage, PlaybackReply, RecordingInfo, Request, SampleRange, Segment},
 };
 use seamone_runtime::LibraryService;
 use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow};
@@ -59,7 +57,7 @@ pub async fn import_audio<R: Runtime>(
 ) -> Result<Option<RecordingInfo>, String> {
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(path) = pick_audio(&app, &window) else {
+        let Some(path) = pick_audio(&window) else {
             return Ok(None);
         };
         trusted(&window)?;
@@ -72,22 +70,17 @@ pub async fn import_audio<R: Runtime>(
 #[cfg(test)]
 pub struct TestAudioPicker(pub std::sync::Mutex<std::collections::VecDeque<Option<FilePath>>>);
 
-fn pick_audio<R: Runtime>(
-    app: &AppHandle<R>,
-    #[cfg_attr(
-        not(desktop),
-        expect(
-            unused_variables,
-            reason = "Only desktop dialogs take a parent window."
-        )
-    )]
-    window: &WebviewWindow<R>,
-) -> Option<FilePath> {
+fn pick_audio<R: Runtime>(window: &WebviewWindow<R>) -> Option<FilePath> {
     #[cfg(test)]
-    if let Some(picker) = app.try_state::<TestAudioPicker>() {
+    if let Some(picker) = window.app_handle().try_state::<TestAudioPicker>() {
         return picker.0.lock().unwrap().pop_front().flatten();
     }
-    let dialog = app
+    pick_audio_dialog(window)
+}
+
+fn pick_audio_dialog<R: Runtime>(window: &WebviewWindow<R>) -> Option<FilePath> {
+    let dialog = window
+        .app_handle()
         .dialog()
         .file()
         .add_filter("WAV, MP3, AAC-LC M4A", &["wav", "mp3", "m4a"])
@@ -139,18 +132,14 @@ fn import_selected<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn get_capture_status<R: Runtime>(
-    window: WebviewWindow<R>,
-) -> Result<CaptureStatus, String> {
+pub async fn get_capture_status<R: Runtime>(window: WebviewWindow<R>) -> Result<Status, String> {
     trusted(&window)?;
     Ok(window.state::<LibraryService>().capture_status())
 }
 
 #[cfg(native_capture)]
 #[tauri::command]
-pub async fn start_recording<R: Runtime>(
-    window: WebviewWindow<R>,
-) -> Result<CaptureStatus, String> {
+pub async fn start_recording<R: Runtime>(window: WebviewWindow<R>) -> Result<Status, String> {
     trusted(&window)?;
     window.state::<LibraryService>().start_recording()
 }
@@ -177,7 +166,7 @@ pub async fn transcribe_recording<R: Runtime>(
     app: AppHandle<R>,
     window: WebviewWindow<R>,
     recording_id: String,
-) -> Result<Vec<ReviewSegment>, String> {
+) -> Result<Vec<Segment>, String> {
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<LibraryService>().transcribe(&recording_id)
@@ -268,9 +257,9 @@ pub async fn playback_ended<R: Runtime>(
 pub async fn save_review<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-    request: ReviewRequest,
+    request: Request,
     proof: Option<String>,
-) -> Result<ReviewSegment, String> {
+) -> Result<Segment, String> {
     trusted(&window)?;
     state.review(&request, proof.as_deref())
 }

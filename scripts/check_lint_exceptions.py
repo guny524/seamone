@@ -38,7 +38,9 @@ def configuration(path, source):
     if path.name == "Cargo.toml":
         return {"lints": data.get("lints", {}),
                 "workspace.lints": data.get("workspace", {}).get("lints", {})}
-    return data.get("tool", {}).get("ruff", {}).get("lint", {})
+    ruff = data.get("tool", {}).get("ruff", {})
+    return {**ruff.get("lint", {}),
+            **{f"ruff.{key}": value for key, value in ruff.items() if key != "lint"}}
 
 
 def configuration_exceptions(path, source):
@@ -85,10 +87,32 @@ def git(root, *args):
 
 
 def clippy_commands(source):
-    # Fold continued recipe lines before checking flags.
     source = re.sub(r"\\\n[ \t]*", " ", source)
     return sorted(line.strip() for line in source.splitlines()
                   if line.startswith("\t") and re.search(r"\bcargo\s+clippy\b", line))
+
+
+def ruff_commands(source):
+    source = re.sub(r"\\\n[ \t]*", " ", source)
+    return sorted(line.strip() for line in source.splitlines()
+                  if line.startswith("\t") and re.search(r"\bruff\s+(?:check|format)\b", line))
+
+
+def ruff_recipes(names, read):
+    found = {}
+    for name in names:
+        if Path(name).name == "Makefile":
+            commands = ruff_commands(read(name))
+            if commands:
+                found[name] = commands
+    return found
+
+
+def ruff_recipe_errors(current, required, previous):
+    return [f"{path}: ruff recipes differ from the reviewed baseline; preserve the checked targets"
+            for path in sorted(set(current) | set(required) | set(previous))
+            if collections.Counter(required.get(path, [])) != collections.Counter(previous.get(path, []))
+            or collections.Counter(required.get(path, [])) - collections.Counter(current.get(path, []))]
 
 
 def command_errors(path, commands):
@@ -126,10 +150,44 @@ def relocated(root, commit, entries):
     return [[renames.get(path, path), entry] for path, entry in entries]
 
 
+def tightens_configuration(path, current, previous):
+    if not isinstance(current, dict) or not isinstance(previous, dict):
+        return False
+    previous = json.loads(json.dumps(previous))
+    if Path(path).name == "Cargo.toml":
+        for section in ("lints", "workspace.lints"):
+            old = previous.get(section, {}).get("clippy", {})
+            new = current.get(section, {}).get("clippy", {})
+            pedantic = new.get("pedantic", {})
+            level = pedantic.get("level") if isinstance(pedantic, dict) else pedantic
+            if level not in {"warn", "deny", "forbid"}:
+                continue
+            for rule in ("missing_errors_doc", "missing_panics_doc", "module_name_repetitions"):
+                if old.get(rule) == "allow" and new.get(rule) in {"warn", "deny", "forbid"}:
+                    old[rule] = new[rule]
+    else:
+        for key in ("ignore", "extend-ignore", "per-file-ignores", "extend-per-file-ignores"):
+            old, new = previous.get(key), current.get(key)
+            if isinstance(old, list) and set(new or []) <= set(old):
+                if new is None:
+                    previous.pop(key)
+                else:
+                    previous[key] = new
+            elif isinstance(old, dict) and isinstance(new or {}, dict):
+                if all(pattern in old and set(rules) <= set(old[pattern])
+                       for pattern, rules in (new or {}).items()):
+                    if new is None:
+                        previous.pop(key)
+                    else:
+                        previous[key] = new
+    return current == previous
+
+
 def configuration_changes(current, previous, *, new_workspace_members=False):
     inherited = {"lints": {"workspace": True}, "workspace.lints": {}}
     return sorted(key for key in set(current or {}) | set(previous or {})
                   if (current or {}).get(key) != (previous or {}).get(key)
+                  and not tightens_configuration(key, (current or {}).get(key), (previous or {}).get(key))
                   and not (new_workspace_members and key not in (previous or {})
                            and Path(key).name == "Cargo.toml" and current[key] == inherited))
 
@@ -150,8 +208,10 @@ def check(root, ref):
         read_base = lambda name: git(root, "show", f"{commit}:{name}")
         base_config = base.get("configuration")
         if base_config is None:
-            # Upgrade the snapshot format using the base's actual configuration, never HEAD's.
             base_config = config_snapshots(root, base_names, read_base)
+        base_ruff = base.get("ruff_commands")
+        if base_ruff is None:
+            base_ruff = ruff_recipes(base_names, read_base)
         base_commands = base.get("clippy_commands")
         if base_commands is None:
             base_commands = clippy_commands(read_base("Makefile"))
@@ -182,7 +242,11 @@ def check(root, ref):
             or collections.Counter(required_commands) - collections.Counter(actual_commands)):
         errors.append(f"Makefile: clippy recipes differ from {BASELINE} or {ref}; preserve the reviewed commands")
     errors.extend(command_errors("Makefile", actual_commands))
+    errors.extend(ruff_recipe_errors(ruff_recipes(names, read_current),
+                                     baseline.get("ruff_commands", {}), base_ruff))
     for path in paths:
+        if path.name == "pyproject.toml" and "ruff.extend" in configuration(path, read_current(path.relative_to(root).as_posix())):
+            errors.append(f"{path.relative_to(root)}: Ruff extend is forbidden; keep all rules in the reviewed tables")
         if path.name in ALTERNATE:
             errors.append(f"{path.relative_to(root)}: alternate lint configuration is forbidden; use the reviewed Cargo/Ruff tables")
         if path.name in ("config", "config.toml") and path.parent.name == ".cargo":

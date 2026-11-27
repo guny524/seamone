@@ -19,6 +19,14 @@ pub use transcript::{TimedText, TranscriptSegment, valid_alignment};
 use alloc::{borrow::ToOwned, string::String};
 use serde::{Deserialize, Serialize};
 
+/// Convert a sample count to the nearest representable f64, rounding only once.
+#[must_use]
+pub fn sample_count_as_f64(samples: u64) -> f64 {
+    let [low0, low1, low2, low3, high0, high1, high2, high3] = samples.to_le_bytes();
+    f64::from(u32::from_le_bytes([high0, high1, high2, high3])) * 4_294_967_296.0
+        + f64::from(u32::from_le_bytes([low0, low1, low2, low3]))
+}
+
 /// 앱 이름
 pub const APP_NAME: &str = "seamone";
 
@@ -43,7 +51,21 @@ pub fn app_info() -> AppInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppInfo, app_info};
+    use super::{AppInfo, app_info, sample_count_as_f64};
+
+    #[test]
+    fn sample_counts_round_once_across_integer_and_mantissa_boundaries() {
+        for (samples, expected) in [
+            (0_u64, 0.0_f64),
+            (u64::from(u32::MAX), 4_294_967_295.0),
+            (u64::from(u32::MAX) + 1, 4_294_967_296.0),
+            (9_007_199_254_740_993, 9_007_199_254_740_992.0),
+            (9_007_199_254_740_995, 9_007_199_254_740_996.0),
+            (u64::MAX, 18_446_744_073_709_551_616.0),
+        ] {
+            assert_eq!(sample_count_as_f64(samples).to_bits(), expected.to_bits());
+        }
+    }
 
     #[test]
     fn app_info_names_the_app_and_gives_a_semantic_version() {

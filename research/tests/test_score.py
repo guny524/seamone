@@ -10,7 +10,8 @@ def rows(*pairs: tuple[str, str]) -> list[dict[str, str]]:
 def test_set_score_is_total_edits_over_total_reference_chars():
     score = score_rows("m", "s", rows(("가나다라마", "가나다라마"), ("가나", "가")))
 
-    assert score.n == 2
+    expected_utterances = 2
+    assert score.n == expected_utterances
     assert score.counts.cer == pytest.approx(1 / 7)
 
 
@@ -23,7 +24,9 @@ def test_runaway_counts_hypotheses_more_than_twice_as_long_as_the_reference():
 def test_common_prefix_is_the_shortest_measured_length_among_models():
     expected = ["a", "b", "c", "d"]
 
-    assert common_prefix_length({"small": ["a", "b", "c", "d"], "large": ["a", "b"]}, expected) == 2
+    measured = {"small": ["a", "b", "c", "d"], "large": ["a", "b"]}
+    expected_prefix_length = 2
+    assert common_prefix_length(measured, expected) == expected_prefix_length
 
 
 def test_common_prefix_is_an_error_when_ids_are_not_the_front_of_the_expected_order():

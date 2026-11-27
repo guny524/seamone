@@ -5,8 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use seamone_asr::Transcriber;
 use seamone_core::error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage, overlaps};
 use seamone_core::review::{
-    EligibleExample, LibraryPage, RecordingInfo, ReviewError, ReviewEvidence, ReviewRequest,
-    ReviewSegment, SampleRange,
+    EligibleExample, Error, Evidence, LibraryPage, RecordingInfo, Request, SampleRange, Segment,
 };
 use std::{fs, path::Path, time::Duration};
 use uuid::Uuid;
@@ -54,7 +53,7 @@ impl Store {
                 .map_err(|e| e.to_string())?;
         }
         tx.commit().map_err(|e| e.to_string())?;
-        // Recovery is by expiring a claim lease, never by merely opening another connection.
+
         let writes = crate::write_guard::WriteAccess::attach(&db)?;
         Ok(Self {
             db,
@@ -174,7 +173,7 @@ impl Store {
         engine: &mut dyn Transcriber,
         engine_name: &str,
         model: &str,
-    ) -> Result<Vec<ReviewSegment>, String> {
+    ) -> Result<Vec<Segment>, String> {
         let (info, audio) = self.prepare_transcription(id)?;
         let segments = engine
             .transcribe(&audio, Some("ko"))
@@ -220,7 +219,7 @@ impl Store {
         segments: Vec<seamone_core::TranscriptSegment>,
         engine: &str,
         model: &str,
-    ) -> Result<Vec<ReviewSegment>, String> {
+    ) -> Result<Vec<Segment>, String> {
         if segments.len() > 10_000
             || segments.iter().map(|s| s.text.len()).sum::<usize>()
                 > seamone_core::review::MAX_RECORDING_TEXT_BYTES
@@ -243,7 +242,7 @@ impl Store {
                 let machine_timing = s
                     .timing
                     .filter(|timing| seamone_core::valid_alignment(timing, &s.text, range));
-                Ok(ReviewSegment {
+                Ok(Segment {
                     id: Uuid::new_v4().to_string(),
                     recording_id: info.id.clone(),
                     recording_revision: info.revision,
@@ -277,7 +276,7 @@ impl Store {
         Ok(segments)
     }
 
-    pub fn segments(&self, recording: &str) -> Result<Vec<ReviewSegment>, String> {
+    pub fn segments(&self, recording: &str) -> Result<Vec<Segment>, String> {
         let mut stmt = self
             .db
             .prepare("SELECT body FROM segments WHERE recording_id=?1 ORDER BY rowid LIMIT 10000")
@@ -308,7 +307,7 @@ impl Store {
             .map_err(|e| e.to_string())?;
         let mut segments = rows
             .map(|r| decode(&r.map_err(|e| e.to_string())?))
-            .collect::<Result<Vec<ReviewSegment>, String>>()?;
+            .collect::<Result<Vec<Segment>, String>>()?;
         let next_offset = if segments.len() > 32 {
             segments.pop();
             Some(offset + 32)
@@ -478,7 +477,7 @@ impl Store {
         tx.commit().map_err(|e| e.to_string())
     }
 
-    pub fn replay(&self, request: &ReviewRequest) -> Result<Option<ReviewSegment>, String> {
+    pub fn replay(&self, request: &Request) -> Result<Option<Segment>, String> {
         let replay: Option<(String, String)> = self
             .db
             .query_row(
@@ -495,7 +494,7 @@ impl Store {
         }
     }
 
-    pub fn segment(&self, id: &str) -> Result<ReviewSegment, String> {
+    pub fn segment(&self, id: &str) -> Result<Segment, String> {
         let text: String = self
             .db
             .query_row("SELECT body FROM segments WHERE id=?1", [id], |r| r.get(0))
@@ -503,8 +502,8 @@ impl Store {
         decode(&text)
     }
 
-    fn review_source_matches(&self, request: &ReviewRequest) -> Result<bool, String> {
-        if request.action.required_evidence() != ReviewEvidence::PlaybackAndMatchingSource {
+    fn review_source_matches(&self, request: &Request) -> Result<bool, String> {
+        if request.action.required_evidence() != Evidence::PlaybackAndMatchingSource {
             return Ok(true);
         }
         let segment = self.segment(&request.segment_id)?;
@@ -522,7 +521,7 @@ impl Store {
     pub(super) fn mutate(
         &mut self,
         authorization: crate::playback_evidence::AuthorizedReview<'_>,
-    ) -> Result<ReviewSegment, String> {
+    ) -> Result<Segment, String> {
         let request = authorization.request();
         if request.event_id.is_empty() || request.event_id.len() > 128 {
             return Err("요청 ID가 잘못됐습니다.".into());
@@ -559,7 +558,7 @@ impl Store {
                 |r| r.get(0),
             )
             .map_err(|e| e.to_string())?;
-        let current: ReviewSegment = decode(&body)?;
+        let current: Segment = decode(&body)?;
         let (samples, revision): (u64, u64) = tx
             .query_row(
                 "SELECT samples,revision FROM recordings WHERE id=?1",
@@ -574,8 +573,8 @@ impl Store {
         if next.verified.is_some() {
             EligibleExample::check(&next, samples, source_matches).map_err(|e| e.to_string())?;
         }
-        if let seamone_core::review::ReviewAction::SaveDraft { text }
-        | seamone_core::review::ReviewAction::CorrectAndConfirm { text } = &request.action
+        if let seamone_core::review::Action::SaveDraft { text }
+        | seamone_core::review::Action::CorrectAndConfirm { text } = &request.action
         {
             let total: usize = tx.query_row("SELECT COALESCE(SUM(length(CAST(json_extract(body,'$.text') AS BLOB))),0) FROM segments WHERE recording_id=?1", [&current.recording_id], |r| r.get(0)).map_err(|e| e.to_string())?;
             if total
@@ -611,7 +610,7 @@ impl Store {
         let segment = self.segment(id)?;
         let info = self.recording(&segment.recording_id)?;
         if segment.revision != revision || info.revision != segment.recording_revision {
-            return Err(seamone_core::review::ReviewError::StaleRevision.to_string());
+            return Err(seamone_core::review::Error::StaleRevision.to_string());
         }
         let hash: String = self
             .db
@@ -636,7 +635,7 @@ impl Store {
         for (id, revision) in jobs {
             let segment = self.segment(&id)?;
             let info = self.recording(&segment.recording_id)?;
-            // Obsolete labels are permanent; source failures are retryable and stay visible.
+
             let label_current = segment.revision == revision
                 && segment.recording_revision == info.revision
                 && EligibleExample::check(&segment, info.samples, true).is_ok();
@@ -663,7 +662,7 @@ impl Store {
     pub fn publish(&mut self, example: &EligibleExample, adapter_id: &str) -> Result<(), String> {
         let s = example.segment();
         if self.eligible(&s.id, s.revision)? != *example {
-            return Err(seamone_core::review::ReviewError::StaleRevision.to_string());
+            return Err(seamone_core::review::Error::StaleRevision.to_string());
         }
         let tx = self
             .db
@@ -671,7 +670,7 @@ impl Store {
             .map_err(|e| e.to_string())?;
         let changed = tx.execute("UPDATE training_queue SET status='complete',adapter_id=?1 WHERE segment_id=?2 AND revision=?3 AND recording_revision=?4 AND status='running' AND claim_owner=?5 AND lease_until>unixepoch() AND EXISTS (SELECT 1 FROM segments WHERE id=?2 AND revision=?3)", params![adapter_id,s.id,s.revision,s.recording_revision,self.owner]).map_err(|e| e.to_string())?;
         if changed != 1 {
-            return Err(seamone_core::review::ReviewError::StaleRevision.to_string());
+            return Err(seamone_core::review::Error::StaleRevision.to_string());
         }
         tx.commit().map_err(|e| e.to_string())
     }
@@ -712,7 +711,7 @@ fn validate_error_ranges(
         )
         .map_err(|e| e.to_string())?;
     if revision != current {
-        return Err(ReviewError::StaleRevision.to_string());
+        return Err(Error::StaleRevision.to_string());
     }
     if !complete {
         return Err("받아쓰기를 마친 뒤 오류를 표시하세요.".into());
@@ -786,7 +785,7 @@ fn flag_overlapping_segments(
         .map_err(|e| e.to_string())?;
     let mut affected = Vec::new();
     for row in rows {
-        let segment: ReviewSegment = decode(&row.map_err(|e| e.to_string())?)?;
+        let segment: Segment = decode(&row.map_err(|e| e.to_string())?)?;
         if segment.recording_revision == revision
             && ranges.iter().any(|&range| overlaps(segment.range, range))
         {
@@ -889,11 +888,11 @@ mod write_tests {
     fn review_serializes_only_the_transition_of_the_persisted_authorized_request() {
         let fixture = crate::store_tests::Fixture::new();
         let (store, current) = fixture.transcribed();
-        let request = ReviewRequest {
+        let request = Request {
             event_id: "forged-review".into(),
             segment_id: current.id.clone(),
             expected_revision: current.revision,
-            action: seamone_core::review::ReviewAction::SaveDraft {
+            action: seamone_core::review::Action::SaveDraft {
                 text: "draft".into(),
             },
         };
@@ -950,11 +949,11 @@ mod write_tests {
         assert!(store.db.execute_batch("CREATE TEMP TRIGGER direct AFTER INSERT ON review_events BEGIN UPDATE segments SET body='forged'; END").is_err());
         let other = Connection::open(fixture.root.join("app/seamone.sqlite3")).unwrap();
         other.execute_batch("CREATE TRIGGER hidden AFTER INSERT ON review_events BEGIN UPDATE segments SET body=json_set(body,'$.verified',json_object('revision',revision,'text','forged','source','corrected')); END").unwrap();
-        let request = ReviewRequest {
+        let request = Request {
             event_id: "forged-trigger".into(),
             segment_id: segment.id.clone(),
             expected_revision: segment.revision,
-            action: seamone_core::review::ReviewAction::SaveDraft {
+            action: seamone_core::review::Action::SaveDraft {
                 text: "draft".into(),
             },
         };

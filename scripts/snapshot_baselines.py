@@ -9,6 +9,7 @@ from check_lint_exceptions import git
 
 REVIEW = '사람이 확인한 뒤에만 늘립니다. 이 PR의 CI는 사람이 보고 판단합니다.'
 SNAPSHOTS = {
+    'scripts/comments.json': ('comments',),
     'scripts/runtime_api.json': ('public',),
     'scripts/playback_api.json': ('declarations', 'callers'),
     'scripts/unsafe_files.json': ('functions',),

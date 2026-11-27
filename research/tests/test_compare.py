@@ -18,7 +18,6 @@ def test_ratio_estimate_of_one_utterance_has_no_standard_error():
 
 
 def test_pooled_rate_matches_the_hand_calculation():
-    # 오류 0과 2, 정답 글자 4와 4 -> 0.25, 표준오차 sqrt(2 * 2) / 8 = 0.25
     rate, stderr = pooled_rate([counts(0, 4), counts(2, 4)])
 
     assert rate == pytest.approx(0.25)
@@ -32,7 +31,6 @@ def test_paired_difference_is_negative_when_model_a_has_fewer_errors():
 
 
 def test_paired_difference_standard_error_matches_the_hand_calculation():
-    # 같은 발화에서 오류 차이가 -1 과 +1, 정답 글자 4와 4 -> 차이 0, 표준오차 sqrt(2 * 2) / 8 = 0.25
     delta, stderr = paired_difference([counts(0, 4), counts(2, 4)], [counts(1, 4), counts(1, 4)])
 
     assert delta == pytest.approx(0.0)

@@ -193,7 +193,7 @@ def run_probe(
         result.device_mib = round(device_allocated_mib(device))
         result.process_rss_mib_peak = round(peak_process_mib())
         result.ok = judgement.ok
-    except Exception as error:  # 실패한 까닭을 결과에 적으려고 모두 잡는다
+    except Exception as error:
         result.error = f"{type(error).__name__}: {error}"[:400]
         traceback.print_exc()
     finally:

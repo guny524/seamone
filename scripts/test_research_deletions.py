@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from check_research_deletions import ENTRY_FILE, ROOT, recipe_violations, violations
 
-# The cache module and paths use only the standard library, unlike audio preparation.
+
 spec = importlib.util.spec_from_file_location('cache_boundary', ROOT / ENTRY_FILE)
 cache = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, {}):
@@ -134,7 +134,7 @@ text = "shutil.rmtree(path)"
 
     def test_atomic_replacement_is_confined_to_the_publish_helper(self):
         source = 'from pathlib import Path\ndef publish_partial(partial: Path,target: Path):\n    partial.replace(target)'
-        # This entry file must still define the deletion entry.
+
         source += '\ndef remove_inside(root,target): pass'
         self.assertEqual(self.check(source, ENTRY_FILE), [])
         self.assertTrue(self.check(source))

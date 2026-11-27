@@ -1,63 +1,6 @@
 {
-  "description": "Existing suppressions only; human approval and expiry remain unresolved. Entries may be removed, never added without a human decision.",
-  "existing": [
-    [
-      "Cargo.toml",
-      "clippy.missing_errors_doc=allow"
-    ],
-    [
-      "Cargo.toml",
-      "clippy.missing_panics_doc=allow"
-    ],
-    [
-      "Cargo.toml",
-      "clippy.module_name_repetitions=allow"
-    ],
-    [
-      "app/src-tauri/src/commands.rs",
-      "#[cfg_attr( not(desktop), expect( unused_variables, reason = \"Only desktop dialogs take a parent window.\" ) )]"
-    ],
-    [
-      "app/ui/src/spectrum.rs",
-      "#[expect( clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = \"FFT indices fit in f32 and the clamped intensity maps into a single color byte.\" )]"
-    ],
-    [
-      "app/ui/src/spectrum.rs",
-      "#[expect( clippy::cast_precision_loss, reason = \"Twiddle angles use indices bounded by the 512-sample FFT window.\" )]"
-    ],
-    [
-      "app/ui/src/timeline.rs",
-      "#[expect( clippy::cast_precision_loss, reason = \"Offsets within the 30-minute recording limit fit exactly in f64.\" )]"
-    ],
-    [
-      "crates/seamone-asr/src/speed.rs",
-      "#[expect( clippy::cast_precision_loss, reason = \"표본 수가 2^53 을 넘으려면 음성이 17만 시간을 넘어야 한다\" )]"
-    ],
-    [
-      "crates/seamone-runtime/src/audio_ingest.rs",
-      "#[expect( clippy::cast_precision_loss, reason = \"The decoder normalizes integer PCM to f32 before resampling to PCM16.\" )]"
-    ],
-    [
-      "crates/seamone-runtime/src/audio_input_tests.rs",
-      "#[expect( clippy::cast_precision_loss, reason = \"The two fixture sample rates and frame indices fit exactly in f32.\" )]"
-    ],
-    [
-      "crates/seamone-runtime/src/normalize.rs",
-      "#[expect( clippy::cast_possible_truncation, reason = \"The channel mix accumulates in f64 and returns a normalized f32 sample.\" )]"
-    ],
-    [
-      "crates/seamone-runtime/src/normalize.rs",
-      "#[expect( clippy::cast_possible_truncation, reason = \"The rounded sample is clamped to the i16 range before quantization.\" )]"
-    ],
-    [
-      "crates/seamone-runtime/src/normalize.rs",
-      "#[expect( clippy::cast_precision_loss, clippy::cast_possible_truncation, reason = \"The validated input rate bounds the filter radius and the normalized coefficients are stored as f32.\" )]"
-    ],
-    [
-      "research/pyproject.toml",
-      "ruff.per-file-ignores={\"tests/*.py\": [\"PLR2004\", \"E501\"]}"
-    ]
-  ],
+  "description": "No lint suppressions. Remove the suppression and express valid values and responsibilities in the code.",
+  "existing": [],
   "configuration": {
     "Cargo.toml": {
       "lints": {},
@@ -71,9 +14,9 @@
             "level": "warn",
             "priority": -1
           },
-          "missing_errors_doc": "allow",
-          "missing_panics_doc": "allow",
-          "module_name_repetitions": "allow",
+          "missing_errors_doc": "warn",
+          "missing_panics_doc": "warn",
+          "module_name_repetitions": "warn",
           "allow_attributes": "deny",
           "allow_attributes_without_reason": "deny",
           "undocumented_unsafe_blocks": "deny"
@@ -134,17 +77,20 @@
         "max-args": 8,
         "max-statements": 50
       },
-      "per-file-ignores": {
-        "tests/*.py": [
-          "PLR2004",
-          "E501"
-        ]
-      }
+      "ruff.line-length": 100,
+      "ruff.target-version": "py312"
     }
   },
   "clippy_commands": [
     "cargo clippy --locked -p seamone -p seamone-runtime --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings",
     "cargo clippy --workspace --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings",
     "cargo clippy -p seamone-core -p seamone-ui --target wasm32-unknown-unknown -- -D warnings"
-  ]
+  ],
+  "ruff_commands": {
+    "research/Makefile": [
+      "uv run ruff check .",
+      "uv run ruff format --check .",
+      "uv run ruff format ."
+    ]
+  }
 }

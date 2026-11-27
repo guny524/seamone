@@ -199,7 +199,6 @@ def sql_literal(token):
 
 
 def database(migrations=None):
-    # Only an empty in-memory database is touched. EXPLAIN compiles SQL without writing rows.
     db = sqlite3.connect(':memory:', cached_statements=0)
     # These optional/newer functions need names and arities for schema preparation and EXPLAIN,
     # not their runtime results. Override built-ins too so inspection uses the same definitions.
@@ -398,7 +397,7 @@ def violations(source, path, policy, db, test_only=False):
             reject(token, f'{name} cannot use a SQL method reference')
         if index in prepared:
             continue
-        # Dynamic SQL expressions must not hide writes from the literal inspection.
+
         if (token.text in SQL_METHODS and index > 0 and code[index - 1].text in {'.', ':'}
                 and index + 2 < len(code) and code[index + 1].text == '('):
             argument_index = index + 2

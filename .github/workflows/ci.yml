@@ -46,16 +46,40 @@ jobs:
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      - name: Lint
-        run: make lint
+      - name: Structural policy
+        run: make check-architecture
+
+      - name: Minimal runtime lint
+        if: ${{ !cancelled() }}
+        run: make lint-runtime-minimal
+
+      - name: Format and syntax
+        if: ${{ !cancelled() }}
+        run: make lint-format
+
+      - name: Native workspace lint
+        if: ${{ !cancelled() }}
+        run: make lint-workspace-code
+
+      - name: WASM lint
+        if: ${{ !cancelled() }}
+        run: make lint-wasm-code
 
       - name: Test
+        if: ${{ !cancelled() }}
         run: make test
 
+      - name: Runtime doctests without test-support
+        if: ${{ !cancelled() }}
+        run: make test-runtime-doc
+
+      - name: Optional offline desktop engine lint
+        if: ${{ !cancelled() }}
+        run: make lint-code CARGO_FEATURES=desktop-whisper
+
       - name: Optional offline desktop engine regression
-        run: |
-          make lint CARGO_FEATURES=desktop-whisper
-          make test CARGO_FEATURES=desktop-whisper
+        if: ${{ !cancelled() }}
+        run: make test CARGO_FEATURES=desktop-whisper
 
       - name: Install pinned UI build tools
         run: make install-ci-tools
@@ -85,7 +109,10 @@ jobs:
         with:
           python-version: '3.12'
       - run: rustup target add wasm32v1-none
-      - run: make check-architecture check-domain
+      - run: make check-architecture
+      - name: Compile the domain without OS support
+        if: ${{ !cancelled() }}
+        run: make check-domain
 
   macos-native-lint:
     needs: guard-base
@@ -106,9 +133,17 @@ jobs:
         run: |
           rustup toolchain install
           rustup target add aarch64-apple-ios-sim
+      - name: Structural policy
+        run: make check-lint-policy
+      - name: Minimal macOS runtime lint
+        if: ${{ !cancelled() }}
+        run: make lint-runtime-minimal
       - name: Compile and lint the iOS host and runtime
-        run: make lint-ios
-      - run: make lint-native CARGO_FEATURES=desktop-whisper
+        if: ${{ !cancelled() }}
+        run: make lint-ios-code
+      - name: Compile and lint the native host and runtime
+        if: ${{ !cancelled() }}
+        run: make lint-native-code CARGO_FEATURES=desktop-whisper
 
   research-test:
     runs-on: ubuntu-22.04

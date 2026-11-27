@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+num-traits = "0.2.19"
 seamone-core.workspace = true
 serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true

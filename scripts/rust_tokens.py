@@ -10,7 +10,7 @@ class Token(NamedTuple):
     end: int
 
 
-def tokens(source):
+def tokens(source, *, include_comments=False):
     position = 0
     while position < len(source):
         start = position
@@ -20,6 +20,8 @@ def tokens(source):
         if source.startswith("//", position):
             end = source.find("\n", position)
             position = len(source) if end < 0 else end + 1
+            if include_comments:
+                yield Token(source[start:position].rstrip("\n"), start, position)
             continue
         if source.startswith("/*", position):
             position += 2
@@ -35,6 +37,8 @@ def tokens(source):
                     position += 1
             if depth:
                 raise ValueError("unclosed Rust comment")
+            if include_comments:
+                yield Token(source[start:position], start, position)
             continue
         raw = re.match(r'(?:br|cr|r)(#*)"', source[position:])
         if raw:

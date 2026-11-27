@@ -3,7 +3,7 @@ use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkBatch, Half, MIN_PREVIEW_SAMPLES, Narrowing, candidate},
     ipc::Command,
-    review::{RecordingInfo, ReviewSegment, SAMPLE_RATE, SampleRange},
+    review::{RecordingInfo, SAMPLE_RATE, SampleRange, Segment},
 };
 use serde_json::json;
 use std::time::Duration;
@@ -174,7 +174,7 @@ impl QuickReview {
         range.start + u64::try_from(elapsed.min(u128::from(span))).unwrap_or(span)
     }
 
-    pub fn flag(self, segments: RwSignal<Vec<ReviewSegment>>) {
+    pub fn flag(self, segments: RwSignal<Vec<Segment>>) {
         if self.narrowing.with_untracked(Option::is_some) {
             return;
         }
@@ -205,7 +205,7 @@ impl QuickReview {
         };
         self.analysis_wav.set(None);
         let guard = self.next_sequence();
-        // Preview changes use their own clip IDs. The candidate stays fixed for every depth.
+
         self.analysis_request.set_value(guard);
         spawn_local(async move {
             let wav = api::call::<String>(
@@ -221,7 +221,7 @@ impl QuickReview {
         });
     }
 
-    pub fn skip(self, segments: RwSignal<Vec<ReviewSegment>>) {
+    pub fn skip(self, segments: RwSignal<Vec<Segment>>) {
         if self.saving.get_untracked() {
             return;
         }
@@ -342,7 +342,7 @@ impl QuickReview {
             self.dismiss();
             return;
         };
-        // Preserve the same request if the commit succeeds but its reply is lost.
+
         self.attempt.set(Some(batch.clone()));
         self.saving.set(true);
         self.stop_audio();
@@ -404,7 +404,7 @@ pub fn position_label(sample: u64) -> String {
 #[component]
 pub fn QuickReviewPanel(
     quick: QuickReview,
-    segments: RwSignal<Vec<ReviewSegment>>,
+    segments: RwSignal<Vec<Segment>>,
     marks: RwSignal<Vec<ErrorMark>>,
     on_confirm: Callback<()>,
     on_exit: Callback<()>,
@@ -433,7 +433,7 @@ pub fn QuickReviewPanel(
 #[component]
 fn ScanPanel(
     quick: QuickReview,
-    segments: RwSignal<Vec<ReviewSegment>>,
+    segments: RwSignal<Vec<Segment>>,
     marks: RwSignal<Vec<ErrorMark>>,
 ) -> impl IntoView {
     let scan_lines = Memo::new(move |_| {
@@ -513,7 +513,7 @@ fn ScanPanel(
 #[component]
 fn NarrowingPanel(
     quick: QuickReview,
-    segments: RwSignal<Vec<ReviewSegment>>,
+    segments: RwSignal<Vec<Segment>>,
     marks: RwSignal<Vec<ErrorMark>>,
     on_confirm: Callback<()>,
 ) -> impl IntoView {
@@ -612,7 +612,7 @@ fn TouchNarrowingActions(quick: QuickReview, on_confirm: Callback<()>) -> impl I
 }
 
 #[component]
-fn TranscriptContext(lines: Memo<Vec<ReviewSegment>>) -> impl IntoView {
+fn TranscriptContext(lines: Memo<Vec<Segment>>) -> impl IntoView {
     view! {
         <div class="transcript-context">
             <For each=move || lines.get() key=|line| (line.id.clone(), line.revision)

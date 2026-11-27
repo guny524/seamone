@@ -18,8 +18,7 @@ fn synthetic_input(active: Arc<AtomicBool>) -> Input<SyntheticStream> {
     Input {
         stream: SyntheticStream(active),
         consumer,
-        rate: 16_000,
-        channels: 1,
+        rate: check_input(16_000, 1).unwrap(),
     }
 }
 
@@ -39,18 +38,14 @@ fn duration_limit_releases_input_and_retains_only_samples_up_to_the_limit() {
     let mut staged = record(&store.audio, &control, 1, |_| {
         Ok(Some(Input {
             stream: SyntheticStream(Arc::clone(&active)),
-            rate: 16_000,
-            channels: 1,
+            rate: check_input(16_000, 1).unwrap(),
             consumer,
         }))
     })
     .unwrap()
     .unwrap();
     assert!(!active.load(Ordering::Acquire));
-    assert!(matches!(
-        control.status(),
-        CaptureStatus::LimitReached { .. }
-    ));
+    assert!(matches!(control.status(), Status::LimitReached { .. }));
     let saved = store
         .save_audio("합성 음성".into(), &mut staged, || true)
         .unwrap();
@@ -59,7 +54,39 @@ fn duration_limit_releases_input_and_retains_only_samples_up_to_the_limit() {
     assert!(pcm.iter().all(|s| (*s + 0.375).abs() < f32::EPSILON));
 }
 
-fn wait_for(recorder: &Recorder, accepts: impl Fn(&CaptureStatus) -> bool) -> CaptureStatus {
+struct ReleaseTailStream(Producer<f64>);
+
+impl Drop for ReleaseTailStream {
+    fn drop(&mut self) {
+        self.0.push(-0.5).unwrap();
+    }
+}
+
+#[test]
+fn saving_drains_the_samples_accepted_while_releasing_the_input_stream() {
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let control = Arc::new(Control::new());
+    let mut audio = record(&store.audio, &control, 1, |control| {
+        let (mut producer, consumer) = RingBuffer::new(8);
+        producer.push(0.5).unwrap();
+        control.request.store(SAVE, Ordering::Release);
+        Ok(Some(Input {
+            stream: ReleaseTailStream(producer),
+            consumer,
+            rate: check_input(16_000, 1).unwrap(),
+        }))
+    })
+    .unwrap()
+    .unwrap();
+    let saved = store
+        .save_audio("합성 음성".into(), &mut audio, || true)
+        .unwrap();
+    let (_, pcm) = store.prepare_transcription(&saved.id).unwrap();
+    assert_eq!(pcm, [0.5, -0.5]);
+}
+
+fn wait_for(recorder: &Recorder, accepts: impl Fn(&Status) -> bool) -> Status {
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
         let status = recorder.status();
@@ -83,8 +110,8 @@ fn capture_recovers_from_open_failure_and_keeps_received_audio_on_disconnect_or_
         })
         .unwrap();
     assert_eq!(
-        wait_for(&recorder, |s| matches!(s, CaptureStatus::Failed { .. })),
-        CaptureStatus::Failed {
+        wait_for(&recorder, |s| matches!(s, Status::Failed { .. })),
+        Status::Failed {
             message: "입력 장치 없음".into()
         }
     );
@@ -102,11 +129,9 @@ fn capture_recovers_from_open_failure_and_keeps_received_audio_on_disconnect_or_
                 Ok(Some(input))
             })
             .unwrap();
-        let CaptureStatus::Interrupted {
+        let Status::Interrupted {
             session_id, reason, ..
-        } = wait_for(&recorder, |s| {
-            matches!(s, CaptureStatus::Interrupted { .. })
-        })
+        } = wait_for(&recorder, |s| matches!(s, Status::Interrupted { .. }))
         else {
             unreachable!()
         };
@@ -150,8 +175,8 @@ fn saving_again_after_a_sqlite_write_error_keeps_the_same_audio_once() {
             Ok(Some(synthetic_input(active)))
         })
         .unwrap();
-    let CaptureStatus::Recording { session_id, .. } =
-        wait_for(&recorder, |s| matches!(s, CaptureStatus::Recording { .. }))
+    let Status::Recording { session_id, .. } =
+        wait_for(&recorder, |s| matches!(s, Status::Recording { .. }))
     else {
         unreachable!()
     };
@@ -168,7 +193,7 @@ fn saving_again_after_a_sqlite_write_error_keeps_the_same_audio_once() {
     );
     assert!(!stream_active.load(Ordering::Acquire));
     assert!(
-        matches!(recorder.status(), CaptureStatus::Interrupted { session_id: id, .. } if id == session_id)
+        matches!(recorder.status(), Status::Interrupted { session_id: id, .. } if id == session_id)
     );
     assert_eq!(
         std::fs::read_dir(root.path().join("audio"))
@@ -206,8 +231,8 @@ fn forced_close_during_save_discards_and_rejects_overlapping_finish() {
             Ok(Some(synthetic_input(active)))
         })
         .unwrap();
-    let CaptureStatus::Recording { session_id, .. } =
-        wait_for(&recorder, |s| matches!(s, CaptureStatus::Recording { .. }))
+    let Status::Recording { session_id, .. } =
+        wait_for(&recorder, |s| matches!(s, Status::Recording { .. }))
     else {
         unreachable!()
     };

@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# The host composes the UI and engine through IPC. Only domain types cross that boundary.
+
 WORKSPACE_IMPORTS = {
     "seamone-core": set(),
     "seamone-ui": {"seamone-core"},
@@ -14,7 +14,7 @@ WORKSPACE_IMPORTS = {
     "seamone": {"seamone-core", "seamone-runtime"},
 }
 
-# Libraries that implement these adapters belong to their respective crates.
+
 ADAPTER_OWNERS = {
     "cpal": "seamone-runtime",
     "rusqlite": "seamone-runtime",
@@ -69,7 +69,6 @@ def violations(packages):
                 continue
             owner = ADAPTER_OWNERS.get(target)
             if name == "seamone-ui" and target == "hound":
-                # The WASM player decodes the WAV returned by the runtime; it does not own files.
                 continue
             if target.startswith("objc2-"):
                 owner = "seamone-runtime"

@@ -1,5 +1,5 @@
 //! Review navigation is independent of async playback and persistence callbacks.
-use crate::review::ReviewSegment;
+use crate::review::Segment;
 #[cfg(test)]
 use crate::review::Verdict;
 
@@ -18,8 +18,8 @@ pub struct Frame {
     pub revision: u64,
 }
 
-impl From<&ReviewSegment> for Frame {
-    fn from(value: &ReviewSegment) -> Self {
+impl From<&Segment> for Frame {
+    fn from(value: &Segment) -> Self {
         Self {
             id: value.id.clone(),
             revision: value.revision,
@@ -65,7 +65,7 @@ impl Default for ReviewFlow {
 }
 
 impl ReviewFlow {
-    pub fn start(&mut self, mode: ReviewMode, segments: &[ReviewSegment]) {
+    pub fn start(&mut self, mode: ReviewMode, segments: &[Segment]) {
         self.exit();
         self.mode = mode;
         self.frames = segments
@@ -185,7 +185,7 @@ impl ReviewFlow {
     }
 
     /// Successful persistence is the only operation that advances the binary pass.
-    pub fn saved(&mut self, ticket: &Ticket, saved: &ReviewSegment, advance: bool) -> bool {
+    pub fn saved(&mut self, ticket: &Ticket, saved: &Segment, advance: bool) -> bool {
         if self.phase != Phase::Saving(ticket.clone())
             || saved.id != ticket.frame.id
             || saved.revision < ticket.frame.revision
@@ -213,9 +213,9 @@ impl ReviewFlow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::review::{ReviewAction, ReviewRequest, SampleRange};
-    fn segment(id: &str) -> ReviewSegment {
-        ReviewSegment {
+    use crate::review::{Action, Request, SampleRange};
+    fn segment(id: &str) -> Segment {
+        Segment {
             id: id.into(),
             recording_id: "r".into(),
             recording_revision: 1,
@@ -256,11 +256,11 @@ mod tests {
         let write = flow.submit(true).unwrap();
         let saved = s
             .apply(
-                &ReviewRequest {
+                &Request {
                     event_id: "e".into(),
                     segment_id: "s".into(),
                     expected_revision: 1,
-                    action: ReviewAction::Judge {
+                    action: Action::Judge {
                         verdict: Verdict::Yes,
                     },
                 },
@@ -300,11 +300,11 @@ mod tests {
         let write = flow.submit(false).unwrap();
         let saved = s
             .apply(
-                &ReviewRequest {
+                &Request {
                     event_id: "e".into(),
                     segment_id: "s".into(),
                     expected_revision: 1,
-                    action: ReviewAction::SaveDraft { text: "예".into() },
+                    action: Action::SaveDraft { text: "예".into() },
                 },
                 16_000,
             )
