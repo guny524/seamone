@@ -188,3 +188,11 @@
 - 남긴 것(사람에게 올림): runtime 에 다른 SQLite crate 더하기, 필수 check 목록(branch protection 은 레포 설정), `EligibleExample::check` 가 pub 이라 학습 예시를 직접 만들 수 있는 길(이번 이슈 전부터), 재생 최소 시간
 - 정리: cron 두 개를 지웠다, worker 탭(codex 세션 `01a21898-2b74-7c02-9206-5ad88ae3fe65`, 이어 열기 `codex resume 01a21898-2b74-7c02-9206-5ad88ae3fe65`)과 Pi 탭을 닫았다, 시험용 worktree 셋(`15-pi-trap`, `13-cer-rebase`, `14-jsonl-rebase`)과 그 로컬 브랜치, Pi target 복제본(7.6G), 15-structure-checks 의 공유 `target`(6.3G)을 지웠다, 디스크 여유 32Gi
 - 남긴 것과 지울 조건: `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(PR #18 브랜치)와 그 `.tmp/structure-checks/`(검증 target 5.4G 와 증거 로그)는 PR #18 이 merge 되거나 닫히면 지운다, `.tmp/conductor/15-structure/`(지시서, 보고, Opus 검토, Pi patch)는 이슈 #15 를 닫을 때 지운다
+
+## 2026-11-27 07:10 PR #18 merge, develop 의 iOS lint 실패, branch protection, 12단계
+- D4 에 따라 메인이 확인자로서 PR #18 을 merge 했다(`393f3d8`), PR CI 의 실패는 새 목록 항목이 base 에 없는 것과 base 의 옛 검사가 바뀐 증거 선언을 잡는 것뿐이라고 로그로 확인했다
+- 그런데 merge 뒤 develop push CI run 45937608832 의 `macos-native-lint` 에서 `make lint-ios` 가 `insert_unverified is never used` 로 실패했다, iOS 처럼 `desktop-whisper` 와 시험이 없는 빌드에서 받아쓰기 commit 경로가 컴파일되지 않아 생긴 죽은 코드다, PR CI 에서는 `lint-ios` 의 앞 단계(목록 대조)가 먼저 실패해 iOS 컴파일까지 가지 않아 보이지 않았다, 메인이 그 실패를 "예상한 것" 으로만 보고 merge 한 잘못이다, 목록 대조 실패가 컴파일 단계를 가리지 않게 CI 를 고치는 일을 12단계에 넣었다
+- PR #18 worktree 와 로컬, 원격 브랜치를 정리했다(디스크 여유 37Gi)
+- develop 에 branch protection 을 걸었다: 필수 check 12개(`lint-test`, `domain`, `macos-native-lint`, `research-test`, `base-guards`, `guard-rules-review-trusted`, 다섯 플랫폼 빌드 job 6개), force push 와 삭제 금지, 관리자 우회는 남겼다(검사 파일을 바꾼 PR 처럼 관문이 일부러 실패할 때 D4 의 확인자가 근거를 기록하고 merge 하는 길), `strict` 는 끔
+- 새 worker(Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-no-exceptions`, 브랜치 `guny524/15-no-exceptions`, handle `term_1f155908-3d76-4535-abc3-92ca9cf95b20`)에게 12단계를 맡겼다: iOS 오류 고침과 CI 단계 분리, lint 예외 15곳을 설계로 없애기(D5), 주석 정리와 금지 검사(D5)
+- 재생 확인의 근본 해결(D6) 설계를 Opus 5.5 high 에게 자문했다, 지금은 화면이 웹뷰 `HtmlAudioElement` 로 재생하고 `ended` 이벤트에서 `playback_ended(token)` 을 보낸다(`app/ui/src/app.rs:504`, `app/ui/src/workspace.rs:364`)

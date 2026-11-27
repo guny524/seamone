@@ -325,3 +325,6 @@
 - [밤사이 결정]: 이번 밤 범위(이슈 decision D1), 기존 lint 예외는 새로 더하는 것만 거절(D2), PR #16 먼저 merge 와 남은 우회는 새 PR(D3), PR #13 base 를 develop 으로
 - 쓴 모델: worker Codex `gpt-6.1-sol` high 한 세션(바꾸지 않음), 검토 Claude Opus 5.5 high 다섯 번, 적용 확인 Pi `d0xin-swift-1.5-qwen3.8-27b-uncensored-fp8` 네 번
 - 자세한 것은 이슈 log `0015-2026_11_27-pstack_structure_checks/issue_log.md`
+
+## 2026-11-27 07:10 사용자 답과 PR #18 merge
+- 사용자가 확인자를 메인에게 맡기고(D4) lint 예외는 설계로 없애고 주석은 pstack 대로 정리하며(D5) 재생 확인을 근본부터 고치라고(D6) 답했다, PR #18 을 merge 했고 develop 에 branch protection 을 걸었다, merge 뒤 드러난 iOS lint 실패를 12단계로 고친다, 자세한 것은 이슈 log 2026-11-27 07:10
