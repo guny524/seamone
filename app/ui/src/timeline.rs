@@ -262,18 +262,16 @@ fn span_style(viewport: SampleRange, span: SampleRange) -> String {
     format!("left:{left}%;width:{}%", right - left)
 }
 
-struct RecordingOffset(u32);
-
-impl RecordingOffset {
-    fn new(samples: u64) -> Self {
-        Self(u32::try_from(samples).expect("30-minute recording offsets fit in u32"))
-    }
+fn sample_count(samples: u64) -> f64 {
+    let [low0, low1, low2, low3, high0, high1, high2, high3] = samples.to_le_bytes();
+    f64::from(u32::from_le_bytes([high0, high1, high2, high3])) * 4_294_967_296.0
+        + f64::from(u32::from_le_bytes([low0, low1, low2, low3]))
 }
 
 fn percentage(range: SampleRange, sample: u64) -> f64 {
-    let offset = RecordingOffset::new(sample.clamp(range.start, range.end) - range.start);
-    let duration = RecordingOffset::new(range.end - range.start);
-    100.0 * f64::from(offset.0) / f64::from(duration.0)
+    let offset = sample.clamp(range.start, range.end) - range.start;
+    let duration = range.end - range.start;
+    100.0 * sample_count(offset) / sample_count(duration)
 }
 
 #[cfg(test)]

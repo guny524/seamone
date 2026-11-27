@@ -1,6 +1,8 @@
 import re
+from types import SimpleNamespace
 
 import pytest
+import torch
 
 from seamone_research import models, transcribe
 from seamone_research.models import MODEL_SPECS
@@ -44,6 +46,32 @@ def test_the_whisper_loader_reads_the_resolved_snapshot(monkeypatch):
     )
     transcribe.build_transcriber(MODEL_SPECS["whisper-small"], "cpu", "float32")
     assert seen == {"processor": "/snap/abc", "model": "/snap/abc"}
+
+
+def test_whisper_generation_keeps_its_token_budget_inside_the_decoder_window(monkeypatch):
+    budgets = []
+
+    class Decoder(FakeModel):
+        def generate(self, features, **options):
+            budgets.append(options["max_new_tokens"])
+            return torch.zeros((1, 1), dtype=torch.long)
+
+    processor = SimpleNamespace(
+        feature_extractor=lambda *args, **kwargs: SimpleNamespace(
+            input_features=torch.zeros((1, 80, 1))
+        ),
+        batch_decode=lambda *args, **kwargs: [" recognized "],
+    )
+    monkeypatch.setattr(transcribe.WhisperProcessor, "from_pretrained", lambda *a: processor)
+    monkeypatch.setattr(
+        transcribe.WhisperForConditionalGeneration,
+        "from_pretrained",
+        lambda *a, **kw: Decoder(),
+    )
+    engine = transcribe.WhisperTranscriber("/snapshot", "cpu", torch.float32)
+    assert engine.transcribe([], "ko") == ["recognized"]
+    expected_generation_tokens = 440
+    assert budgets == [expected_generation_tokens]
 
 
 def test_the_qwen_loader_reads_the_resolved_snapshot(monkeypatch):

@@ -38,7 +38,9 @@ def configuration(path, source):
     if path.name == "Cargo.toml":
         return {"lints": data.get("lints", {}),
                 "workspace.lints": data.get("workspace", {}).get("lints", {})}
-    return data.get("tool", {}).get("ruff", {}).get("lint", {})
+    ruff = data.get("tool", {}).get("ruff", {})
+    return {**ruff.get("lint", {}),
+            **{f"ruff.{key}": ruff[key] for key in ("exclude", "extend-exclude") if key in ruff}}
 
 
 def configuration_exceptions(path, source):
@@ -85,7 +87,6 @@ def git(root, *args):
 
 
 def clippy_commands(source):
-
     source = re.sub(r"\\\n[ \t]*", " ", source)
     return sorted(line.strip() for line in source.splitlines()
                   if line.startswith("\t") and re.search(r"\bcargo\s+clippy\b", line))
@@ -184,7 +185,6 @@ def check(root, ref):
         read_base = lambda name: git(root, "show", f"{commit}:{name}")
         base_config = base.get("configuration")
         if base_config is None:
-
             base_config = config_snapshots(root, base_names, read_base)
         base_commands = base.get("clippy_commands")
         if base_commands is None:

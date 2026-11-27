@@ -49,9 +49,21 @@ jobs:
       - name: Structural policy
         run: make check-architecture
 
-      - name: Lint
+      - name: Minimal runtime lint
         if: ${{ !cancelled() }}
-        run: make lint-code
+        run: make lint-runtime-minimal
+
+      - name: Format and syntax
+        if: ${{ !cancelled() }}
+        run: make lint-format
+
+      - name: Native workspace lint
+        if: ${{ !cancelled() }}
+        run: make lint-workspace-code
+
+      - name: WASM lint
+        if: ${{ !cancelled() }}
+        run: make lint-wasm-code
 
       - name: Test
         if: ${{ !cancelled() }}
@@ -119,6 +131,9 @@ jobs:
           rustup target add aarch64-apple-ios-sim
       - name: Structural policy
         run: make check-lint-policy
+      - name: Minimal macOS runtime lint
+        if: ${{ !cancelled() }}
+        run: make lint-runtime-minimal
       - name: Compile and lint the iOS host and runtime
         if: ${{ !cancelled() }}
         run: make lint-ios-code

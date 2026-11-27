@@ -1,5 +1,6 @@
 """Freeze only comments explaining external constraints; express our behavior in code."""
 
+import ast
 import collections
 import hashlib
 import io
@@ -36,6 +37,18 @@ def rust_comments(source):
 
 
 def python_comments(source):
+    tree = ast.parse(source)
+    documentation = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.body and isinstance(node.body[0], ast.Expr):
+                value = node.body[0].value
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                    documentation.add(id(node.body[0]))
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str) and id(node) not in documentation):
+            yield node.lineno, ast.get_source_segment(source, node)
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type != tokenize.COMMENT:
             continue
@@ -61,14 +74,19 @@ def inventory(root):
 
 
 def violations(root, entries):
-    expected = collections.Counter((entry['path'], entry['sha256']) for entry in entries)
-    actual = collections.Counter()
     errors = []
-    for path, line, digest, _ in inventory(root):
-        actual[path, digest] += 1
-        if actual[path, digest] > expected[path, digest]:
+    for entry in entries:
+        if (not isinstance(entry.get('text'), str)
+                or hashlib.sha256(entry['text'].encode()).hexdigest() != entry['sha256']):
+            errors.append(f"{entry['path']}: comment text and sha256 must match")
+    expected = collections.Counter((entry['path'], entry['sha256'], entry.get('text'))
+                                   for entry in entries)
+    actual = collections.Counter()
+    for path, line, digest, text in inventory(root):
+        actual[path, digest, text] += 1
+        if actual[path, digest, text] > expected[path, digest, text]:
             errors.append(f'{path}:{line}: unreviewed comment; {FIX}')
-    for (path, _), count in (expected - actual).items():
+    for (path, _, _), count in (expected - actual).items():
         errors.append(f'{path}: {count} stale comment snapshot entry(s); remove the missing entries')
     return errors
 
@@ -79,7 +97,7 @@ def main():
         base_commit(ROOT, ref)
         entries = json.loads((ROOT / SNAPSHOT).read_text(encoding='utf-8'))['comments']
         errors = baseline_errors(ROOT, SNAPSHOT, ref) + violations(ROOT, entries)
-    except (OSError, ValueError, KeyError, TypeError, tokenize.TokenError,
+    except (SyntaxError, OSError, ValueError, KeyError, TypeError, tokenize.TokenError,
             subprocess.CalledProcessError) as error:
         errors = [f'{SNAPSHOT}: cannot check comments: {error}; {FIX}']
     for error in errors:

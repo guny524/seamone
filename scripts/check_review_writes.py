@@ -199,7 +199,6 @@ def sql_literal(token):
 
 
 def database(migrations=None):
-
     db = sqlite3.connect(':memory:', cached_statements=0)
     # These optional/newer functions need names and arities for schema preparation and EXPLAIN,
     # not their runtime results. Override built-ins too so inspection uses the same definitions.

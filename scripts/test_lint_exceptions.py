@@ -166,6 +166,13 @@ class BaselineProtection(unittest.TestCase):
         self.save()
         self.assertIn('lint tables changed', self.errors())
 
+    def test_ruff_file_exclusions_cannot_bypass_lint(self):
+        for key in ('exclude', 'extend-exclude'):
+            with self.subTest(key=key):
+                (self.root / 'pyproject.toml').write_text(
+                    f'[tool.ruff]\n{key}=["tests/**"]\n' + self.ruff)
+                self.assertIn('lint tables changed', self.errors())
+
     def test_alternate_configuration_files_are_forbidden(self):
         for name in ('clippy.toml', '.clippy.toml', 'ruff.toml', '.ruff.toml'):
             with self.subTest(name=name):

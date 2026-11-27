@@ -15,8 +15,11 @@ from seamone_research.data import SAMPLE_RATE
 from seamone_research.memory import release_memory
 from seamone_research.models import ModelSpec, resolve_model_path
 
-# Whisper 의 디코더 길이 한도 448 에서 시작 토큰 4개와 여유를 뺀 값
-WHISPER_MAX_NEW_TOKENS = 440
+# Whisper 의 디코더 길이 한도는 448 이다
+WHISPER_DECODER_LIMIT = 448
+WHISPER_START_TOKENS = 4
+WHISPER_TOKEN_MARGIN = 4
+WHISPER_MAX_NEW_TOKENS = WHISPER_DECODER_LIMIT - WHISPER_START_TOKENS - WHISPER_TOKEN_MARGIN
 QWEN_MAX_NEW_TOKENS = 512
 QWEN_LANGUAGE_NAMES = {"ko": "Korean", "en": "English"}
 
