@@ -196,3 +196,11 @@
 - develop 에 branch protection 을 걸었다: 필수 check 12개(`lint-test`, `domain`, `macos-native-lint`, `research-test`, `base-guards`, `guard-rules-review-trusted`, 다섯 플랫폼 빌드 job 6개), force push 와 삭제 금지, 관리자 우회는 남겼다(검사 파일을 바꾼 PR 처럼 관문이 일부러 실패할 때 D4 의 확인자가 근거를 기록하고 merge 하는 길), `strict` 는 끔
 - 새 worker(Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-no-exceptions`, 브랜치 `guny524/15-no-exceptions`, handle `term_1f155908-3d76-4535-abc3-92ca9cf95b20`)에게 12단계를 맡겼다: iOS 오류 고침과 CI 단계 분리, lint 예외 15곳을 설계로 없애기(D5), 주석 정리와 금지 검사(D5)
 - 재생 확인의 근본 해결(D6) 설계를 Opus 5.5 high 에게 자문했다, 지금은 화면이 웹뷰 `HtmlAudioElement` 로 재생하고 `ended` 이벤트에서 `playback_ended(token)` 을 보낸다(`app/ui/src/app.rs:504`, `app/ui/src/workspace.rs:364`)
+
+## 2026-11-27 13:40 12단계와 PR #21, 13단계 시작
+- 12단계(worker, 13:36 끝남): lint 억제 기준 목록 14개(Cargo 3, Rust 10, Ruff 1, 메인이 앞서 15곳이라 한 것은 잘못 센 것)를 모두 설계로 없앴다, 숫자 변환은 `FftIndex`, `Intensity`, `Pcm16`, `KernelRadius`, `RecordingOffset` 범위 타입과 명시적 변환, 결과가 같은지는 checksum 시험, 플랫폼별 미사용 인자는 picker 책임 옮기기, 꺼 둔 clippy lint 셋을 켜고 core 타입 이름을 고쳤다(IPC JSON 그대로), research 시험 magic number 와 긴 줄
+- 주석: 실제 일반 주석은 69개였다(메인이 앞서 Rust 207줄, Python 31줄이라 한 것은 문서 주석까지 센 틀린 수), 47개를 지우고 바꿀 수 없는 외부 사정 22개를 `scripts/comments.json` 에 고정했다, 새 주석은 `make check-comments` 가 거절한다
+- iOS 빌드의 `insert_unverified` 죽은 코드를 쓰는 조건에서만 두고, 목록 대조 실패가 native, iOS, WASM, domain 컴파일을 가리지 않게 Makefile 과 CI step 을 나눴다
+- worker 가 no_std 확인을 위해 노트북 rustup 에 `wasm32v1-none` target 을 더했다(Rust 도구 범위)
+- 메인이 `make test` 139개(실패 0), 주석과 예외 검사기 시험 통과, 남은 `#[expect]`, `#[allow]` 속성 0개를 확인했다, 커밋 `8c4f4d6`, PR #21 https://github.com/guny524/seamone/pull/21 , Opus 5.5 high 독립 검토를 맡겼다
+- 13단계(재생 확인 PR 1, decision D7)를 같은 worker 에게 PR #21 위 브랜치 `guny524/15-runtime-playback` 에서 시작하게 했다
