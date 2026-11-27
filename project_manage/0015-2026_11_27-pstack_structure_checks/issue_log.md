@@ -230,3 +230,7 @@
 - `PlayedRun` 과 `Heard` 를 output module 밖에서 만들면 E0603(compile_fail 과 통과 짝), 구조 검사가 callback 안의 lock, 할당, 외부 atomics 쓰기를 거절한다
 - 메인이 `make test` 154개(실패 0, 실제 장치 시험 1개 ignored)를 확인하고 `3150bb5` 로 커밋해 draft PR #22 https://github.com/guny524/seamone/pull/22 를 열었다(PR #21 위), Opus 5.5 high 검토를 맡겼다
 - 사람 시험으로 남김: `make playback-device-proof`(기본 출력 장치로 1초 400 Hz tone, 장치 시계로 들은 범위 확인), macOS, Windows, Linux 실제 기기
+
+## 2026-11-27 14:35 PR #21 남은 다섯 건 고침
+- 두 번째 worker(14:29 끝남): lint 밖의 `[tool.ruff]` 표 전체와 research Ruff 실행 명령을 기준과 대조하고 `extend` 를 거절, docstring 이 아닌 f-string 과 bytes 문장도 주석으로 셈, `test-runtime-doc` 을 CI step 으로, CI 구성 시험이 `lint-format` 을 요구, sample 수의 u64 에서 f64 변환을 core 함수 하나로 모음, 다섯 건 모두 결함을 넣어 실패하고 되돌려 통과하는 것을 증명했다
+- 메인이 `make test` 143개(실패 0)와 `make test-architecture` 통과를 확인하고 `87e602f` 로 PR #21 에 push 했다, 두 번째 worker 탭을 닫았다
