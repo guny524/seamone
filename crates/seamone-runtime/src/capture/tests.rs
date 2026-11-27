@@ -18,8 +18,7 @@ fn synthetic_input(active: Arc<AtomicBool>) -> Input<SyntheticStream> {
     Input {
         stream: SyntheticStream(active),
         consumer,
-        rate: 16_000,
-        channels: 1,
+        rate: check_input(16_000, 1).unwrap(),
     }
 }
 
@@ -39,8 +38,7 @@ fn duration_limit_releases_input_and_retains_only_samples_up_to_the_limit() {
     let mut staged = record(&store.audio, &control, 1, |_| {
         Ok(Some(Input {
             stream: SyntheticStream(Arc::clone(&active)),
-            rate: 16_000,
-            channels: 1,
+            rate: check_input(16_000, 1).unwrap(),
             consumer,
         }))
     })
@@ -56,7 +54,7 @@ fn duration_limit_releases_input_and_retains_only_samples_up_to_the_limit() {
     assert!(pcm.iter().all(|s| (*s + 0.375).abs() < f32::EPSILON));
 }
 
-struct ReleaseTailStream(Producer<f32>);
+struct ReleaseTailStream(Producer<f64>);
 
 impl Drop for ReleaseTailStream {
     fn drop(&mut self) {
@@ -76,8 +74,7 @@ fn saving_drains_the_samples_accepted_while_releasing_the_input_stream() {
         Ok(Some(Input {
             stream: ReleaseTailStream(producer),
             consumer,
-            rate: 16_000,
-            channels: 1,
+            rate: check_input(16_000, 1).unwrap(),
         }))
     })
     .unwrap()

@@ -1,22 +1,12 @@
 //! 속도 측정에 쓰는 순수 함수, 시계나 파일을 읽지 않고 값만 받아 계산한다.
 
 use crate::SAMPLE_RATE_HZ;
+use seamone_core::sample_count_as_f64;
 
 /// 표본 수에서 음성 길이(초)를 구한다.
 #[must_use]
 pub fn audio_secs(sample_count: usize) -> f64 {
-    let mut low = [0; 4];
-    let mut high = [0; 4];
-    for (word, byte) in low
-        .iter_mut()
-        .chain(high.iter_mut())
-        .zip(sample_count.to_le_bytes())
-    {
-        *word = byte;
-    }
-    let samples =
-        f64::from(u32::from_le_bytes(high)) * 4_294_967_296.0 + f64::from(u32::from_le_bytes(low));
-    samples / f64::from(SAMPLE_RATE_HZ)
+    sample_count_as_f64(sample_count as u64) / f64::from(SAMPLE_RATE_HZ)
 }
 
 /// 실시간 배수, 음성 길이를 처리 시간으로 나눈 값이다(1 이면 실시간, 3 이면 실시간의 3배 빠르다).

@@ -1,7 +1,7 @@
 use crate::{
     audio::{MAX_RECORDING_SAMPLES, canonical_spec},
     audio_ingest,
-    normalize::Normalizer,
+    normalize::{Normalizer, check_input},
     store::Store,
 };
 use hound::{SampleFormat, WavReader, WavSpec, WavWriter};
@@ -50,6 +50,30 @@ fn canonical_wav_preserves_signed_samples_and_reopens_through_sqlite() {
 }
 
 #[test]
+fn pcm32_wav_retains_sub_f32_precision_until_final_pcm16_rounding() {
+    let root = fixture();
+    let source = root.path().join("pcm32.wav");
+    let mut wav = WavWriter::create(
+        &source,
+        WavSpec {
+            channels: 2,
+            sample_rate: 16_000,
+            bits_per_sample: 32,
+            sample_format: SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for sample in [0x4000_7fff_i32, -0x4000_7fff] {
+        wav.write_sample(sample).unwrap();
+        wav.write_sample(sample).unwrap();
+    }
+    wav.finalize().unwrap();
+    let mut store = Store::open(&root.path().join("app")).unwrap();
+    let recording = store.import(&source).unwrap();
+    assert_eq!(wav_samples(&store, &recording.id), [16_384, -16_384]);
+}
+
+#[test]
 fn stereo_float_wav_downmixes_and_resamples_to_exact_pcm16_values() {
     let root = fixture();
     let source = root.path().join("stereo.wav");
@@ -78,9 +102,9 @@ fn stereo_float_wav_downmixes_and_resamples_to_exact_pcm16_values() {
 
 #[test]
 fn normalizer_clamps_and_rejects_aliasing_above_nyquist() {
-    let mut direct = Normalizer::new(16_000, 1).unwrap();
+    let mut direct = Normalizer::new(check_input(16_000, 1).unwrap());
     let mut pcm = Vec::new();
-    for sample in [-4.0, -1.0, -0.5, f32::NAN, 0.5, 1.0, 4.0] {
+    for sample in [-4.0, -1.0, -0.5, f64::NAN, 0.5, 1.0, 4.0] {
         direct
             .push(sample, |sample| {
                 pcm.push(sample);
@@ -96,7 +120,7 @@ fn normalizer_clamps_and_rejects_aliasing_above_nyquist() {
 
     for rate in [44_100_u16, 48_000] {
         let convert = |frequency: f32| {
-            let mut normalizer = Normalizer::new(u32::from(rate), 1).unwrap();
+            let mut normalizer = Normalizer::new(check_input(u32::from(rate), 1).unwrap());
             let mut pcm = Vec::new();
             let mut collect = |sample| {
                 pcm.push(sample);
@@ -104,7 +128,7 @@ fn normalizer_clamps_and_rejects_aliasing_above_nyquist() {
             };
             for frame in 0..(rate / 10) {
                 let sample = 0.8 * (TAU * frequency * f32::from(frame) / f32::from(rate)).sin();
-                normalizer.push(sample, &mut collect).unwrap();
+                normalizer.push(f64::from(sample), &mut collect).unwrap();
             }
             normalizer.finish(collect).unwrap();
             assert_eq!(pcm.len(), 1600);

@@ -35,6 +35,29 @@ let character = '/';
         source = '#!/usr/bin/env python3\n# coding: utf-8\n"""# module documentation"""\ntext = "# text"\nvalue = 1 # explanation\n'
         self.assertEqual(list(python_comments(source)), [(5, '# explanation')])
 
+    def test_only_module_class_and_function_first_strings_are_documentation(self):
+        source = '''"""module docs"""
+class Work:
+    """class docs"""
+    async def run(self):
+        """function docs"""
+        value = "data"
+        "hidden explanation"
+        return value
+if True:
+    """conditional explanation"""
+'''
+        self.assertEqual(list(python_comments(source)), [
+            (10, '"""conditional explanation"""'), (7, '"hidden explanation"')])
+
+    def test_f_strings_and_bytes_are_statements_and_never_docstrings(self):
+        for statement in ('f"message"', 'f"message {value}"', 'b"message"'):
+            with self.subTest(statement=statement):
+                source = 'def work():\n    ' + statement + '\n'
+                self.assertEqual(list(python_comments(source)), [(2, statement)])
+                source = '"""module docs"""\nvalue = ' + statement + '\n'
+                self.assertEqual(list(python_comments(source)), [])
+
     def test_unclosed_rust_comment_fails_closed(self):
         with self.assertRaises(ValueError):
             list(rust_comments('/* unfinished'))
@@ -72,8 +95,8 @@ class CommentBaseline(unittest.TestCase):
 
     def test_snapshot_addition_does_not_approve_the_source_comment(self):
         (self.root / 'code.py').write_text('# external constraint\n')
-        entries = [{'path': path, 'sha256': digest}
-                   for path, _, digest, _ in inventory(self.root)]
+        entries = [{'path': path, 'sha256': digest, 'text': text}
+                   for path, _, digest, text in inventory(self.root)]
         self.path.write_text(json.dumps({'comments': entries}))
         self.assertEqual(violations(self.root, entries), [])
         self.assertIn('unreviewed snapshot addition', '\n'.join(
@@ -83,7 +106,8 @@ class CommentBaseline(unittest.TestCase):
         source = self.root / 'lib.rs'
         comment = '// External API constraint.'
         source.write_text(comment + '\n')
-        entries = [{'path': 'lib.rs', 'sha256': hashlib.sha256(comment.encode()).hexdigest()}]
+        entries = [{'path': 'lib.rs', 'sha256': hashlib.sha256(comment.encode()).hexdigest(),
+                    'text': comment}]
         self.path.write_text(json.dumps({'comments': entries}))
         git(self.root, 'add', '.')
         self.commit()
@@ -93,6 +117,17 @@ class CommentBaseline(unittest.TestCase):
             self.assertIn('unreviewed comment', '\n'.join(violations(self.root, entries)))
         source.rename(self.root / 'moved.rs')
         self.assertIn('unreviewed comment', '\n'.join(violations(self.root, entries)))
+
+    def test_snapshot_text_must_match_its_hash_and_source(self):
+        comment = '# external constraint'
+        (self.root / 'code.py').write_text(comment + '\n')
+        entry = {'path': 'code.py', 'sha256': hashlib.sha256(comment.encode()).hexdigest(),
+                 'text': comment}
+        self.assertEqual(violations(self.root, [entry]), [])
+        for changed in ({**entry, 'text': '# different'}, {**entry, 'sha256': '0' * 64},
+                        {'path': entry['path'], 'sha256': entry['sha256']}):
+            self.assertIn('comment text and sha256 must match',
+                          '\n'.join(violations(self.root, [changed])))
 
     def test_missing_base_or_snapshot_fails_closed(self):
         self.assertIn('cannot read reviewed snapshot', '\n'.join(
