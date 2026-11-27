@@ -234,3 +234,12 @@
 ## 2026-11-27 14:35 PR #21 남은 다섯 건 고침
 - 두 번째 worker(14:29 끝남): lint 밖의 `[tool.ruff]` 표 전체와 research Ruff 실행 명령을 기준과 대조하고 `extend` 를 거절, docstring 이 아닌 f-string 과 bytes 문장도 주석으로 셈, `test-runtime-doc` 을 CI step 으로, CI 구성 시험이 `lint-format` 을 요구, sample 수의 u64 에서 f64 변환을 core 함수 하나로 모음, 다섯 건 모두 결함을 넣어 실패하고 되돌려 통과하는 것을 증명했다
 - 메인이 `make test` 143개(실패 0)와 `make test-architecture` 통과를 확인하고 `87e602f` 로 PR #21 에 push 했다, 두 번째 worker 탭을 닫았다
+
+## 2026-11-27 14:38 PR #22 의 Opus 검토
+- Opus 5.5 high(세션 `494cd11a-56a2-4238-8db7-20a7fb671df1`) 결함 4건, 증거를 출력 callback 밖에서 만들거나 늘리는 길은 없다
+  - 판정이 cpal 의 재생 시각 추정에 기댄다: macOS 는 `callback + 버퍼 길이` 고정(cpal 0.15.3 `host/coreaudio/macos/mod.rs:699-704` 의 TODO), Windows 도 추정, 그래서 Bluetooth(150~300 ms)나 AirPlay(약 2초)에서는 소리가 나기 전에 들은 것으로 판정될 수 있다
+  - slider Seek 의 순서가 보장되지 않고 polling 이 끄는 위치를 덮는다
+  - 장치를 열고 닫는 동안 store lock 을 쥐어 다른 일이 멈추고 `get_playback_status` 가 async worker 를 막는다
+  - `(callback, playback)` 을 시각으로 바꾸는 부분이 자동 시험 밖이다
+- [결정, 메인] 1번은 D7 의 뜻을 좁히지 않고 출력 장치 지연(macOS CoreAudio 의 장치, stream latency 와 safety offset, Windows `GetStreamLatency`)을 읽어 판정 시각에 더한다, 지연을 읽지 못하면 들은 것으로 판정하지 않는다, 바깥 API 라 필요한 unsafe 는 플랫폼 adapter 의 함수 하나에 두고 unsafe 허용 목록에 근거와 함께 더한다(외부 사정)
+- 이 네 건을 새 worker(Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-playback-fix`, handle `term_cf27c207-f261-4d45-aa49-8332ee097a5c`)에게 맡겼다, 두 번째 worker 세션을 `codex resume` 으로 다른 worktree 에서 이어 열었더니 예전 cwd 로 열려 닫고 새로 띄웠다(이어 열기는 원래 worktree 에서만 쓴다)
