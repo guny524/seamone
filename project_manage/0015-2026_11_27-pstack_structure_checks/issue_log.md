@@ -258,3 +258,8 @@
   - 늦은 preview 준비가 다른 화면의 하나뿐인 session 을 덮는 경쟁(가능성 낮음)
   - 시험이 성질을 확인하지 않음(듣는 코드 없는 `ended` 단언, stale session 의 stop 미확인, JS 가짜 출력의 답 꼴이 진짜와 다름), 죽은 줄
 - 첫 worker 에게 같은 세션으로 다섯 건을 맡겼다(runtime 은 PR #22 쪽 worker 가 고치므로 UI, 검사, 시험만)
+
+## 2026-11-27 15:00 PR #22 고침과 develop merge
+- 새 worker(14:57 끝남): macOS 는 CoreAudio 의 device latency, safety offset, stream latency, Windows 는 `GetStreamLatency` 와 장치 period 를 읽어 판정 시각에 더하고 지연을 읽지 못하면 거절한다, ALSA 는 cpal 0.15.3 원본(`src/host/alsa/mod.rs:758`, `:827`)이 이미 `get_delay` 를 더해 두 번 더하지 않는다, cpal 0.16, 0.17, 0.18 은 지연 API 가 없거나 조회 실패를 0 으로 넘겨 판 올리기로는 풀리지 않아 0.15.3 을 유지하고 이미 lockfile 에 있는 `coreaudio-rs`, `windows` 를 직접 의존에 더했다, unsafe 는 플랫폼별 `read_latency` 함수 하나씩, 시각 변환은 `output/clock.rs` 순수 함수, slider 는 놓을 때만 Seek, 조작은 화면 Queue 로 한 줄, 장치 열기 전에 store lock 해제, 상태 조회 spawn_blocking, 250 ms 지연 동안 승인이 생기지 않는 시험
+- 메인이 `make test` 160개(실패 0)와 `make test-architecture` 통과를 확인하고 `db2f5cb` 로 PR #22 에 push 했다, develop(PR #21)을 merge 했다(`f78bf57`, `lib.rs` doctest 충돌은 재생 브랜치 쪽 새 설계를 남김), develop 의 `comments.json` 새 꼴(원문 포함)에 맞춰 두 SAFETY 주석 항목에 검사와 같은 추출로 원문을 채웠다(`dec0801`), merge 뒤 `make test` 164개 통과, 남은 정책 실패는 이 PR 이 늘리는 목록 항목뿐이다
+- 새 unsafe FFI 를 Opus 에게 다시 검토받는다
