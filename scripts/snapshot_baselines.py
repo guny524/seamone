@@ -11,7 +11,7 @@ REVIEW = '사람이 확인한 뒤에만 늘립니다. 이 PR의 CI는 사람이 
 SNAPSHOTS = {
     'scripts/comments.json': ('comments',),
     'scripts/runtime_api.json': ('public',),
-    'scripts/playback_api.json': ('declarations', 'callers'),
+    'scripts/playback_api.json': ('declarations', 'callers', 'modules'),
     'scripts/unsafe_files.json': ('functions',),
     'scripts/review_writes.json': ('modules', 'migrations'),
 }

@@ -7,7 +7,10 @@ use std::path::Path;
 /// # Errors
 /// 보관함 생성과 DB 초기화가 실패하면 오류를 돌려준다
 pub fn open(root: &Path) -> Result<LibraryService, String> {
-    let service = LibraryService::open(root)?;
+    let service = LibraryService {
+        listening: crate::playback_evidence::Playbacks::fake(),
+        ..LibraryService::open(root)?
+    };
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     let service = LibraryService {
         recorder: crate::capture::Recorder::fake(),
@@ -38,4 +41,10 @@ pub fn transcribed(root: &Path) -> Result<(LibraryService, Segment), String> {
             .next()
             .ok_or("시험용 전사 조각이 없습니다.")?,
     ))
+}
+
+/// # Errors
+/// 시험용 출력 session이 없거나 실제 장치를 진행하려 하면 오류를 돌려준다
+pub fn advance_playback(service: &LibraryService, frames: usize) -> Result<(), String> {
+    service.listening.advance(frames)
 }

@@ -39,7 +39,7 @@ enum Phase {
     Ready,
     Loading(Ticket),
     Playing(Ticket),
-    Listened,
+    Listened(Ticket),
     Saving(Ticket),
 }
 
@@ -123,7 +123,7 @@ impl ReviewFlow {
     }
     #[must_use]
     pub fn listened(&self) -> bool {
-        self.phase == Phase::Listened
+        matches!(self.phase, Phase::Listened(_))
     }
 
     fn ticket(&mut self) -> Option<Ticket> {
@@ -156,7 +156,7 @@ impl ReviewFlow {
         if !self.playing(ticket) {
             return false;
         }
-        self.phase = Phase::Listened;
+        self.phase = Phase::Listened(ticket.clone());
         true
     }
 
@@ -168,6 +168,7 @@ impl ReviewFlow {
     pub fn playback_failed(&mut self, ticket: &Ticket) -> bool {
         if self.phase != Phase::Loading(ticket.clone())
             && self.phase != Phase::Playing(ticket.clone())
+            && self.phase != Phase::Listened(ticket.clone())
         {
             return false;
         }
@@ -316,6 +317,23 @@ mod tests {
         flow.loaded(&play);
         flow.ended(&play);
         assert!(flow.submit(true).is_some());
+    }
+
+    #[test]
+    fn a_device_error_revokes_only_the_matching_completed_playback() {
+        let mut flow = ReviewFlow::default();
+        flow.start(ReviewMode::Binary, &[segment("s")]);
+        let first = flow.play().unwrap();
+        assert!(flow.loaded(&first));
+        assert!(flow.ended(&first));
+        assert!(flow.playback_failed(&first));
+        assert!(!flow.listened());
+        assert!(flow.submit(true).is_none());
+        let second = flow.play().unwrap();
+        assert!(flow.loaded(&second));
+        assert!(flow.ended(&second));
+        assert!(!flow.playback_failed(&first));
+        assert!(flow.listened());
     }
 
     #[test]

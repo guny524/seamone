@@ -19,6 +19,10 @@
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
+      "pub fn control_playback ( & self , session : & str , action : seamone_core : : playback : : Action , ) - > Result < seamone_core : : playback : : Status , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
       "pub fn dismiss_info ( & self ) - > Result < ( ) , String >"
     ],
     [
@@ -55,11 +59,15 @@
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
+      "pub fn play_recording ( & self , id : & str , revision : u64 , range : SampleRange , ) - > Result < seamone_core : : playback : : Status , String >"
+    ],
+    [
+      "crates/seamone-runtime/src/lib.rs",
       "pub fn playback ( & self , id : & str , revision : u64 ) - > Result < PlaybackReply , String >"
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
-      "pub fn playback_ended ( & self , token : & str ) - > Result < ( ) , String >"
+      "pub fn playback_status ( & self ) - > Result < seamone_core : : playback : : Status , String >"
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
@@ -108,6 +116,10 @@
     [
       "crates/seamone-runtime/src/lib.rs",
       "pub use training : : LocalTrainer"
+    ],
+    [
+      "crates/seamone-runtime/src/test_support.rs",
+      "pub fn advance_playback ( service : & LibraryService , frames : usize ) - > Result < ( ) , String >"
     ],
     [
       "crates/seamone-runtime/src/test_support.rs",

@@ -390,7 +390,7 @@ pub struct PlaybackReply {
     pub segment_id: String,
     pub revision: u64,
     pub wav_base64: String,
-    pub token: String,
+    pub session: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

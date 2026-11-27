@@ -82,6 +82,31 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
     const state = { segments, recordings: [recording], saves: 0, delayNextSave: 0, failNextSave: false, infoSeen, exports: 0,
       microphone: { state: microphone ? 'idle' : 'unavailable' }, finishCalls: [], failMicSave: false, nextImport: null,
       marks: [], markCalls: [], rangeCalls: [], reviewCalls: 0, endedCalls: 0, holdNextRange: false, failNextMark: false, lostMarkReply: false };
+    state.output = {session:null, state:'idle', position:0, heard:false, error:null};
+    state.autoOutput = true;
+    state.advanceOutput = frames => {
+      const output = state.output, proof = proofs.get(output.session);
+      if (output.state !== 'playing' || !proof) return;
+      const start = output.position, end = Math.min(proof.end,start + frames);
+      proof.ranges.push([start,end]);
+      const merged = [];
+      for (const range of proof.ranges.toSorted((a,b) => a[0]-b[0])) {
+        const last = merged.at(-1);
+        if (last && range[0] <= last[1]) last[1] = Math.max(last[1],range[1]);
+        else merged.push([...range]);
+      }
+      proof.ranges = merged;
+      proof.complete = merged.length === 1 && merged[0][0] === proof.start && merged[0][1] === proof.end;
+      output.position = end; output.heard = proof.complete;
+      if (end === proof.end) output.state = 'finished';
+    };
+    const prepareOutput = (id,revision,range) => {
+      proofs.clear();
+      const session = crypto.randomUUID();
+      proofs.set(session,{id,revision,start:range.start,end:range.end,ranges:[],complete:false});
+      state.output = {session,state:'ready',position:range.start,heard:false,error:null};
+      return session;
+    };
     window.__REVIEW_TEST__ = state;
     const copy = value => JSON.parse(JSON.stringify(value));
     const rangeWav = range => {
@@ -170,10 +195,31 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
         const s = segments.find(s => s.id === args.segmentId);
         if (s.revision !== args.revision) throw '다른 수정본이 저장됐습니다';
         if (s.range.start >= s.range.end) throw '재생 구간이 비었습니다';
-        const token = crypto.randomUUID(); proofs.set(token, { id:s.id, revision:s.revision, complete:false });
-        return { segment_id:s.id, revision:s.revision, wav_base64:rangeWav(s.range), token };
+        const session = prepareOutput(s.id,s.revision,s.range);
+        return { segment_id:s.id, revision:s.revision, wav_base64:rangeWav(s.range), session };
       }
-      if (command === 'playback_ended') { state.endedCalls++; proofs.get(args.token).complete = true; return; }
+      if (command === 'play_recording') {
+        prepareOutput(null,args.revision,args.range); state.output.state = 'playing';
+        return copy(state.output);
+      }
+      if (command === 'control_playback') {
+        if (args.session !== state.output.session) throw 'stale playback session';
+        const proof = proofs.get(args.session), action = args.action;
+        if (action.kind === 'play') {
+          if (state.output.position === proof.end) state.output.position = proof.start;
+          state.output.state = 'playing';
+        } else if (['pause','stop'].includes(action.kind)) state.output.state = 'paused';
+        else if (action.kind === 'seek') {
+          if (action.at < proof.start || action.at > proof.end) throw 'outside playback range';
+          state.output.position = action.at;
+          if (state.output.state === 'finished') state.output.state = 'paused';
+        } else throw 'unknown playback control';
+        return copy(state.output);
+      }
+      if (command === 'get_playback_status') {
+        if (state.autoOutput) state.advanceOutput(640);
+        return copy(state.output);
+      }
       if (command === 'save_review') {
         state.reviewCalls++;
         const req = args.request;
@@ -571,9 +617,16 @@ try {
     await page.getByRole('button',{name:'오류와 수정본 교정 목록',exact:true}).click();
     await expect(page.getByText('표시한 오류 구간 0:00.250 ~ 0:00.750, 0:01.250 ~ 0:01.500',{exact:true})).toBeVisible();
     const confirm = page.getByRole('button',{name:'이대로 교정 확정 (Ctrl/Command+Enter)',exact:true});
+    await page.evaluate(() => { window.__REVIEW_TEST__.autoOutput = false; });
     await page.getByRole('button',{name:'구간 재생 (Space)',exact:true}).click();
-    await page.locator('audio[aria-label="현재 조각의 음성"]').evaluate(node => node.dispatchEvent(new Event('ended')));
+    await expect(page.locator('audio[aria-label="현재 조각의 음성"]')).toHaveCount(0);
+    await page.evaluate(() => document.dispatchEvent(new Event('ended')));
+    await expect(page.getByText('이 수정본의 음성을 끝까지 들었습니다.',{exact:true})).toHaveCount(0);
     await expect(confirm).toBeDisabled();
+    await page.evaluate(() => {
+      window.__REVIEW_TEST__.advanceOutput(24000);
+      window.__REVIEW_TEST__.autoOutput = true;
+    });
     await expect(page.getByText('이 수정본의 음성을 끝까지 들었습니다.',{exact:true})).toBeVisible();
     await expect(confirm).toBeDisabled();
     await page.getByLabel('수정 초안').fill('  첫 번째 최신전사문  ');
