@@ -1,9 +1,12 @@
-"""Check direct dependency declarations from Cargo, including renamed and gated edges."""
+"""Check Cargo dependency directions and keep browser output out of the UI."""
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
+
+from rust_tokens import tokens
 
 
 WORKSPACE_IMPORTS = {
@@ -34,6 +37,23 @@ ADAPTER_OWNERS = {
 HOST_NORMAL = {"seamone-core", "seamone-runtime", "serde", "serde_json", "tauri"}
 
 
+WEB_OUTPUT_FEATURES = {'HtmlAudioElement', 'HtmlMediaElement', 'HtmlVideoElement',
+                       'AudioContext', 'BaseAudioContext', 'AudioBufferSourceNode',
+                       'OscillatorNode', 'AudioWorkletNode'}
+
+
+def ui_output_errors(source):
+    code = list(tokens(source))
+    for index, token in enumerate(code):
+        if token.text in WEB_OUTPUT_FEATURES | {'Audio'}:
+            yield 'UI media API is forbidden; use runtime play_recording/control_playback/get_playback_status'
+        if token.text in {'audio', 'video'} and index and code[index - 1].text in {'<', ':'}:
+            yield 'UI media elements are forbidden; use runtime output'
+        if re.search(r'<\s*(?:audio|video)\b|\b(?:Audio|AudioContext|BaseAudioContext|AudioWorkletNode)\b', token.text) and ('"' in token.text):
+            yield 'UI media markup or JavaScript is forbidden; use runtime output'
+
+
+
 def violations(packages):
     members = {package["name"]: Path(package["manifest_path"]).parent for package in packages}
     for package in packages:
@@ -42,12 +62,25 @@ def violations(packages):
         if name not in WORKSPACE_IMPORTS:
             yield f"{manifest}: classify workspace crate {name} in WORKSPACE_IMPORTS"
             continue
+        if name == "seamone-ui":
+            aliases = {dep.get("rename") or dep["name"] for dep in package["dependencies"] if dep["name"] == "web-sys"}
+            for feature, enabled in package.get("features", {}).items():
+                for item in enabled:
+                    owner, _, forwarded = item.partition('/')
+                    if owner.rstrip('?') in aliases and forwarded in WEB_OUTPUT_FEATURES:
+                        yield f"{manifest}: {feature}: UI web-sys output feature {forwarded} is forbidden; use runtime output"
+            for path in sorted((Path(manifest).parent / 'src').rglob('*.rs')):
+                for error in ui_output_errors(path.read_text(encoding='utf-8')):
+                    yield f"{path}: {error}"
         for feature, enabled in package.get("features", {}).items():
             if any(item == "test-support" or item.endswith("/test-support") for item in enabled):
                 yield f"{manifest}: {feature}: test-support belongs only to the host's dev-dependency"
         for dep in package["dependencies"]:
             target = dep["name"]  # Cargo reports the package name separately from its import alias.
             kind = dep["kind"] or "normal"
+            if name == "seamone-ui" and target == "web-sys":
+                for feature in sorted(set(dep.get("features", [])) & WEB_OUTPUT_FEATURES):
+                    yield f"{manifest}: UI web-sys output feature {feature} is forbidden; use runtime output"
             context = f"{manifest}: {name} -> {target} ({kind}, {dep['target'] or 'all targets'})"
             if "test-support" in dep.get("features", []) and not (
                 name == "seamone" and target == "seamone-runtime" and kind == "dev"

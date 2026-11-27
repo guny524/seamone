@@ -1,4 +1,3 @@
-// Exercises the real compiled WASM UI with a test-only IPC service and real HTML audio ended events.
 import { chromium, expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
@@ -39,7 +38,6 @@ wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28); wav.writeUInt16LE(2,
 wav.write('data', 36); wav.writeUInt32LE(wav.length - 44, 40);
 const browser = await chromium.launch({
   ...(process.env.SEAMONE_CHROME ? { executablePath: process.env.SEAMONE_CHROME } : {}),
-  args: ['--autoplay-policy=no-user-gesture-required'],
 });
 let completed = 0;
 async function captureReview(page, state) {
@@ -81,7 +79,7 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
     const proofs = new Map(); const events = new Map(); const batches = new Map();
     const state = { segments, recordings: [recording], saves: 0, delayNextSave: 0, failNextSave: false, infoSeen, exports: 0,
       microphone: { state: microphone ? 'idle' : 'unavailable' }, finishCalls: [], failMicSave: false, nextImport: null,
-      marks: [], markCalls: [], rangeCalls: [], reviewCalls: 0, endedCalls: 0, holdNextRange: false, failNextMark: false, lostMarkReply: false };
+      marks: [], markCalls: [], rangeCalls: [], playCalls: [], controlCalls: [], reviewCalls: 0, reviewPlaybackCalls: 0, endedCalls: 0, holdNextPlayback: false, failNextMark: false, lostMarkReply: false };
     state.output = {session:null, state:'idle', position:0, heard:false, error:null};
     state.autoOutput = true;
     state.advanceOutput = frames => {
@@ -104,6 +102,7 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
       proofs.clear();
       const session = crypto.randomUUID();
       proofs.set(session,{id,revision,start:range.start,end:range.end,ranges:[],complete:false});
+      state.outputRange = {...range};
       state.output = {session,state:'ready',position:range.start,heard:false,error:null};
       return session;
     };
@@ -161,11 +160,6 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
       if (command === 'get_error_marks') return { marks: copy(state.marks), next_offset: null };
       if (command === 'get_recording_playback') {
         state.rangeCalls.push(copy(args.range));
-        if (state.holdNextRange) {
-          state.holdNextRange = false;
-          await new Promise(resolve => { state.releaseRange = resolve; });
-          state.delayedRangeReturned = true;
-        }
         return rangeWav(args.range);
       }
       if (command === 'save_error_marks') {
@@ -192,6 +186,7 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
       if (command === 'save_text_file') { state.exports++; return true; }
       if (command === 'copy_saved_text') { state.exports++; return; }
       if (command === 'get_playback') {
+        state.reviewPlaybackCalls++;
         const s = segments.find(s => s.id === args.segmentId);
         if (s.revision !== args.revision) throw '다른 수정본이 저장됐습니다';
         if (s.range.start >= s.range.end) throw '재생 구간이 비었습니다';
@@ -199,10 +194,18 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
         return { segment_id:s.id, revision:s.revision, wav_base64:rangeWav(s.range), session };
       }
       if (command === 'play_recording') {
+        state.playCalls.push(copy(args.range));
         prepareOutput(null,args.revision,args.range); state.output.state = 'playing';
-        return copy(state.output);
+        const prepared = copy(state.output);
+        if (state.holdNextPlayback) {
+          state.holdNextPlayback = false;
+          await new Promise(resolve => { state.releasePlayback = resolve; });
+          state.delayedPlaybackReturned = true;
+        }
+        return prepared;
       }
       if (command === 'control_playback') {
+        state.controlCalls.push(copy(args));
         if (args.session !== state.output.session) throw 'stale playback session';
         const proof = proofs.get(args.session), action = args.action;
         if (action.kind === 'play') {
@@ -269,7 +272,7 @@ async function startBinary(page) {
   await page.getByText('조각별 검증', {exact:true}).click();
   await page.getByRole('button',{ name:'자동 전사문 Yes/No 검증',exact:true }).click();
 }
-const quickAudio = page => page.locator('audio[aria-label="빠른 검수 음성"]');
+
 const startQuick = page => page.getByRole('button',{ name:'빠른 검수 시작',exact:true }).click();
 const bar = (page, kind, start, end) => page.locator(
   `.timeline-bar.${kind}[data-start="${start}"][data-end="${end}"]`);
@@ -277,9 +280,15 @@ const clipRanges = (page, kind) => page.locator(`.timeline-bar.${kind}`).evaluat
   nodes.map(node => [Number(node.dataset.start), Number(node.dataset.end)]));
 const readState = (page, key) => page.evaluate(key => window.__REVIEW_TEST__[key],key);
 async function seekAndPause(page, seconds) {
-  const audio = quickAudio(page);
-  await expect.poll(() => audio.evaluate(node => node.readyState)).toBeGreaterThan(0);
-  await audio.evaluate((node, at) => { node.pause(); node.currentTime = at; },seconds);
+  await expect.poll(async () => (await readState(page,'playCalls')).length).toBeGreaterThan(0);
+  const at = await page.evaluate(async seconds => {
+    const state = window.__REVIEW_TEST__, session = state.output.session;
+    const at = state.outputRange.start + Math.floor(seconds * 16000);
+    await window.__TAURI__.core.invoke('control_playback',{session,action:{kind:'seek',at}});
+    await window.__TAURI__.core.invoke('control_playback',{session,action:{kind:'pause'}});
+    return at;
+  },seconds);
+  await expect(page.locator('.timeline-playhead')).toHaveAttribute('data-sample',String(at));
 }
 try {
   {
@@ -550,14 +559,11 @@ try {
     })).toEqual([18,true,18]);
     await captureReview(page,'narrow');
     await page.getByRole('button',{name:'뒤 절반 듣기',exact:true}).click();
-    await expect.poll(async () => (await readState(page,'rangeCalls')).at(-1)).toEqual({start:20000,end:36000});
+    await expect.poll(async () => (await readState(page,'playCalls')).at(-1)).toEqual({start:20000,end:36000});
     await seekAndPause(page,0.125);
     await expect(timeline.locator('.timeline-playhead')).toHaveAttribute('data-sample','22000');
-    expect(await quickAudio(page).evaluate(node => {
-      const wav = Uint8Array.from(atob(node.src.split(',')[1]), c => c.charCodeAt(0));
-      const pcm = new DataView(wav.buffer);
-      return [node.duration, pcm.getInt16(46,true), pcm.getInt16(44+4001*2,true)];
-    })).toEqual([1,24000,0]);
+    await expect(page.locator('audio,video')).toHaveCount(0);
+    expect((await readState(page,'output')).position).toBe(22000);
 
     const chooseRight = page.getByRole('button',{name:'뒤 절반 선택 (→)',exact:true});
     await chooseRight.click();
@@ -578,6 +584,7 @@ try {
     await expect(bar(page,'candidate',4000,12000)).toBeVisible();
     expect(await readState(page,'markCalls')).toEqual([]);
     expect(await readState(page,'endedCalls')).toBe(0);
+    expect(await readState(page,'reviewPlaybackCalls')).toBe(0);
 
     await page.evaluate(() => { window.__REVIEW_TEST__.lostMarkReply = true; });
     await page.keyboard.down('Escape'); await page.keyboard.down('Escape'); await page.keyboard.up('Escape');
@@ -587,7 +594,7 @@ try {
     expect(await clipRanges(page,'retained')).toEqual([[20000,24000]]);
     await expect(bar(page,'candidate',4000,12000)).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect.poll(async () => (await readState(page,'rangeCalls')).at(-1)?.start).toBe(36000);
+    await expect.poll(async () => (await readState(page,'playCalls')).at(-1)?.start).toBe(36000);
     const attempts = await readState(page,'markCalls');
     expect(attempts).toHaveLength(2); expect(attempts[0]).toEqual(attempts[1]);
     expect(attempts[0].ranges).toEqual([{start:20000,end:24000},{start:4000,end:12000}]);
@@ -664,22 +671,29 @@ try {
   {
     const { page, errors } = await fixture({ quick:true, long:true });
     await startQuick(page);
-    await expect.poll(() => quickAudio(page).evaluate(node => node.readyState)).toBeGreaterThan(0);
-    await quickAudio(page).evaluate(node => { node.currentTime = 29.85; });
-    await expect.poll(async () => (await readState(page,'rangeCalls')).at(-1)).toEqual({start:480000,end:512000});
+    await expect.poll(async () => (await readState(page,'playCalls')).length).toBe(1);
+    await page.evaluate(() => {
+      const state = window.__REVIEW_TEST__;
+      state.advanceOutput(state.outputRange.end-state.output.position);
+    });
+    await expect.poll(async () => (await readState(page,'playCalls')).at(-1)).toEqual({start:480000,end:512000});
     await seekAndPause(page,0.2);
     await page.keyboard.press('Space');
     await expect(page.locator('.sample-timeline')).toHaveAttribute('data-start','457600');
     await expect(page.locator('.timeline-line .line-time')).toHaveText('세 번째 자동 전사문');
-    await page.evaluate(() => { window.__REVIEW_TEST__.holdNextRange = true; });
+    await page.evaluate(() => { window.__REVIEW_TEST__.holdNextPlayback = true; });
     await page.getByRole('button',{name:'앞 절반 듣기',exact:true}).click();
-    await expect.poll(() => page.evaluate(() => typeof window.__REVIEW_TEST__.releaseRange)).toBe('function');
+    await expect.poll(() => page.evaluate(() => typeof window.__REVIEW_TEST__.releasePlayback)).toBe('function');
+    const pendingRange = (await readState(page,'playCalls')).at(-1);
     await page.keyboard.press('Backspace');
-    await expect.poll(async () => (await readState(page,'rangeCalls')).at(-1)?.start).toBe(483200);
+    expect((await readState(page,'playCalls')).at(-1)).toEqual(pendingRange);
+    await page.evaluate(() => window.__REVIEW_TEST__.releasePlayback());
+    await expect.poll(() => readState(page,'delayedPlaybackReturned')).toBe(true);
+    await expect.poll(async () => (await readState(page,'playCalls')).at(-1)?.start).toBe(483200);
     await seekAndPause(page,0.25);
-    await page.evaluate(() => window.__REVIEW_TEST__.releaseRange());
-    await expect.poll(() => readState(page,'delayedRangeReturned')).toBe(true);
-    await quickAudio(page).evaluate(node => node.dispatchEvent(new Event('ended')));
+    const current = await readState(page,'output');
+    await page.evaluate(() => document.dispatchEvent(new Event('ended')));
+    expect((await readState(page,'output')).session).toBe(current.session);
     await page.keyboard.press('Space');
     await expect(bar(page,'candidate',483200,487200)).toBeVisible();
     await expect(page.getByText(/현재 범위가 마지막 후보입니다/)).toBeVisible();
@@ -688,16 +702,38 @@ try {
     await expect(bar(page,'locked',483200,487200)).toBeVisible();
     expect(await readState(page,'markCalls')).toEqual([]);
     await page.keyboard.press('Escape');
-    await expect.poll(async () => (await readState(page,'rangeCalls')).at(-1)?.start).toBe(487200);
+    await expect.poll(async () => (await readState(page,'playCalls')).at(-1)?.start).toBe(487200);
     expect((await readState(page,'markCalls'))[0].ranges).toEqual([{start:483200,end:487200}]);
     await seekAndPause(page,0.2);
     await page.keyboard.press('n');
-    await expect.poll(async () => (await readState(page,'rangeCalls')).at(-1)).toEqual({start:505600,end:512000});
+    await expect.poll(async () => (await readState(page,'playCalls')).at(-1)).toEqual({start:505600,end:512000});
     await expect(page.getByText('녹음 끝',{exact:true})).toBeVisible();
     expect(await readState(page,'endedCalls')).toBe(0);
+    expect(await readState(page,'reviewPlaybackCalls')).toBe(0);
     expect(await readState(page,'markCalls')).toHaveLength(1);
     expect((await readState(page,'segments')).every(s => !s.verified && !s.verdict)).toBe(true);
     await finish(page,errors,'chunk transition, stale preview cancellation and explicit selection at minimum size');
+  }
+  {
+    const { page, errors } = await fixture({quick:true,branch:true});
+    await startQuick(page);
+    await seekAndPause(page,2.25);
+    const oldSession = (await readState(page,'output')).session;
+    await page.evaluate(() => {
+      Object.assign(window.__REVIEW_TEST__.output,{state:'failed',heard:false,error:'시험 출력 장치 오류'});
+    });
+    await expect(page.getByRole('alert')).toHaveText('시험 출력 장치 오류');
+    await page.getByRole('button',{name:'재생 다시 시도',exact:true}).click();
+    await expect.poll(async () => (await readState(page,'playCalls')).at(-1).start).toBe(36000);
+    const session = (await readState(page,'output')).session;
+    expect(session).not.toBe(oldSession);
+    await page.getByRole('button',{name:'검수 나가기',exact:true}).click();
+    await expect.poll(async () => (await readState(page,'controlCalls')).some(call =>
+      call.session === session && call.action.kind === 'stop')).toBe(true);
+    await expect(page.locator('audio,video')).toHaveCount(0);
+    expect(await readState(page,'reviewPlaybackCalls')).toBe(0);
+    expect(await readState(page,'reviewCalls')).toBe(0);
+    await finish(page,errors,'runtime device error permits retry at the last confirmed source position and exit stops only that preview session');
   }
   {
     const { page, errors } = await fixture({ quick:true, branch:true });
@@ -789,7 +825,7 @@ try {
     await seekAndPause(page,2.25);
     await tap('오류 표시');
     await tap('뒤 절반 듣기');
-    await expect.poll(async () => (await readState(page,'rangeCalls')).at(-1)).toEqual({start:20000,end:36000});
+    await expect.poll(async () => (await readState(page,'playCalls')).at(-1)).toEqual({start:20000,end:36000});
     await tap('뒤 절반 선택');
     await tap('더 좁히기');
     await tap('더 좁히기');

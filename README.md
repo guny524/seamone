@@ -18,7 +18,7 @@
 - 마이크는 macOS, Windows, Linux에서 쓴다. Android와 iOS에서는 파일을 가져올 수 있다. 기본 마이크가 없거나 접근이 거부되면 장치와 시스템 권한을 확인한 뒤 다시 시작한다
 - 녹음은 최대 30분이며 제한에 도달하면 마이크를 해제한다. 장치가 끊기거나 앱을 닫으려 할 때 이미 받은 음성은 저장하거나 취소할 수 있다. 보관함 쓰기에 실패하면 같은 음성을 다시 저장할 수 있다. `녹음 취소`를 선택하면 받은 음성을 버린다
 - 파일은 0초 초과 30분 이하, 최대 512MiB까지 받는다. WAV는 PCM 정수(8·16·24·32bit) 또는 32bit float를 지원한다. M4A는 AAC-LC를 지원한다. 지원하지 않는 인코딩, 읽을 수 없는 오디오 트랙, 확인된 손상에는 오류 이유를 표시한다
-- 오류를 표시하면 앱은 누르는 순간의 재생 위치를 읽는다, 앞선 전사 줄 시작점보다 최대 1초 앞에서 후보를 시작하되 이번에 실제로 재생한 최근 6초 안으로 제한한다
+- 오류를 표시하면 앱은 runtime session을 일시 정지하고 반환된 원본 sample 위치를 읽는다, 앞선 전사 줄 시작점보다 최대 1초 앞에서 후보를 시작하되 이번에 실제로 재생한 최근 6초 안으로 제한한다
 - 새 단계의 왼쪽 절반이 먼저 회색으로 표시된다. 각 절반이 4,000 samples(250ms) 이상일 때 나눈다. 더 나눌 수 없으면 현재 범위를 마지막 후보로 표시한다. 처음부터 나눌 수 없는 범위는 `Enter`로 선택한다
 - `↑`로 올라가면 오류의 빨간 막대와 그 갈래에서 `Enter`로 고른 검은 막대가 남는다. 같은 갈래에서 한 번 더 올라가도 보관한 오류 범위를 넓히지 않는다
 - `Backspace`는 현재 회색 후보를 버리고 한 단계 올라간다. 처음 단계에서 보관한 오류가 없으면 재생으로 돌아간다. 보관한 오류가 있으면 `Esc`로 그 범위만 저장할 수 있다
@@ -53,9 +53,10 @@ graph LR
 - runtime의 비공개 `playback_evidence`는 현재 조각과 revision의 음성을 준비하고 `player`에 한 session을 둔다, 비공개 `output`의 Renderer가 CPAL callback의 장치 시계로 출력 완료를 확인한 범위만 `PlayedRun`으로 보내고 `Heard`가 합집합을 만든다, 조각 전체를 덮은 session만 `AuthorizedReview`를 발급한다, `Store::mutate`는 이 승인 값의 불변 요청만 저장한다, Yes와 No 판정 및 교정 확정은 이 증거를 요구하며 초안 저장과 오류 표시 해제, 검증 취소는 재생 없이 승인한다
 - `VerifiedText`의 필드는 core의 검수 전이 밖에서 직접 조립하지 못하고 getter로 읽는다. DB와 IPC의 JSON 모양을 유지하기 위해 Deserialize는 남긴다. 따라서 타입의 필드 비공개만으로 저장 권한을 보장하지 않으며 Store의 확인 전사 쓰기와 학습 대기열 삽입 위치도 검사한다
 - `app/src-tauri`: 신뢰할 창과 command 권한, 파일 dialog, mobile 문서 URI 접근과 해제, clipboard와 Tauri 이벤트를 맡고 `LibraryService`를 호출한다, Android의 seek할 수 없는 문서 스트림은 runtime이 크기를 제한해 임시 파일로 옮긴 뒤 디코딩한다
-- `app/ui`: 빠른 검수, 조각별 검증, 교정, 일반 편집 화면, 검증과 교정은 runtime의 재생 상태를 조회한다, 빠른 검수는 HTML audio로 원본을 최대 30초씩 이어 재생하며 확인 전사를 만드는 증거는 발급받지 않는다
+- `app/ui`: 빠른 검수, 조각별 검증, 교정, 일반 편집 화면, 빠른 검수와 검증·교정은 runtime의 재생 상태를 조회한다, 빠른 검수는 preview session으로 원본을 최대 30초씩 이어 재생하며 확인 전사를 만드는 증거는 발급받지 않는다
 - `research`: 앱과 별도인 PyTorch 연구 코드, 앱은 Python을 포함하지 않고 연구 adapter를 활성화하지 않는다
 - research의 직접 삭제 API는 `seamone_research/cache.py`의 `remove_inside`에 모은다. 이 함수는 HF_HOME 아래 전용 eval-raw/seamone_eval cache 안에서 root의 자식만 삭제하고 공유 HF_HOME/hub와 root 밖의 symlink를 거절한다. manifest 파일 삭제는 기존 missing_ok 동작을 유지한다
+- UI는 HTML audio·video node와 media API로 소리를 내지 않는다, UI Cargo의 HtmlAudioElement·HtmlMediaElement feature를 제거했으며 Cargo 경계 검사가 별칭·platform·optional feature 전달의 재도입을 거절한다, Leptos의 tachys가 media binding을 간접 활성화하므로 타입 자체가 compiler에서 사라지지는 않는다, 구조 검사는 제품 UI의 media 타입·tag와 명시적인 media JavaScript도 거절한다, 임의의 동적 JavaScript를 격리하는 sandbox는 아니다
 - 재생 확인은 1배속 출력 callback에 제출한 모든 source sample의 버퍼 끝이 장치 시계를 지난 상태다, 일시 정지와 되감기, 앞으로 넘긴 뒤 빈 구간을 다시 듣는 것을 허용한다, 장치 오류와 잘못된 시각은 session 전체를 무효로 하며 처음부터 다시 열어야 한다, OS mute나 실제 사람의 청취는 확인할 수 없다, 앱에 별도 음량 조절은 없다
 
 ### 2-1. 데이터와 저장
@@ -67,7 +68,7 @@ graph LR
 - native는 `Transcriber`가 반환한 줄의 밀리초 범위를 16kHz 원본 샘플 범위로 변환한다. Whisper small의 DTW token 시각은 실제 디코딩된 텍스트와 일치하고 줄 범위 안에서 순서가 맞을 때 함께 저장한다
 - 여러 글자로 된 token, UTF-8이 나뉜 token, grapheme에 걸친 token은 확인 가능한 시간 범위를 공유한다. 타이밍이 없는 기존 데이터나 사람이 수정한 글은 전사 줄 전체의 범위로 표시한다
 - 재생은 파일에서 해당 구간만 seek해 읽는다, 시작을 포함하고 끝을 제외하는 최대 60초 WAV를 만들어 제한된 IPC 응답으로 보낸다
-- `get_recording_playback`은 녹음 ID, 녹음 revision, 원본 표본 범위를 받아 WAV를 돌려준다, 빠른 검수와 절반 듣기는 이 명령을 쓰며 학습에 필요한 재생 증명을 발급받지 않는다
+- `get_recording_playback`은 녹음 ID, 녹음 revision, 원본 표본 범위를 받아 WAV를 돌려준다, 빠른 검수의 스펙트로그램 분석에 쓰며 소리를 내거나 학습에 필요한 재생 증명을 발급받지 않는다
 - 빠른 검수의 `save_error_marks`는 요청 ID, 녹음 ID와 revision, 여러 원본 샘플 범위를 받는다. 이번 요청의 샘플 범위와 겹치는 조각을 한 SQLite transaction에서 교정 대상으로 바꾸고 기존 학습 자격을 거둔다. 앞서 기록한 샘플을 새 요청으로 다시 표시해도 다시 교정 대상으로 올린다. 이미 표시한 샘플은 중복 저장하지 않으며, 같은 요청 ID와 내용으로 재전송하면 처음 저장한 결과를 유지한다
 - 기존 단일 범위 저장 명령 `save_error_mark`와 페이지 조회 명령 `get_error_marks`도 쓸 수 있다. 오류 범위를 저장할 때 조각의 원본 시간, 자동 전사문, 편집한 글, 기존 Yes/No 판정을 보존한다
 - 조각 목록은 한 응답에 최대 32개, 각 글은 최대 32KB, 녹음 전체의 편집 글은 최대 2MB다
@@ -88,7 +89,7 @@ graph LR
 ### 2-3. 음성 출력 IPC
 - 아래 명령은 `main` 로컬 창에서만 쓴다, 모든 위치는 녹음 원본의 16kHz sample 절대 위치이고 범위는 시작 포함, 끝 제외다
 - `get_playback({ segmentId, revision })`은 현재 조각 전체의 WAV와 `session`, `segment_id`, `revision`을 반환한다, 아직 재생하지 않으며 이전 session과 증거를 버린다
-- `play_recording({ recordingId, revision, range })`은 검수 증거를 만들지 않는 미리 듣기를 시작하고 Status를 반환한다, 이전 session은 닫는다, 빠른 검수의 HTML audio 연결은 다음 PR에서 이 명령으로 바꾼다
+- `play_recording({ recordingId, revision, range })`은 검수 증거를 만들지 않는 미리 듣기를 시작하고 Status를 반환한다, 이전 session은 닫는다, 빠른 검수의 30초 연속 재생과 절반 듣기가 이 명령을 쓴다
 - `control_playback({ session, action })`은 `action.kind`의 `play`, `pause`, `seek`, `stop`을 받고 Status를 반환한다, `seek`는 절대 위치 `at`을 함께 받으며 현재 구간 밖을 거절한다, `stop`은 장치를 닫고 확인된 범위를 유지해 다시 `play`할 수 있게 한다, 다른 session의 조작은 거절한다
 - `get_playback_status({})`는 `session`, `state`, `position`, `heard`, `error`를 반환한다, state는 `idle`, `ready`, `playing`, `paused`, `finished`, `failed`다, 끝 위치여도 건너뛴 구간이 남으면 heard는 false다, UI가 보내는 완료 명령은 없다
 - 데스크톱의 출력 thread가 CPAL stream을 소유한다, 출력 callback은 미리 준비한 음성과 고정 크기 queue를 쓰고 lock과 할당을 하지 않는다, 장치 buffer 시각이 거꾸로 가거나 playback 시각이 callback보다 앞이면 오류다, 벽시계를 기다려 증거를 만들지 않는다
@@ -130,7 +131,7 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 - `make check-review-writes`는 보호 SQL을 비공개 WritePermit의 고정 저장 메서드로 모으고, 저장 전용 module의 타입·권한·구현을 base의 해시와 대조한다. cfg(test) module 안의 시험 본문은 이 해시에서 뺀다. 호출자에게 열린 permit을 돌려주지 않으며, 메서드 안에서 실제 저장값을 검사하고 직렬화한다. 검수 저장은 DB의 현재 값과 승인된 요청의 core 전이를 대조하고, 새 확인 전사에는 Played 승인을 요구한다. SQLite authorizer는 메서드 밖의 보호 쓰기, training_queue 대상·revision 열 UPDATE, trigger를 통한 보호 쓰기를 거절한다. 정적 검사는 SQL 인자의 리터럴 전체를 EXPLAIN하고, prepare*로 만든 Statement의 실행 인자는 데이터로 구분한다. 동적 SQL과 메서드 참조, Batch/raw API와 외부 소스 경로(cfg_attr 포함)를 막고, 시험 외의 Connection::open*은 Store::open으로 제한한다. authorizer/hooks 변경도 Store::open과 저장 module로 제한하며, migration 뒤 DDL과 writable_schema를 거절한다. migration 경로와 내용 해시도 base와 대조한다. 임의의 외부 프로그램까지 막는 sandbox는 아니다
 - `scripts/runtime_api.json`, `scripts/playback_api.json`, `scripts/review_writes.json`, `scripts/unsafe_files.json`, `scripts/comments.json`은 `LINT_BASE_REF`의 같은 목록과 비교한다. base에 목록이 없거나 현재 목록의 항목과 개수가 늘면 실패한다. 사람이 확인한 뒤에만 기준 브랜치의 목록을 늘리며, 이 PR의 CI는 사람이 보고 판단한다. 이슈 브랜치에서 목록을 함께 고쳐 검사 통과를 승인할 수 없다
 - CI의 기준 선택은 guard-base reusable workflow 한 곳에서 한다. PR은 base SHA, develop push는 첫 parent를 비교 기준으로 쓰고, 다른 브랜치 push는 origin/develop과의 merge-base를 쓴다. develop의 검사 정책은 이미 승인된 HEAD에서 읽으므로 merge한 목록·module 해시를 다시 거절하지 않는다. tag push에는 검사를 실행하지 않는다. base가 HEAD와 같은 PR은 거절하고 비교할 변경이 없는 branch push와 로컬 검사는 허용한다. guard-integrity는 base의 검사 코드와 목록으로 PR merge ref를 검사하므로 뒤처진 PR에 base가 승인한 변경도 포함한다. head의 검사 helper와 Make target은 실행하지 않는다. 보호 파일 변경은 별도 guard-review-trusted workflow의 pull_request_target job `guard-rules-review-trusted`가 merge-base부터 PR head까지 판정한다. 필수 check는 이 이름으로 지정하며 branch protection 설정은 레포 밖에서 관리한다. scripts, Makefile, research/Makefile, .github, AGENTS.md, .cargo, rust-toolchain.toml과 모든 crate의 lint 표가 보호 대상이다. trusted job은 head 코드를 실행하지 않는다. 검사 자체를 바꾸는 PR의 실패를 없애는 예외는 두지 않는다
-- `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치를 확인한다, 빠른 검수의 HTML audio event와 교정 화면의 runtime 상태 조회는 각각 시험한다, 앱의 IPC 서비스와 출력 진행은 시험용이다, 다운로드 페이지의 화면과 빌드 링크도 확인한다
+- `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치를 확인한다, 빠른 검수의 chunk 전환과 늦은 준비 취소, 교정 화면의 확인은 runtime 상태 조회로 시험하며 DOM ended event는 재생을 끝내지 못한다, 앱의 IPC 서비스와 출력 진행은 시험용이다, 다운로드 페이지의 화면과 빌드 링크도 확인한다
 - `make site-preview`: [다운로드 안내](site/index.html)를 로컬 `http://127.0.0.1:4173`에서 열어 본다. 포트가 쓰이는 중이면 `make site-preview SITE_PORT=4174`로 바꾼다
 - macOS 패키지 CI는 업로드할 DMG를 읽기 전용으로 열어 체크섬, 앱 식별자, CPU 종류와 마이크 권한 안내를 검사한다. Whisper 빌드에서는 Mach-O와 Info.plist의 최소 macOS 버전을 빌드 설정과 대조한다
 - `CARGO_BUILD_JOBS=2 make playback-device-proof`: 기본 출력 장치로 1초의 작은 400Hz tone을 내고 장치 시계와 들은 범위를 확인한다, 기본 시험에서는 ignored이며 실제 장치가 있는 macOS·Windows·Linux에서 사람이 별도로 실행한다, 소리가 나므로 자동 CI와 worker에서는 실행하지 않는다

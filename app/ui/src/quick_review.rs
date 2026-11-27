@@ -3,11 +3,11 @@ use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkBatch, Half, MIN_PREVIEW_SAMPLES, Narrowing, candidate},
     ipc::Command,
+    playback::{Action as PlaybackAction, State as PlaybackState, Status as PlaybackStatus},
     review::{RecordingInfo, SAMPLE_RATE, SampleRange, Segment},
 };
 use serde_json::json;
 use std::time::Duration;
-use web_sys::HtmlAudioElement;
 
 const SCAN_CHUNK: u64 = 30 * SAMPLE_RATE;
 
@@ -16,7 +16,29 @@ struct Clip {
     id: u64,
     range: SampleRange,
     scan: bool,
-    url: Option<String>,
+    session: Option<String>,
+    wav: Option<String>,
+}
+
+impl Clip {
+    fn observe(&self, status: &PlaybackStatus) -> Result<(u64, bool), String> {
+        if self.session.is_none() || status.session != self.session {
+            return Err("재생이 바뀌었습니다. 현재 구간을 다시 여세요.".into());
+        }
+        if status.state == PlaybackState::Failed {
+            return Err(status
+                .error
+                .clone()
+                .unwrap_or_else(|| "음성을 재생하지 못했습니다.".into()));
+        }
+        if status.state == PlaybackState::Idle
+            || !(self.range.start..=self.range.end).contains(&status.position)
+            || (status.state == PlaybackState::Finished && status.position != self.range.end)
+        {
+            return Err("재생 위치가 현재 구간과 맞지 않습니다.".into());
+        }
+        Ok((status.position, status.state == PlaybackState::Finished))
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -33,7 +55,8 @@ pub struct QuickReview {
     analysis_request: StoredValue<u64>,
     clip: RwSignal<Option<Clip>>,
     last_scan: RwSignal<Option<Clip>>,
-    audio: StoredValue<Option<HtmlAudioElement>, LocalStorage>,
+    preparing: StoredValue<bool>,
+    flagging: StoredValue<bool>,
     error: RwSignal<String>,
     status: RwSignal<String>,
 }
@@ -53,7 +76,8 @@ impl QuickReview {
             analysis_request: StoredValue::new(0),
             clip: RwSignal::new(None),
             last_scan: RwSignal::new(None),
-            audio: StoredValue::new_local(None),
+            preparing: StoredValue::new(false),
+            flagging: StoredValue::new(false),
             error,
             status,
         }
@@ -78,11 +102,13 @@ impl QuickReview {
     }
 
     fn stop_audio(self) {
-        if let Some(audio) = self.audio.try_update_value(Option::take).flatten() {
-            let _ = audio.pause();
+        let previous = self.clip.try_update(Option::take).flatten();
+        if let Some(clip) = &previous
+            && let Some(session) = &clip.session
+        {
+            api::stop_playback(session.clone());
         }
-        let last_scan = self.clip.try_update(Option::take).flatten();
-        if let Some(scan) = last_scan.filter(|clip| clip.scan && clip.url.is_some()) {
+        if let Some(scan) = previous.filter(|clip| clip.scan && clip.wav.is_some()) {
             self.last_scan.set(Some(scan));
         }
         self.preview_cursor.set(None);
@@ -105,9 +131,9 @@ impl QuickReview {
     }
 
     fn play(self, range: SampleRange, scan: bool) {
-        let Some(recording) = self.recording.get_untracked() else {
+        if self.recording.with_untracked(Option::is_none) {
             return;
-        };
+        }
         self.stop_audio();
         self.error.set(String::new());
         let id = self.next_sequence();
@@ -118,25 +144,85 @@ impl QuickReview {
             id,
             range,
             scan,
-            url: None,
+            session: None,
+            wav: None,
         }));
+        self.prepare_current();
+    }
+
+    fn prepare_current(self) {
+        if self.preparing.get_value() {
+            return;
+        }
+        let Some(recording) = self.recording.get_untracked() else {
+            return;
+        };
+        let Some(clip) = self
+            .clip
+            .get_untracked()
+            .filter(|clip| clip.session.is_none())
+        else {
+            return;
+        };
+        self.preparing.set_value(true);
+        spawn_local(async move {
+            let result = api::call::<PlaybackStatus>(Command::PlayRecording,
+                json!({"recordingId":recording.id,"revision":recording.revision,"range":clip.range})).await;
+            if !self.is_current(clip.id) {
+                if let Ok(status) = result
+                    && let Some(session) = status.session
+                {
+                    let _ = api::call::<PlaybackStatus>(
+                        Command::ControlPlayback,
+                        json!({"session":session,"action":{"kind":"stop"}}),
+                    )
+                    .await;
+                }
+                self.preparing.set_value(false);
+                self.prepare_current();
+                return;
+            }
+            self.preparing.set_value(false);
+            match result {
+                Ok(status) => {
+                    let mut ready = clip.clone();
+                    ready.session.clone_from(&status.session);
+                    match ready.observe(&status) {
+                        Ok(_) => {
+                            self.clip.set(Some(ready));
+                            if clip.scan {
+                                self.load_scan_wav(clip.id, recording, clip.range);
+                            }
+                        }
+                        Err(error) => {
+                            if let Some(session) = ready.session {
+                                api::stop_playback(session);
+                            }
+                            self.failed(clip.id, error);
+                        }
+                    }
+                }
+                Err(error) => self.failed(clip.id, error),
+            }
+        });
+    }
+
+    fn load_scan_wav(self, id: u64, recording: RecordingInfo, range: SampleRange) {
         spawn_local(async move {
             let result = api::call::<String>(
                 Command::GetRecordingPlayback,
                 json!({"recordingId":recording.id,"revision":recording.revision,"range":range}),
             )
             .await;
-            if !self.is_current(id) {
-                return;
-            }
-            match result {
-                Ok(wav) => self.clip.set(Some(Clip {
-                    id,
-                    range,
-                    scan,
-                    url: Some(format!("data:audio/wav;base64,{wav}")),
-                })),
-                Err(error) => self.failed(id, error),
+            if self.is_current(id) {
+                match result {
+                    Ok(wav) => self.clip.update(|clip| {
+                        if let Some(clip) = clip {
+                            clip.wav = Some(wav);
+                        }
+                    }),
+                    Err(error) => self.error.set(error),
+                }
             }
         });
     }
@@ -153,32 +239,45 @@ impl QuickReview {
     }
 
     fn playhead(self) -> u64 {
-        self.clip.with_untracked(|clip| {
-            clip.as_ref().filter(|clip| clip.scan).map_or_else(
-                || self.cursor.get_untracked(),
-                |clip| self.clip_position(clip.range),
-            )
-        })
-    }
-
-    fn clip_position(self, range: SampleRange) -> u64 {
-        let elapsed = self.audio.with_value(|audio| {
-            audio
-                .as_ref()
-                .and_then(|node| Duration::try_from_secs_f64(node.current_time()).ok())
-                .map_or(0, |time| {
-                    time.as_nanos() * u128::from(SAMPLE_RATE) / 1_000_000_000
-                })
-        });
-        let span = range.end - range.start;
-        range.start + u64::try_from(elapsed.min(u128::from(span))).unwrap_or(span)
+        self.cursor.get_untracked()
     }
 
     pub fn flag(self, segments: RwSignal<Vec<Segment>>) {
-        if self.narrowing.with_untracked(Option::is_some) {
+        if self.narrowing.with_untracked(Option::is_some) || self.flagging.get_value() {
             return;
         }
-        let playhead = self.playhead();
+        let Some(clip) = self.clip.get_untracked() else {
+            self.resume();
+            return;
+        };
+        let Some(session) = clip.session.clone() else {
+            return;
+        };
+        self.flagging.set_value(true);
+        spawn_local(async move {
+            let result = api::call::<PlaybackStatus>(
+                Command::ControlPlayback,
+                json!({"session":session,"action":PlaybackAction::Pause}),
+            )
+            .await;
+            self.flagging.set_value(false);
+            if !self.is_current(clip.id) {
+                return;
+            }
+            match result {
+                Ok(status) => {
+                    let checked = clip;
+                    match checked.observe(&status) {
+                        Ok((position, _)) => self.flag_at(segments, position),
+                        Err(error) => self.failed(checked.id, error),
+                    }
+                }
+                Err(error) => self.failed(clip.id, error),
+            }
+        });
+    }
+
+    fn flag_at(self, segments: RwSignal<Vec<Segment>>, playhead: u64) {
         let latest_line_start = segments.with_untracked(|segments| {
             segments
                 .iter()
@@ -194,8 +293,20 @@ impl QuickReview {
             self.status.set(String::new());
             self.narrowing.set(Some(Narrowing::new(range)));
             self.load_analysis_audio(range);
-        } else if self.clip.with_untracked(Option::is_none) {
-            self.resume();
+        } else if let Some(session) = self
+            .clip
+            .with_untracked(|clip| clip.as_ref()?.session.clone())
+        {
+            spawn_local(async move {
+                if let Err(error) = api::call::<PlaybackStatus>(
+                    Command::ControlPlayback,
+                    json!({"session":session,"action":PlaybackAction::Play}),
+                )
+                .await
+                {
+                    self.error.set(error);
+                }
+            });
         }
     }
 
@@ -361,20 +472,33 @@ impl QuickReview {
         });
     }
 
-    fn ended(self, id: u64, node: &HtmlAudioElement) {
-        if !node.ended() {
+    fn observe(self, id: u64, status: &PlaybackStatus) {
+        if !self.is_current(id) || self.flagging.get_value() {
             return;
         }
-        let Some((scan, end)) = self.clip.with_untracked(|clip| {
-            let clip = clip.as_ref().filter(|clip| clip.id == id)?;
-            Some((clip.scan, clip.range.end))
-        }) else {
-            return;
-        };
-        self.stop_audio();
-        if scan {
-            self.cursor.set(end);
-            self.resume();
+        let result = self.clip.with_untracked(|clip| {
+            let clip = clip.as_ref()?;
+            Some(
+                clip.observe(status)
+                    .map(|(position, finished)| (finished, clip.scan, position)),
+            )
+        });
+        match result {
+            Some(Ok((finished, scan, position))) => {
+                if scan {
+                    self.cursor.set(position);
+                } else {
+                    self.preview_cursor.set(Some(position));
+                }
+                if finished {
+                    self.stop_audio();
+                    if scan {
+                        self.resume();
+                    }
+                }
+            }
+            Some(Err(error)) => self.failed(id, error),
+            None => {}
         }
     }
 
@@ -421,7 +545,7 @@ pub fn QuickReviewPanel(
                     <button disabled=move || quick.saving.get() on:click=move |_| on_exit.run(())>"검수 나가기"</button>
                 </div>
             </div>
-            {move || quick.clip.get().filter(|clip| clip.url.is_some()).map(|clip| view! { <QuickAudio quick clip/> })}
+            <QuickOutput quick/>
             <Show when=move || quick.narrowing.with(Option::is_some)
                 fallback=move || view! { <ScanPanel quick segments marks/> }>
                 <NarrowingPanel quick segments marks on_confirm/>
@@ -628,10 +752,7 @@ fn TranscriptContext(lines: Memo<Vec<Segment>>) -> impl IntoView {
 
 fn scan_audio(clip: Option<&Clip>, range: SampleRange) -> Option<String> {
     let clip = clip.filter(|clip| clip.scan && clip.range == range)?;
-    clip.url
-        .as_deref()?
-        .strip_prefix("data:audio/wav;base64,")
-        .map(str::to_owned)
+    clip.wav.clone()
 }
 
 #[component]
@@ -654,29 +775,147 @@ fn ErrorHalf(quick: QuickReview, half: Half) -> impl IntoView {
 }
 
 #[component]
-fn QuickAudio(quick: QuickReview, clip: Clip) -> impl IntoView {
-    let audio = NodeRef::<leptos::html::Audio>::new();
-    let id = clip.id;
-    audio.on_load(move |node| {
-        if quick.is_current(id) {
-            quick.audio.set_value(Some(node));
-        } else {
-            let _ = node.pause();
+fn QuickOutput(quick: QuickReview) -> impl IntoView {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    let alive = Arc::new(AtomicBool::new(true));
+    let pending = Arc::new(AtomicBool::new(false));
+    let active = Arc::clone(&alive);
+    let poll = move || {
+        if !active.load(Ordering::Relaxed) || quick.flagging.get_value() {
+            return;
         }
-    });
-    view! {
-        <audio node_ref=audio src=clip.url autoplay=true aria-label="빠른 검수 음성"
-            on:timeupdate=move |_| {
-                if quick.is_current(id) {
-                    let position = quick.clip_position(clip.range);
-                    if clip.scan {
-                        quick.cursor.set(position);
-                    } else {
-                        quick.preview_cursor.set(Some(position));
-                    }
-                }
+        let Some(id) = quick.clip.with_untracked(|clip| {
+            clip.as_ref()
+                .filter(|clip| clip.session.is_some())
+                .map(|clip| clip.id)
+        }) else {
+            return;
+        };
+        if pending.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        let pending = Arc::clone(&pending);
+        let active = Arc::clone(&active);
+        spawn_local(async move {
+            let status = api::call::<PlaybackStatus>(Command::GetPlaybackStatus, json!({})).await;
+            pending.store(false, Ordering::Relaxed);
+            if !active.load(Ordering::Relaxed) {
+                return;
             }
-            on:ended=move |event| quick.ended(id, &event_target::<HtmlAudioElement>(&event))
-            on:error=move |_| quick.failed(id,"음성을 재생하지 못했습니다.".into())/>
+            match status {
+                Ok(status) => quick.observe(id, &status),
+                Err(error) => quick.failed(id, error),
+            }
+        });
+    };
+    let timer = set_interval_with_handle(poll, Duration::from_millis(40)).ok();
+    on_cleanup(move || {
+        alive.store(false, Ordering::Relaxed);
+        if let Some(timer) = timer {
+            timer.clear();
+        }
+        quick.stop_audio();
+    });
+    view! { <span hidden aria-hidden="true" data-runtime-quick-output/> }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn clip() -> Clip {
+        Clip {
+            id: 7,
+            range: SampleRange {
+                start: 32_000,
+                end: 48_000,
+            },
+            scan: true,
+            session: Some("preview".into()),
+            wav: None,
+        }
+    }
+
+    fn status(position: u64, state: PlaybackState) -> PlaybackStatus {
+        PlaybackStatus {
+            session: Some("preview".into()),
+            position,
+            state,
+            heard: false,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn positions_are_absolute_source_samples_and_only_runtime_finish_advances() {
+        let clip = clip();
+        assert_eq!(
+            clip.observe(&status(36_000, PlaybackState::Playing))
+                .unwrap(),
+            (36_000, false)
+        );
+        assert_eq!(
+            clip.observe(&status(48_000, PlaybackState::Paused))
+                .unwrap(),
+            (48_000, false)
+        );
+        assert_eq!(
+            clip.observe(&status(48_000, PlaybackState::Finished))
+                .unwrap(),
+            (48_000, true)
+        );
+    }
+
+    #[test]
+    fn stale_sessions_errors_and_positions_outside_the_clip_are_rejected() {
+        let mut clip = clip();
+        let mut stale = status(36_000, PlaybackState::Playing);
+        stale.session = Some("old".into());
+        let mut failed = status(36_000, PlaybackState::Failed);
+        failed.error = Some("device disconnected".into());
+        for wrong in [
+            stale,
+            status(31_999, PlaybackState::Playing),
+            status(48_001, PlaybackState::Playing),
+            status(40_000, PlaybackState::Finished),
+            status(32_000, PlaybackState::Idle),
+            failed,
+        ] {
+            assert!(clip.observe(&wrong).is_err());
+        }
+        clip.session = None;
+        let mut missing = status(32_000, PlaybackState::Ready);
+        missing.session = None;
+        assert!(clip.observe(&missing).is_err());
+    }
+
+    #[test]
+    fn waveform_data_does_not_change_the_session_or_its_position() {
+        let mut clip = clip();
+        let recording_range = clip.range;
+        let paused = status(36_000, PlaybackState::Paused);
+        let before = clip.observe(&paused).unwrap();
+        clip.wav = Some("waveform".into());
+        assert_eq!(
+            scan_audio(Some(&clip), recording_range),
+            Some("waveform".into())
+        );
+        assert_eq!(clip.observe(&paused).unwrap(), before);
+        assert_eq!(clip.session.as_deref(), Some("preview"));
+        assert!(
+            scan_audio(
+                Some(&clip),
+                SampleRange {
+                    start: 0,
+                    end: 16_000
+                }
+            )
+            .is_none()
+        );
+        clip.scan = false;
+        assert!(scan_audio(Some(&clip), recording_range).is_none());
     }
 }

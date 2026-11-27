@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from check_crate_boundaries import ui_output_errors
+
 CHECK = Path(__file__).with_name("check_crate_boundaries.py").resolve()
 
 
@@ -140,6 +142,44 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("test-support belongs only", result.stderr)
+
+    def test_ui_cannot_enable_browser_output_through_gated_aliased_dependencies(self):
+        for kind in ['dependencies', 'build-dependencies', 'target.\'cfg(target_os="ios")\'.dev-dependencies']:
+            for feature in ['HtmlAudioElement', 'HtmlMediaElement']:
+                with self.subTest(kind=kind, feature=feature):
+                    path = self.root / 'ui-layer/Cargo.toml'
+                    original = path.read_text()
+                    try:
+                        self.add('ui-layer', f'[{kind}]\nbrowser = {{package="web-sys",version="0.3",features=["{feature}"]}}\n')
+                        result = self.check()
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn('UI web-sys output feature', result.stderr)
+                    finally:
+                        path.write_text(original)
+
+    def test_ui_cannot_forward_optional_web_output_but_can_render_waveforms(self):
+        self.add('ui-layer', '[dependencies]\nbrowser = {package="web-sys",version="0.3",features=["CanvasRenderingContext2d"],optional=true}\n')
+        self.assertEqual(self.check().returncode, 0)
+        self.add('ui-layer', '[features]\nplayback=["browser?/HtmlMediaElement"]\n')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('UI web-sys output feature', result.stderr)
+
+    def test_ui_media_tags_types_and_javascript_are_rejected_even_if_transitive_bindings_exist(self):
+        for source in ['view! { <audio autoplay=true/> }', 'view! { <video/> }',
+                       'use web_sys::HtmlAudioElement as Player;', 'leptos::html::Audio',
+                       '#[wasm_bindgen(inline_js = "new Audio()")]',
+                       'element.set_inner_html(r#"<audio src=x>"#)']:
+            with self.subTest(source=source):
+                self.assertTrue(list(ui_output_errors(source)))
+        self.assertEqual(list(ui_output_errors('// HtmlAudioElement\nlet caption = "audio recording"; view! { <canvas/> }')), [])
+
+    def test_ui_source_scan_is_part_of_the_cargo_boundary_command(self):
+        source = self.root / 'ui-layer/src/lib.rs'
+        source.write_text('fn player() { let _ = web_sys::HtmlMediaElement::play; }')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('UI media API is forbidden', result.stderr)
 
 
 if __name__ == "__main__":

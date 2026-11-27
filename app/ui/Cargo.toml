@@ -12,7 +12,7 @@ num-traits = "0.2.19"
 seamone-core.workspace = true
 serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
-web-sys = { version = "0.3", features = ["HtmlAudioElement", "HtmlMediaElement", "KeyboardEvent", "HtmlTextAreaElement", "HtmlElement", "Window", "Document", "Storage", "CanvasRenderingContext2d", "HtmlCanvasElement", "ImageData"] }
+web-sys = { version = "0.3", features = ["KeyboardEvent", "HtmlTextAreaElement", "HtmlElement", "Window", "Document", "Storage", "CanvasRenderingContext2d", "HtmlCanvasElement", "ImageData"] }
 base64 = "0.22"
 hound = "3.5.1"
 console_error_panic_hook = "0.1.7"

@@ -417,13 +417,7 @@ impl Workspace {
     }
 
     pub fn stop_session(session: String) {
-        spawn_local(async move {
-            let _ = api::call::<seamone_core::playback::Status>(
-                Command::ControlPlayback,
-                json!({"session":session,"action":{"kind":"stop"}}),
-            )
-            .await;
-        });
+        api::stop_playback(session);
     }
 
     pub fn playback_error(self, ticket: &Ticket, message: String) {
