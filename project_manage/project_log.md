@@ -382,3 +382,6 @@
 
 ## 2026-11-27 16:08 PR #23 merge
 - 빠른 검수도 runtime 출력으로 재생하고 웹뷰가 소리를 내는 길을 검사로 막는 PR #23 을 merge 했다(`feba022`), 재생 확인의 근본 해결이 develop 에 들어갔다, 자세한 것은 이슈 log 2026-11-27 16:08
+
+## 2026-11-27 16:12 develop CI 통과와 이슈 #15 정리
+- PR #23 merge 뒤 develop push CI(ci, guard-integrity)가 통과했다, GitHub 이슈 #15 의 체크박스를 실제 상태로 맞췄다(남은 것은 실기기 재생 시험 하나)
