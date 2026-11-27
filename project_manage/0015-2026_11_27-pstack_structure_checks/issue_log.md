@@ -273,3 +273,7 @@
 - 남은 결함 셋: 검수 저장이 store lock 을 쥔 채 장치를 다시 여는 player lock 을 기다린다, macOS 에서 이름이 같은 입력 전용 장치가 있으면 매번 거절(추측), 지연을 읽지 못하는 실제 경로(장치 열기 실패)를 시험이 덮지 않는다
 - 확인하지 못한 것: Windows `GetStreamLatency` 가 Bluetooth A2DP 지연을 담는지, session 중 장치 지연이 바뀌는 경우
 - 세 건을 PR #22 worker 에게 맡겼다, 실기기 시험 절차(Bluetooth, AirPlay, Windows, Linux)를 이슈 board 7-9 에 사람 몫으로 적었다
+
+## 2026-11-27 15:15 PR #23 을 PR #22 위로 맞춤
+- 첫 worker(15:12 끝남): PR #22 의 `dec0801` 을 PR #23 브랜치에 merge 했다, 충돌 네 파일(`AGENTS.md`, `Makefile`, `README.md`, `app/ui/tests/review.mjs`)은 두 쪽 동작을 모두 남겨 풀었다, 자동 merge 된 `app.rs` 와 `workspace.rs` 도 본문을 대조해 PR #22 의 조작 Queue 와 slider 규칙, PR #23 의 준비 중 재생 막기가 함께 남은 것을 확인했다, 소스의 공개 항목과 현재 목록을 대조하는 시험(`scripts/test_runtime_api.py`)을 더했다
+- 메인이 `make test` 170개(실패 0)와 `make test-architecture` 통과를 확인하고 merge 커밋 `e97596d` 로 PR #23 에 push 했다, PR #22 에 13c 고침이 더해지면 다시 merge 한다
