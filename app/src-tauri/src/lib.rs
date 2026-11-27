@@ -802,7 +802,25 @@ mod tests {
                 verdict: Verdict::No,
             },
         };
-        assert!(invoke(&window, "save_review", json!({"request":req,"proof":null})).is_err());
+        let no_proof =
+            invoke(&window, "save_review", json!({"request":req,"proof":null})).unwrap_err();
+        assert_eq!(
+            invoke(&window, "save_review", json!({"request":req})).unwrap_err(),
+            no_proof
+        );
+        for malformed in [
+            json!([req, null]),
+            json!({"proof":null}),
+            json!({"request":req,"proof":7}),
+        ] {
+            let error = invoke(&window, "save_review", malformed).unwrap_err();
+            assert!(
+                error
+                    .as_str()
+                    .is_some_and(|message| message.starts_with("invalid args for command")),
+                "{error}"
+            );
+        }
         let playback: PlaybackReply = serde_json::from_value(
             invoke(
                 &window,
