@@ -367,18 +367,15 @@ impl Workspace {
         });
     }
 
-    pub fn control_playback(self, playback: &Playback, action: seamone_core::playback::Action) {
-        let playback = playback.clone();
-        spawn_local(async move {
-            if let Err(error) = api::call::<seamone_core::playback::Status>(
-                Command::ControlPlayback,
-                json!({"session":playback.session,"action":action}),
-            )
-            .await
-            {
-                self.playback_error(&playback.ticket, error);
-            }
-        });
+    pub async fn control_playback(
+        playback: &Playback,
+        action: seamone_core::playback::Action,
+    ) -> Result<seamone_core::playback::Status, String> {
+        api::call::<seamone_core::playback::Status>(
+            Command::ControlPlayback,
+            json!({"session":playback.session,"action":action}),
+        )
+        .await
     }
 
     pub fn observe_playback(

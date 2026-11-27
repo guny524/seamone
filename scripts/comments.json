@@ -46,6 +46,14 @@
       "sha256": "e86917fccd288019ad04378d8e00acf908e9f5b492f694efacbff250654ed113"
     },
     {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/macos.rs",
+      "sha256": "b05806acf8a287d98ef992dc0539d9d00ce007b2047dc84ba8c150f306fa0de0"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/windows.rs",
+      "sha256": "9bfef1034bcd1a4e99fadda3f6d28af7aeb30a6635bd94d83dc634bcb2d258c4"
+    },
+    {
       "path": "research/seamone_research/data.py",
       "sha256": "b3277b24692ab82bbb846cbeb4555315fbdf19d267affff5cfa3dcad6d1558b7"
     },

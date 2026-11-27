@@ -267,10 +267,11 @@ pub async fn control_playback<R: Runtime>(
 #[tauri::command]
 pub async fn get_playback_status<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, LibraryService>,
 ) -> Result<seamone_core::playback::Status, String> {
     trusted(&window)?;
-    state.playback_status()
+    tauri::async_runtime::spawn_blocking(move || window.state::<LibraryService>().playback_status())
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

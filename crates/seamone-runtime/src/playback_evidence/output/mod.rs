@@ -10,6 +10,14 @@ use std::sync::Arc;
     target_os = "macos",
     target_os = "windows"
 ))]
+mod clock;
+#[cfg(any(
+    test,
+    feature = "test-support",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "windows"
+))]
 mod engine;
 #[cfg(any(test, feature = "test-support"))]
 mod fake;

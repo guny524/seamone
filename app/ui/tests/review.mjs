@@ -39,7 +39,7 @@ wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28); wav.writeUInt16LE(2,
 wav.write('data', 36); wav.writeUInt32LE(wav.length - 44, 40);
 const browser = await chromium.launch({
   ...(process.env.SEAMONE_CHROME ? { executablePath: process.env.SEAMONE_CHROME } : {}),
-  args: ['--autoplay-policy=no-user-gesture-required'],
+  args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio'],
 });
 let completed = 0;
 async function captureReview(page, state) {
@@ -83,6 +83,9 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
       microphone: { state: microphone ? 'idle' : 'unavailable' }, finishCalls: [], failMicSave: false, nextImport: null,
       marks: [], markCalls: [], rangeCalls: [], reviewCalls: 0, endedCalls: 0, holdNextRange: false, failNextMark: false, lostMarkReply: false };
     state.output = {session:null, state:'idle', position:0, heard:false, error:null};
+    state.statusPolls = 0;
+    state.controlCalls = [];
+    state.holdControl = false;
     state.autoOutput = true;
     state.advanceOutput = frames => {
       const output = state.output, proof = proofs.get(output.session);
@@ -203,6 +206,11 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
         return copy(state.output);
       }
       if (command === 'control_playback') {
+        state.controlCalls.push(copy(args.action));
+        if (state.holdControl) {
+          state.holdControl = false;
+          await new Promise(resolve => { state.releaseControl = resolve; });
+        }
         if (args.session !== state.output.session) throw 'stale playback session';
         const proof = proofs.get(args.session), action = args.action;
         if (action.kind === 'play') {
@@ -217,6 +225,7 @@ async function fixture({ infoSeen = true, invalidFirst = false, quick = false, l
         return copy(state.output);
       }
       if (command === 'get_playback_status') {
+        state.statusPolls++;
         if (state.autoOutput) state.advanceOutput(640);
         return copy(state.output);
       }
@@ -282,6 +291,46 @@ async function seekAndPause(page, seconds) {
   await audio.evaluate((node, at) => { node.pause(); node.currentTime = at; },seconds);
 }
 try {
+  {
+    const {page,errors} = await fixture();
+    await startBinary(page);
+    await page.evaluate(() => { window.__REVIEW_TEST__.autoOutput = false; });
+    await page.getByRole('button',{name:'구간 재생 (Space)',exact:true}).click();
+    const slider = page.getByRole('slider',{name:'현재 조각 재생 위치',exact:true});
+    await expect(slider).toBeVisible();
+    await page.evaluate(() => { window.__REVIEW_TEST__.controlCalls = []; });
+    const pollingBeforeDrag = await readState(page,'statusPolls');
+    await slider.evaluate(node => {
+      node.value = '3200'; node.dispatchEvent(new Event('input',{bubbles:true}));
+    });
+    await expect.poll(() => slider.inputValue()).toBe('3200');
+    await expect.poll(() => page.evaluate(() => window.__REVIEW_TEST__.controlCalls.length)).toBe(0);
+    await expect.poll(() => readState(page,'statusPolls')).toBeGreaterThan(pollingBeforeDrag + 1);
+    await expect(slider).toHaveValue('3200');
+    await slider.evaluate(node => node.dispatchEvent(new Event('change',{bubbles:true})));
+    await expect.poll(() => readState(page,'controlCalls')).toEqual([{kind:'seek',at:3200}]);
+    await expect.poll(() => readState(page,'output')).toMatchObject({position:3200});
+    await slider.evaluate(node => {
+      node.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
+      node.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));
+      window.__REVIEW_TEST__.output.position = 4000;
+    });
+    await expect(slider).toHaveValue('4000');
+    await page.evaluate(() => {
+      window.__REVIEW_TEST__.controlCalls = [];
+      window.__REVIEW_TEST__.holdControl = true;
+    });
+    const toggle = page.locator('.runtime-playback button').first();
+    await toggle.click();
+    await expect.poll(() => readState(page,'controlCalls')).toEqual([{kind:'pause'}]);
+    await toggle.click();
+    await page.getByRole('button',{name:'재생 멈추기',exact:true}).click();
+    expect(await readState(page,'controlCalls')).toEqual([{kind:'pause'}]);
+    await page.evaluate(() => window.__REVIEW_TEST__.releaseControl());
+    await expect.poll(() => readState(page,'controlCalls')).toEqual([{kind:'pause'},{kind:'play'},{kind:'stop'}]);
+    await expect.poll(() => readState(page,'output')).toMatchObject({state:'paused'});
+    await finish(page,errors,'slider commits once and controls remain ordered while an IPC reply is pending');
+  }
   {
     const {page, errors} = await fixture({microphone: true});
     const start = page.getByRole('button', {name:'녹음 시작', exact:true});

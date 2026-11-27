@@ -1,10 +1,20 @@
 {
-  "description": "Only the reviewed native permission function may contain unsafe; both function identity and body hash are checked against the PR base.",
+  "description": "Only the reviewed native permission and output-latency functions may contain unsafe; both function identity and body hash are checked against the PR base.",
   "functions": [
     {
       "path": "crates/seamone-runtime/src/capture.rs",
       "function": "authorize_macos",
       "body_sha256": "e19148846a44799543a43b8b104d50db0e46e05364e481f65485e2e0e2ce90de"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/macos.rs",
+      "function": "read_latency",
+      "body_sha256": "cf17c1db5dfe57d08a0fc77943fc60777df706e6e81ba3f8ec8facb75512a6a2"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/windows.rs",
+      "function": "read_latency",
+      "body_sha256": "61a06fb4e1ee2ddd09ddc2c1e5cc43c91374c094b3786eb8a3c3e1146e0bbefb"
     }
   ]
 }

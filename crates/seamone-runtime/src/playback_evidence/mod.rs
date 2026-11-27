@@ -81,7 +81,7 @@ impl Playbacks {
 
     pub(super) fn prepare_review(
         &self,
-        store: &Store,
+        store: impl std::ops::Deref<Target = Store>,
         id: &str,
         revision: u64,
     ) -> Result<PlaybackReply, String> {
@@ -93,6 +93,7 @@ impl Playbacks {
         let wav = store
             .audio
             .range_wav(&segment.recording_id, segment.range, recording.samples)?;
+        drop(store);
         let session = self.player.lock().map_err(|e| e.to_string())?.load(
             samples(&wav)?,
             segment.range.start,
@@ -108,7 +109,7 @@ impl Playbacks {
 
     pub(super) fn play_recording(
         &self,
-        store: &Store,
+        store: impl std::ops::Deref<Target = Store>,
         id: &str,
         revision: u64,
         range: SampleRange,
@@ -118,6 +119,7 @@ impl Playbacks {
             return Err(Error::StaleRevision.to_string());
         }
         let wav = store.audio.range_wav(id, range, recording.samples)?;
+        drop(store);
         let mut player = self.player.lock().map_err(|e| e.to_string())?;
         let session = player.load(samples(&wav)?, range.start, None)?;
         player.control(&session, Action::Play)
@@ -185,7 +187,7 @@ pub(super) fn mutate_after_playback(
     let playbacks = Playbacks::fake();
     let session = if request.action.required_evidence().requires_playback() {
         let reply =
-            playbacks.prepare_review(store, &request.segment_id, request.expected_revision)?;
+            playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision)?;
         playbacks.finish(&reply.session)?;
         Some(reply.session)
     } else {

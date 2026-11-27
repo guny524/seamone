@@ -4,7 +4,7 @@
 - runtime의 Store, AudioLibrary, Connection과 raw mutate는 공개하지 않는다, host가 Store를 직접 바꾸는 길은 `make test`의 통과/compile_fail doctest와 `make check-architecture`의 `scripts/runtime_api.json` 대조로 막는다, 공개 항목을 목록에 더하기 전에 LibraryService의 증거 확인 경로를 거치는지 검토한다
 - Store의 검수 저장은 비공개 playback_evidence 모듈의 AuthorizedReview만 받는다, 새 확인 전사가 생기거나 바뀌면 admit이 Played 승인을 요구한다, prepare_review와 authorize_review는 LibraryService의 playback과 review에, render는 native callback과 test-support 가짜 장치에 고정한다, 함수 범위와 base 목록으로 대조한다
 - 재생 증거는 runtime output이 장치 callback 시계로 버퍼 끝을 확인한 범위의 합집합이다, PlayedRun과 Heard는 output 밖에 공개하지 않고 직접 생성과 변경을 컴파일 거절 시험으로 막는다, 실시간 callback은 lock·할당 없이 동작한다, playback_api.json은 생산 코드 해시와 fake 장치의 cfg 경계도 고정한다, 장치 오류는 session 전체를 무효로 한다, OS mute와 사람의 실제 청취는 확인하지 않는다, 빠른 검수의 HTML audio는 증거를 만들지 않는다
-- Rust unsafe는 scripts/unsafe_files.json에 적은 기존 마이크 권한 함수의 이름과 본문 해시가 같을 때만 쓴다, capture의 저장소·재생 증거·transmute 접근과 runtime include!는 거절한다, make check-unsafe와 base 대조가 이 범위를 확인한다
+- Rust unsafe는 scripts/unsafe_files.json에 적은 마이크 권한 함수와 플랫폼별 출력 지연 조회 함수의 이름과 본문 해시가 같을 때만 쓴다, capture의 저장소·재생 증거·transmute 접근과 runtime include!는 거절한다, make check-unsafe와 base 대조가 이 범위를 확인한다
 - VerifiedText의 필드는 core의 검수 전이 밖에 공개하지 않고 읽기는 getter로 한다, DB와 IPC 읽기를 위한 Deserialize는 유지하므로 이 타입만으로 저장 권한을 보장하지 않는다, struct literal 거절/정상 doctest와 JSON 시험이 필드 경계와 직렬화 모양을 확인한다
 - segments body 쓰기와 training_queue INSERT는 비공개 WritePermit의 고정 메서드 안에서 검사·직렬화·저장한다, 열린 permit은 밖으로 주지 않는다, 검수 저장은 DB의 현재 값과 승인된 core 전이를 대조한다, queue 대상·revision 열 UPDATE와 trigger를 통한 보호 쓰기도 거절한다, 저장 전용 module의 타입·권한·구현 해시를 base와 대조하고 cfg(test) module의 시험 본문은 뺀다
 - runtime_api.json, playback_api.json, review_writes.json, unsafe_files.json은 LINT_BASE_REF의 같은 목록과 대조한다, base에 목록이 없거나 항목을 스스로 늘리면 실패한다, 사람이 확인한 뒤에만 늘리며 이 PR의 CI는 사람이 보고 판단한다
