@@ -13,7 +13,7 @@ from seamone_research.cer import CerCounts, count_errors, ratio_estimate
 from seamone_research.data import EVAL_SETS, load_eval_ids
 from seamone_research.hypotheses import read_hypotheses
 from seamone_research.paths import hypothesis_path
-from seamone_research.score import common_prefix_length
+from seamone_research.score import shared_reference_prefix
 
 
 def pooled_rate(per_utterance: Sequence[CerCounts]) -> tuple[float, float]:
@@ -38,8 +38,7 @@ def counts_on_common_prefix(
     result: dict[str, list[CerCounts]] = {model: [] for model in models}
     for set_name in set_names:
         rows = {model: read_hypotheses(hypothesis_path(model, set_name)) for model in models}
-        ids = {model: [row["id"] for row in rows[model]] for model in models}
-        common = common_prefix_length(ids, expected[set_name]["ids"])
+        common = shared_reference_prefix(rows, expected[set_name]["ids"], set_name)
         for model in models:
             result[model] += [count_errors(r["ref"], r["hyp"]) for r in rows[model][:common]]
     return result

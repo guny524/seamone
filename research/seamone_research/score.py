@@ -53,6 +53,31 @@ def common_prefix_length(
     return min(lengths, default=0)
 
 
+def shared_reference_prefix(
+    rows_by_model: Mapping[str, Sequence[Mapping[str, str]]],
+    expected_ids: Sequence[str],
+    set_name: str,
+) -> int:
+    """공통 표본의 id와 CER 정규화 이후의 정답 글이 모두 같은지 확인한다."""
+    ids = {model: [row["id"] for row in rows] for model, rows in rows_by_model.items()}
+    common = common_prefix_length(ids, expected_ids)
+    if common == 0:
+        return 0
+
+    models = iter(rows_by_model.items())
+    baseline_model, baseline_rows = next(models)
+    baseline_refs = [normalize(row["ref"]) for row in baseline_rows[:common]]
+    for model, rows in models:
+        for index, (reference, row) in enumerate(zip(baseline_refs, rows[:common], strict=True)):
+            if reference != normalize(row["ref"]):
+                message = (
+                    f"{set_name}/{expected_ids[index]}: "
+                    f"{baseline_model} 과 {model} 의 정규화한 정답이 다르다"
+                )
+                raise ValueError(message)
+    return common
+
+
 def format_score(score: SetScore) -> str:
     counts = score.counts
     total = counts.reference_chars
@@ -74,8 +99,7 @@ def collect(models: Sequence[str], set_names: Sequence[str]) -> list[dict]:
         measured = {model: rows for model, rows in rows_by_model.items() if rows}
         if not measured:
             continue
-        ids = {model: [row["id"] for row in rows] for model, rows in measured.items()}
-        common = common_prefix_length(ids, expected[set_name]["ids"])
+        common = shared_reference_prefix(measured, expected[set_name]["ids"], set_name)
         for model, rows in measured.items():
             full = score_rows(model, set_name, rows)
             shared = score_rows(model, set_name, rows[:common])
