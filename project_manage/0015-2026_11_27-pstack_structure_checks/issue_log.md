@@ -277,3 +277,7 @@
 ## 2026-11-27 15:15 PR #23 을 PR #22 위로 맞춤
 - 첫 worker(15:12 끝남): PR #22 의 `dec0801` 을 PR #23 브랜치에 merge 했다, 충돌 네 파일(`AGENTS.md`, `Makefile`, `README.md`, `app/ui/tests/review.mjs`)은 두 쪽 동작을 모두 남겨 풀었다, 자동 merge 된 `app.rs` 와 `workspace.rs` 도 본문을 대조해 PR #22 의 조작 Queue 와 slider 규칙, PR #23 의 준비 중 재생 막기가 함께 남은 것을 확인했다, 소스의 공개 항목과 현재 목록을 대조하는 시험(`scripts/test_runtime_api.py`)을 더했다
 - 메인이 `make test` 170개(실패 0)와 `make test-architecture` 통과를 확인하고 merge 커밋 `e97596d` 로 PR #23 에 push 했다, PR #22 에 13c 고침이 더해지면 다시 merge 한다
+
+## 2026-11-27 15:23 PR #22 재검토 세 건 고침
+- PR #22 worker(15:20 끝남): 검수 저장은 replay 를 먼저 보고 store lock 을 놓은 채 재생 증거를 확인한 뒤 다시 잡아 저장한다(장치 열기 동안 목록 조회와 초안 저장이 막히지 않는 시험), macOS 는 출력을 지원하는 장치만 이름으로 비교한다(가짜 장치 목록 시험, 실제 USB 장치 시험은 안 함), 장치 열기 실패와 Stop 뒤 다시 열기 실패는 `State::Failed` 와 `heard == false` 가 된다, 세 건 모두 결함을 넣어 실패하고 되돌려 통과했다
+- 메인이 `make test` 169개(실패 0)와 `make test-architecture` 통과를 확인하고 `d3fa235` 로 PR #22 에 push 했다, worker 탭을 닫았다, CI 를 기다린다
