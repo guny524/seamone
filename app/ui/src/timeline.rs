@@ -6,7 +6,7 @@ use leptos::prelude::*;
 use seamone_core::{
     TimedText,
     error_marks::{ErrorMark, overlaps},
-    review::{ReviewSegment, SampleRange},
+    review::{SampleRange, Segment},
 };
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{CanvasRenderingContext2d, ImageData};
@@ -14,7 +14,7 @@ use web_sys::{CanvasRenderingContext2d, ImageData};
 #[component]
 pub fn ReviewTimeline(
     quick: QuickReview,
-    segments: RwSignal<Vec<ReviewSegment>>,
+    segments: RwSignal<Vec<Segment>>,
     marks: RwSignal<Vec<ErrorMark>>,
     range: SampleRange,
     wav: Signal<Option<Result<String, String>>>,
@@ -143,13 +143,13 @@ fn Playhead(range: SampleRange, cursor: Signal<Option<u64>>) -> impl IntoView {
 
 #[component]
 fn AlignedTranscript(
-    lines: Memo<Vec<ReviewSegment>>,
+    lines: Memo<Vec<Segment>>,
     range: SampleRange,
     cursor: Signal<Option<u64>>,
     highlight: bool,
 ) -> impl IntoView {
     let rows = Memo::new(move |_| {
-        let mut rows: Vec<Vec<ReviewSegment>> = Vec::new();
+        let mut rows: Vec<Vec<Segment>> = Vec::new();
         for line in lines.get() {
             if let Some(row) = rows.iter_mut().find(|row| {
                 row.last()
@@ -262,11 +262,39 @@ fn span_style(viewport: SampleRange, span: SampleRange) -> String {
     format!("left:{left}%;width:{}%", right - left)
 }
 
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "Offsets within the 30-minute recording limit fit exactly in f64."
-)]
+struct RecordingOffset(u32);
+
+impl RecordingOffset {
+    fn new(samples: u64) -> Self {
+        Self(u32::try_from(samples).expect("30-minute recording offsets fit in u32"))
+    }
+}
+
 fn percentage(range: SampleRange, sample: u64) -> f64 {
-    100.0 * (sample.clamp(range.start, range.end) - range.start) as f64
-        / (range.end - range.start) as f64
+    let offset = RecordingOffset::new(sample.clamp(range.start, range.end) - range.start);
+    let duration = RecordingOffset::new(range.end - range.start);
+    100.0 * f64::from(offset.0) / f64::from(duration.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::percentage;
+    use seamone_core::review::SampleRange;
+
+    #[test]
+    fn percentage_preserves_sample_positions_and_clamps_to_the_viewport() {
+        let range = SampleRange {
+            start: 16_000,
+            end: 28_800_000,
+        };
+        for (sample, expected) in [
+            (0, 0.0),
+            (16_000, 0.0),
+            (14_408_000, 50.0),
+            (28_800_000, 100.0),
+            (u64::MAX, 100.0),
+        ] {
+            assert_eq!(percentage(range, sample), expected);
+        }
+    }
 }

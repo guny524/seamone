@@ -119,7 +119,6 @@ impl Narrowing {
 
     #[must_use]
     pub fn depth(&self) -> usize {
-        // A leaf occupies the same row as its confirmed range.
         self.path.len() - usize::from(self.half(Half::Front).is_none())
     }
 
@@ -148,7 +147,9 @@ impl Narrowing {
         if self.path.len() == 1 {
             return;
         }
-        let branch = *self.path.last().expect("a narrowed branch");
+        let Some(&branch) = self.path.last() else {
+            return;
+        };
         if self.picked_side
             || !self
                 .retained

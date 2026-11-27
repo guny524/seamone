@@ -5,7 +5,7 @@ pub const MAX_RECORDING_SECONDS: u32 = 30 * 60;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
-pub enum CaptureStatus {
+pub enum Status {
     Unavailable,
     Idle,
     Starting {

@@ -1,4 +1,5 @@
 //! Streaming mono resampling to the library's fixed PCM16 rate.
+use num_traits::ToPrimitive;
 use seamone_core::{capture::MAX_RECORDING_SECONDS, review::SAMPLE_RATE};
 use std::{collections::VecDeque, f64::consts::PI};
 
@@ -19,20 +20,25 @@ pub fn finite(sample: f32) -> f32 {
     if sample.is_finite() { sample } else { 0.0 }
 }
 
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "The channel mix accumulates in f64 and returns a normalized f32 sample."
-)]
 pub fn channel_average(sum: f64, channels: u16) -> f32 {
-    (sum / f64::from(channels)) as f32
+    (sum / f64::from(channels))
+        .to_f32()
+        .expect("channel average converts to f32")
 }
 
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "The rounded sample is clamped to the i16 range before quantization."
-)]
+struct Pcm16(i16);
+
+impl Pcm16 {
+    fn quantize(sample: f64) -> Self {
+        let rounded = (sample * 32_768.0)
+            .round()
+            .clamp(f64::from(i16::MIN), f64::from(i16::MAX));
+        Self(rounded.to_i16().unwrap_or_default())
+    }
+}
+
 fn pcm16(sample: f64) -> i16 {
-    (sample * 32_768.0).round().clamp(-32_768.0, 32_767.0) as i16
+    Pcm16::quantize(sample).0
 }
 
 pub struct Normalizer {
@@ -98,6 +104,19 @@ impl Normalizer {
     }
 }
 
+struct KernelRadius(u16);
+
+impl KernelRadius {
+    fn from_ratio(ratio: f64) -> Self {
+        Self(
+            (24.0 / ratio.min(1.0))
+                .ceil()
+                .to_u16()
+                .expect("validated input rate bounds the filter radius"),
+        )
+    }
+}
+
 struct LowPass {
     radius: u64,
     weights: Vec<Vec<f32>>,
@@ -106,24 +125,20 @@ struct LowPass {
 }
 
 impl LowPass {
-    #[expect(
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        reason = "The validated input rate bounds the filter radius and the normalized coefficients are stored as f32."
-    )]
     fn new(rate: u32) -> Self {
-        let ratio = SAMPLE_RATE as f64 / f64::from(rate);
-        // Blackman-windowed sinc. Widen the kernel at higher input rates so the
-        // transition below the 8 kHz output Nyquist frequency stays narrow.
-        let radius = (24.0 / ratio.min(1.0)).ceil() as i32;
+        let ratio =
+            f64::from(u32::try_from(SAMPLE_RATE).expect("fixed PCM16 rate")) / f64::from(rate);
+
+        let radius = KernelRadius::from_ratio(ratio);
         let cutoff = 0.44 * ratio.min(1.0);
         let weights = (0..PHASES)
             .map(|phase| {
-                let fraction = phase as f64 / PHASES as f64;
-                let weights: Vec<f64> = (-radius..=radius)
+                let fraction = f64::from(u16::try_from(phase).expect("bounded filter phase"))
+                    / f64::from(u16::try_from(PHASES).expect("bounded filter phase count"));
+                let weights: Vec<f64> = (-i32::from(radius.0)..=i32::from(radius.0))
                     .map(|tap| {
                         let distance = f64::from(tap) - fraction;
-                        let window = PI * distance / f64::from(radius);
+                        let window = PI * distance / f64::from(radius.0);
                         if window.abs() >= PI {
                             return 0.0;
                         }
@@ -138,11 +153,15 @@ impl LowPass {
                 let gain: f64 = weights.iter().sum();
                 weights
                     .into_iter()
-                    .map(|weight| (weight / gain) as f32)
+                    .map(|weight| {
+                        (weight / gain)
+                            .to_f32()
+                            .expect("normalized filter coefficient")
+                    })
                     .collect()
             })
             .collect();
-        let radius = u64::try_from(radius).expect("positive filter radius");
+        let radius = u64::from(radius.0);
         Self {
             radius,
             weights,
@@ -172,6 +191,78 @@ impl LowPass {
     fn discard_before(&mut self, first: u64) {
         while self.first < first && self.input.pop_front().is_some() {
             self.first += 1;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resampling_preserves_pcm16_samples_at_supported_rate_extremes_and_common_rates() {
+        for (rate, length, expected) in [
+            (8_000, 4_096, 16_018_315_236_159_049_558),
+            (16_000, 2_048, 17_848_847_840_009_084_928),
+            (44_100, 743, 11_427_453_305_392_998_375),
+            (48_000, 683, 6_038_885_649_343_245_240),
+            (192_000, 171, 1_644_297_260_069_288_869),
+        ] {
+            let mut normalizer = Normalizer::new(rate, 1).unwrap();
+            let mut output = Vec::new();
+            for index in 0..2_048_u16 {
+                let sample = (f32::from(index % 257) - 128.0) / 100.0;
+                normalizer
+                    .push(sample, |sample| {
+                        output.push(sample);
+                        Ok(())
+                    })
+                    .unwrap();
+            }
+            normalizer
+                .finish(|sample| {
+                    output.push(sample);
+                    Ok(())
+                })
+                .unwrap();
+            let digest = output.iter().fold(0_u64, |digest, sample| {
+                digest
+                    .wrapping_mul(31)
+                    .wrapping_add(u64::from(u16::from_le_bytes(sample.to_le_bytes())))
+            });
+            assert_eq!(output.len(), length, "{rate} Hz");
+            assert_eq!(digest, expected, "{rate} Hz");
+        }
+    }
+
+    #[test]
+    fn mixing_preserves_single_precision_rounding() {
+        for (sum, channels, bits) in [
+            (1.0, 3, 1_051_372_203),
+            (-4.5, 32, 3_188_719_616),
+            (1e30, 2, 1_892_283_082),
+        ] {
+            assert_eq!(channel_average(sum, channels).to_bits(), bits);
+        }
+    }
+
+    #[test]
+    fn pcm16_rounds_half_steps_and_saturates_including_non_finite_input() {
+        for (input, expected) in [
+            (-1.1, i16::MIN),
+            (-1.0, i16::MIN),
+            (-1.5 / 32_768.0, -2),
+            (-0.5 / 32_768.0, -1),
+            (0.0, 0),
+            (0.5 / 32_768.0, 1),
+            (1.5 / 32_768.0, 2),
+            (1.0, i16::MAX),
+            (1.1, i16::MAX),
+            (f64::NAN, 0),
+            (f64::INFINITY, i16::MAX),
+            (f64::NEG_INFINITY, i16::MIN),
+        ] {
+            assert_eq!(pcm16(input), expected);
         }
     }
 }

@@ -11,7 +11,7 @@
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
-      "pub fn capture_status ( & self ) - > CaptureStatus"
+      "pub fn capture_status ( & self ) - > Status"
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
@@ -71,7 +71,7 @@
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
-      "pub fn review ( & self , request : & ReviewRequest , proof : Option < & str > , ) - > Result < ReviewSegment , String >"
+      "pub fn review ( & self , request : & Request , proof : Option < & str > ) - > Result < Segment , String >"
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
@@ -91,11 +91,11 @@
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
-      "pub fn start_recording ( & self ) - > Result < CaptureStatus , String >"
+      "pub fn start_recording ( & self ) - > Result < Status , String >"
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
-      "pub fn transcribe ( & self , id : & str ) - > Result < Vec < ReviewSegment > , String >"
+      "pub fn transcribe ( & self , id : & str ) - > Result < Vec < Segment > , String >"
     ],
     [
       "crates/seamone-runtime/src/lib.rs",
@@ -115,7 +115,7 @@
     ],
     [
       "crates/seamone-runtime/src/test_support.rs",
-      "pub fn transcribed ( root : & Path ) - > Result < ( LibraryService , ReviewSegment ) , String >"
+      "pub fn transcribed ( root : & Path ) - > Result < ( LibraryService , Segment ) , String >"
     ],
     [
       "crates/seamone-runtime/src/training.rs",

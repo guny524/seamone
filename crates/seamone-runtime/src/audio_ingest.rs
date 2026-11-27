@@ -3,6 +3,7 @@ use crate::{
     normalize::{EMPTY_ERROR, LENGTH_ERROR, Normalizer, channel_average, check_input, finite},
 };
 use hound::{SampleFormat, WavReader};
+use num_traits::ToPrimitive;
 use seamone_core::capture::MAX_RECORDING_SECONDS;
 use std::{
     fs::File,
@@ -54,10 +55,6 @@ pub fn decode(library: &AudioLibrary, mut input: File) -> Result<StagedAudio, St
     output.finish()
 }
 
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "The decoder normalizes integer PCM to f32 before resampling to PCM16."
-)]
 fn decode_wav(input: File, output: &mut AudioWriter) -> Result<(), String> {
     let wav_error = |error| format!("WAV가 손상됐거나 지원하지 않는 인코딩입니다. {error}");
     let mut wav = WavReader::new(BufReader::new(input)).map_err(wav_error)?;
@@ -92,7 +89,13 @@ fn decode_wav(input: File, output: &mut AudioWriter) -> Result<(), String> {
         SampleFormat::Int => {
             let scale = 2_f32.powi(i32::from(spec.bits_per_sample) - 1);
             for sample in wav.samples::<i32>() {
-                push(sample.map_err(wav_error)? as f32 / scale)?;
+                push(
+                    sample
+                        .map_err(wav_error)?
+                        .to_f32()
+                        .expect("PCM32 converts to f32")
+                        / scale,
+                )?;
             }
         }
         SampleFormat::Float => {

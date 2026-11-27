@@ -119,7 +119,7 @@ impl AudioLibrary {
         let mut cursor = Cursor::new(Vec::new());
         let mut writer =
             WavWriter::new(&mut cursor, canonical_spec()).map_err(|e| e.to_string())?;
-        // The decoder never loads the complete recording for playback.
+
         for _ in range.start..range.end {
             let value = reader
                 .samples::<i16>()

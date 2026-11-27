@@ -1,7 +1,7 @@
 use crate::api;
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
-    capture::{CaptureStatus, MAX_RECORDING_SECONDS},
+    capture::{MAX_RECORDING_SECONDS, Status},
     ipc::Command,
     review::RecordingInfo,
 };
@@ -18,7 +18,7 @@ enum Action {
 
 #[derive(Clone, Copy)]
 pub(crate) struct Microphone {
-    status: RwSignal<CaptureStatus>,
+    status: RwSignal<Status>,
     action: RwSignal<Action>,
     version: RwSignal<u32>,
     polling: RwSignal<bool>,
@@ -34,7 +34,7 @@ impl Microphone {
         notice: RwSignal<String>,
     ) -> Self {
         let microphone = Self {
-            status: RwSignal::new(CaptureStatus::Unavailable),
+            status: RwSignal::new(Status::Unavailable),
             action: RwSignal::new(Action::None),
             version: RwSignal::new(0),
             polling: RwSignal::new(false),
@@ -47,9 +47,7 @@ impl Microphone {
             move || {
                 if matches!(
                     microphone.status.get_untracked(),
-                    CaptureStatus::Starting { .. }
-                        | CaptureStatus::Recording { .. }
-                        | CaptureStatus::Finishing { .. }
+                    Status::Starting { .. } | Status::Recording { .. } | Status::Finishing { .. }
                 ) {
                     microphone.poll();
                 }
@@ -62,10 +60,7 @@ impl Microphone {
     }
 
     pub(crate) fn can_offer_start(self) -> bool {
-        matches!(
-            self.status.get(),
-            CaptureStatus::Idle | CaptureStatus::Failed { .. }
-        )
+        matches!(self.status.get(), Status::Idle | Status::Failed { .. })
     }
 
     pub(crate) fn start_disabled(self) -> bool {
@@ -79,7 +74,7 @@ impl Microphone {
         self.polling.set(true);
         let version = self.version.get_untracked();
         spawn_local(async move {
-            let result = api::call::<CaptureStatus>(Command::GetCaptureStatus, json!({})).await;
+            let result = api::call::<Status>(Command::GetCaptureStatus, json!({})).await;
             self.polling.set(false);
             if version != self.version.get_untracked() {
                 return;
@@ -109,7 +104,7 @@ impl Microphone {
         }
         self.begin(Action::Start);
         spawn_local(async move {
-            match api::call::<CaptureStatus>(Command::StartRecording, json!({})).await {
+            match api::call::<Status>(Command::StartRecording, json!({})).await {
                 Ok(status) => self.status.set(status),
                 Err(error) => self.error.set(error),
             }
@@ -123,10 +118,10 @@ impl Microphone {
             return;
         }
         let id = match self.status.get_untracked() {
-            CaptureStatus::Starting { session_id } if !save => session_id,
-            CaptureStatus::Recording { session_id, .. }
-            | CaptureStatus::LimitReached { session_id }
-            | CaptureStatus::Interrupted { session_id, .. } => session_id,
+            Status::Starting { session_id } if !save => session_id,
+            Status::Recording { session_id, .. }
+            | Status::LimitReached { session_id }
+            | Status::Interrupted { session_id, .. } => session_id,
             _ => return,
         };
         self.begin(if save { Action::Save } else { Action::Cancel });
@@ -138,11 +133,11 @@ impl Microphone {
             .await
             {
                 Ok(Some(info)) => {
-                    self.status.set(CaptureStatus::Idle);
+                    self.status.set(Status::Idle);
                     on_saved.run(info);
                 }
                 Ok(None) => {
-                    self.status.set(CaptureStatus::Idle);
+                    self.status.set(Status::Idle);
                     self.notice.set("녹음을 취소했습니다.".into());
                 }
                 Err(error) => self.error.set(error),
@@ -162,24 +157,22 @@ pub(crate) fn MicrophonePanel(
     let active = move || {
         matches!(
             microphone.status.get(),
-            CaptureStatus::Starting { .. }
-                | CaptureStatus::Recording { .. }
-                | CaptureStatus::LimitReached { .. }
-                | CaptureStatus::Interrupted { .. }
+            Status::Starting { .. }
+                | Status::Recording { .. }
+                | Status::LimitReached { .. }
+                | Status::Interrupted { .. }
         )
     };
     let can_save = move || {
         matches!(
             microphone.status.get(),
-            CaptureStatus::Recording { .. }
-                | CaptureStatus::LimitReached { .. }
-                | CaptureStatus::Interrupted { .. }
+            Status::Recording { .. } | Status::LimitReached { .. } | Status::Interrupted { .. }
         )
     };
     view! {
         <Show when=move || match microphone.status.get() {
-            CaptureStatus::Unavailable => false,
-            CaptureStatus::Idle | CaptureStatus::Failed { .. } => {
+            Status::Unavailable => false,
+            Status::Idle | Status::Failed { .. } => {
                 microphone.action.get() != Action::None || browsing.get()
             }
             _ => true,
@@ -203,22 +196,22 @@ pub(crate) fn MicrophonePanel(
                     Action::Save => "녹음을 저장하는 중입니다.".into(),
                     Action::Cancel => "녹음을 취소하는 중입니다.".into(),
                     Action::None => match microphone.status.get() {
-                        CaptureStatus::Starting { .. } => "마이크 입력을 기다리는 중입니다.".into(),
-                        CaptureStatus::Recording { elapsed_seconds, .. } => format!(
+                        Status::Starting { .. } => "마이크 입력을 기다리는 중입니다.".into(),
+                        Status::Recording { elapsed_seconds, .. } => format!(
                             "녹음 중 {:02}:{:02} / {:02}:00",
                             elapsed_seconds / 60, elapsed_seconds % 60, MAX_RECORDING_SECONDS / 60,
                         ),
-                        CaptureStatus::LimitReached { .. } => "30분 제한에 도달했습니다. 녹음을 저장하거나 취소한 뒤 창을 닫을 수 있습니다.".into(),
-                        CaptureStatus::Interrupted { elapsed_seconds, reason, .. } => format!(
+                        Status::LimitReached { .. } => "30분 제한에 도달했습니다. 녹음을 저장하거나 취소한 뒤 창을 닫을 수 있습니다.".into(),
+                        Status::Interrupted { elapsed_seconds, reason, .. } => format!(
                             "{reason} 받은 음성 {:02}:{:02}. 녹음을 저장하거나 취소한 뒤 창을 닫을 수 있습니다.",
                             elapsed_seconds / 60, elapsed_seconds % 60,
                         ),
-                        CaptureStatus::Finishing { .. } => "녹음을 마무리하는 중입니다.".into(),
+                        Status::Finishing { .. } => "녹음을 마무리하는 중입니다.".into(),
                         _ => "기본 마이크로 최대 30분까지 녹음합니다.".into(),
                     }
                 }}</p>
-                <Show when=move || matches!(microphone.status.get(), CaptureStatus::Failed { .. })>
-                    <p class="error" role="alert">{move || if let CaptureStatus::Failed { message } = microphone.status.get() { message } else { String::new() }}</p>
+                <Show when=move || matches!(microphone.status.get(), Status::Failed { .. })>
+                    <p class="error" role="alert">{move || if let Status::Failed { message } = microphone.status.get() { message } else { String::new() }}</p>
                 </Show>
             </section>
         </Show>

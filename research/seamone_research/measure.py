@@ -106,7 +106,7 @@ def _read_config(path: Path) -> dict | None:
         return None
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except ValueError as error:  # JSONDecodeError 와 UnicodeDecodeError 모두 ValueError 다
+    except ValueError as error:
         message = f"{path} 의 측정 설정을 해석하지 못한다({type(error).__name__}: {error})"
         raise ValueError(message) from error
     if not isinstance(value, dict):

@@ -10,7 +10,7 @@ use cpal::{
 };
 use rtrb::{Consumer, Producer, RingBuffer};
 use seamone_core::{
-    capture::{CaptureStatus, MAX_RECORDING_SECONDS},
+    capture::{MAX_RECORDING_SECONDS, Status},
     review::{RecordingInfo, SAMPLE_RATE},
 };
 use std::{
@@ -36,6 +36,7 @@ const STALLED: &str =
 const QUEUE_FRAMES: usize = 65_536;
 const INPUT_TIMEOUT: Duration = Duration::from_secs(3);
 const INPUT_POLL: Duration = Duration::from_millis(5);
+const FRAMES_BEFORE_CONTROL_CHECK: u16 = 1_024;
 
 #[derive(Default)]
 pub struct Recorder {
@@ -67,14 +68,14 @@ struct Control {
     fault: AtomicU8,
     has_audio: AtomicBool,
     seconds: AtomicU32,
-    status: Mutex<CaptureStatus>,
+    status: Mutex<Status>,
 }
 
 impl Control {
     fn new() -> Self {
         let id = uuid::Uuid::new_v4().to_string();
         Self {
-            status: Mutex::new(CaptureStatus::Starting {
+            status: Mutex::new(Status::Starting {
                 session_id: id.clone(),
             }),
             id,
@@ -85,13 +86,13 @@ impl Control {
         }
     }
 
-    fn status(&self) -> CaptureStatus {
+    fn status(&self) -> Status {
         let status = self
             .status
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         match &*status {
-            CaptureStatus::Recording { session_id, .. } => CaptureStatus::Recording {
+            Status::Recording { session_id, .. } => Status::Recording {
                 session_id: session_id.clone(),
                 elapsed_seconds: self.seconds.load(Ordering::Relaxed),
             },
@@ -99,7 +100,7 @@ impl Control {
         }
     }
 
-    fn set_status(&self, status: CaptureStatus) {
+    fn set_status(&self, status: Status) {
         *self
             .status
             .lock()
@@ -129,13 +130,13 @@ impl Recorder {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    pub fn status(&self) -> CaptureStatus {
+    pub fn status(&self) -> Status {
         let state = self.state();
         let Some(session) = &state.session else {
-            return CaptureStatus::Idle;
+            return Status::Idle;
         };
         if matches!(session.pending, Pending::Finishing) {
-            CaptureStatus::Finishing {
+            Status::Finishing {
                 session_id: session.control.id.clone(),
             }
         } else {
@@ -147,7 +148,7 @@ impl Recorder {
         &self,
         library: AudioLibrary,
         foreground: ForegroundGuard,
-    ) -> Result<CaptureStatus, String> {
+    ) -> Result<Status, String> {
         #[cfg(any(test, feature = "test-support"))]
         if self.fake {
             return self.start_using(library, foreground, |_| {
@@ -171,14 +172,14 @@ impl Recorder {
         library: AudioLibrary,
         foreground: ForegroundGuard,
         open: impl FnOnce(Arc<Control>) -> Result<Option<Input<S>>, String> + Send + 'static,
-    ) -> Result<CaptureStatus, String> {
+    ) -> Result<Status, String> {
         let mut state = self.state();
         if state.closed {
             return Err(WINDOW_CLOSED.into());
         }
         if state.session.as_ref().is_some_and(|session| {
             !matches!(session.pending, Pending::Input(_))
-                || !matches!(session.control.status(), CaptureStatus::Failed { .. })
+                || !matches!(session.control.status(), Status::Failed { .. })
         }) {
             return Err("진행 중인 녹음을 저장하거나 취소하세요.".into());
         }
@@ -190,7 +191,7 @@ impl Recorder {
                 let result = record(&library, &worker, MAX_RECORDING_SECONDS, open);
                 drop(foreground);
                 if let Err(message) = &result {
-                    worker.set_status(CaptureStatus::Failed {
+                    worker.set_status(Status::Failed {
                         message: message.clone(),
                     });
                 }
@@ -221,14 +222,9 @@ impl Recorder {
                 return Err("이 녹음을 이미 마무리하고 있습니다.".into());
             }
             let status = session.control.status();
-            if save
-                && matches!(
-                    status,
-                    CaptureStatus::Starting { .. } | CaptureStatus::Failed { .. }
-                )
-            {
+            if save && matches!(status, Status::Starting { .. } | Status::Failed { .. }) {
                 return Err(match status {
-                    CaptureStatus::Failed { message } => message,
+                    Status::Failed { message } => message,
                     _ => "마이크가 시작될 때까지 기다리세요.".into(),
                 });
             }
@@ -269,7 +265,7 @@ impl Recorder {
             if let (Err(error), Ok(Some(audio))) = (&result, staged)
                 && !control.discarded()
             {
-                control.set_status(CaptureStatus::Interrupted {
+                control.set_status(Status::Interrupted {
                     session_id: id.into(),
                     elapsed_seconds: u32::try_from(audio.samples / SAMPLE_RATE)
                         .unwrap_or(MAX_RECORDING_SECONDS),
@@ -295,7 +291,7 @@ impl Recorder {
             let control = &session.control;
             if control.has_audio.load(Ordering::Acquire)
                 && !control.discarded()
-                && !matches!(control.status(), CaptureStatus::Failed { .. })
+                && !matches!(control.status(), Status::Failed { .. })
             {
                 let _ = control.request.compare_exchange(
                     RUNNING,
@@ -374,8 +370,8 @@ fn record<S>(
             break;
         }
         let mut count = 0;
-        // Yield to stop and fault checks even when the producer keeps the ring full.
-        for _ in 0..(limit - frames).min(1024) {
+
+        for _ in 0..(limit - frames).min(u64::from(FRAMES_BEFORE_CONTROL_CHECK)) {
             let Ok(sample) = consumer.pop() else { break };
             converter.push(sample, &mut write)?;
             count += 1;
@@ -383,7 +379,7 @@ fn record<S>(
         if count > 0 {
             if frames == 0 {
                 control.has_audio.store(true, Ordering::Release);
-                control.set_status(CaptureStatus::Recording {
+                control.set_status(Status::Recording {
                     session_id: control.id.clone(),
                     elapsed_seconds: 0,
                 });
@@ -406,7 +402,7 @@ fn record<S>(
         return Ok(None);
     }
     interruption = interruption.or_else(|| control.input_fault());
-    // Draining after release keeps the last accepted samples in the saved recording.
+
     while frames < limit && !control.discarded() {
         let Ok(sample) = consumer.pop() else { break };
         converter.push(sample, &mut write)?;
@@ -427,13 +423,13 @@ fn record<S>(
     if matches!(request, RUNNING | PAUSE_TO_CLOSE) {
         let session_id = control.id.clone();
         let status = match interruption.or((request == PAUSE_TO_CLOSE).then_some(CLOSE_PAUSED)) {
-            Some(reason) => CaptureStatus::Interrupted {
+            Some(reason) => Status::Interrupted {
                 session_id,
                 elapsed_seconds: u32::try_from(frames / u64::from(rate))
                     .unwrap_or(MAX_RECORDING_SECONDS),
                 reason: reason.into(),
             },
-            None => CaptureStatus::LimitReached { session_id },
+            None => Status::LimitReached { session_id },
         };
         control.set_status(status);
     }

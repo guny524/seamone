@@ -6,7 +6,7 @@ use rusqlite::{
     hooks::{AuthAction, AuthContext, Authorization},
     params,
 };
-use seamone_core::review::{ReviewError, ReviewSegment};
+use seamone_core::review::{Error, Segment};
 use std::sync::{
     Arc,
     atomic::{AtomicU8, Ordering},
@@ -65,10 +65,18 @@ impl WriteAccess {
         Ok(Self(state))
     }
 
+    #[cfg(any(
+        test,
+        feature = "test-support",
+        all(
+            feature = "desktop-whisper",
+            not(any(target_os = "android", target_os = "ios"))
+        )
+    ))]
     pub(super) fn insert_unverified(
         &self,
         connection: &Transaction<'_>,
-        segments: &[ReviewSegment],
+        segments: &[Segment],
     ) -> Result<(), String> {
         WritePermit::insert_unverified(self, connection, segments)
     }
@@ -76,7 +84,7 @@ impl WriteAccess {
     pub(super) fn clear_verification(
         &self,
         connection: &Transaction<'_>,
-        segments: Vec<ReviewSegment>,
+        segments: Vec<Segment>,
     ) -> Result<(), String> {
         WritePermit::clear_verification(self, connection, segments)
     }
@@ -85,7 +93,7 @@ impl WriteAccess {
         &self,
         connection: &Transaction<'_>,
         authorization: AuthorizedReview<'_>,
-        next: &ReviewSegment,
+        next: &Segment,
     ) -> Result<(), String> {
         WritePermit::review(self, connection, authorization, next)
     }
@@ -111,10 +119,18 @@ impl WritePermit<'_> {
         })
     }
 
+    #[cfg(any(
+        test,
+        feature = "test-support",
+        all(
+            feature = "desktop-whisper",
+            not(any(target_os = "android", target_os = "ios"))
+        )
+    ))]
     fn insert_unverified(
         access: &WriteAccess,
         connection: &Transaction<'_>,
-        segments: &[ReviewSegment],
+        segments: &[Segment],
     ) -> Result<(), String> {
         if segments.iter().any(|segment| segment.verified.is_some()) {
             return Err("미검증 쓰기에 확인 전사가 포함됐습니다.".into());
@@ -136,7 +152,7 @@ impl WritePermit<'_> {
     fn clear_verification(
         access: &WriteAccess,
         connection: &Transaction<'_>,
-        segments: Vec<ReviewSegment>,
+        segments: Vec<Segment>,
     ) -> Result<(), String> {
         let permit = Self::enter(access, connection, 1)?;
         for mut segment in segments {
@@ -144,7 +160,7 @@ impl WritePermit<'_> {
             segment.revision = segment
                 .revision
                 .checked_add(1)
-                .ok_or_else(|| ReviewError::StaleRevision.to_string())?;
+                .ok_or_else(|| Error::StaleRevision.to_string())?;
             segment.error_marked_text = Some(segment.text.clone());
             let body = serde_json::to_string(&segment).map_err(|error| error.to_string())?;
             permit
@@ -169,7 +185,7 @@ impl WritePermit<'_> {
         access: &WriteAccess,
         connection: &Transaction<'_>,
         authorization: AuthorizedReview<'_>,
-        next: &ReviewSegment,
+        next: &Segment,
     ) -> Result<(), String> {
         let request = authorization.request();
         let persisted: String = connection
@@ -179,7 +195,7 @@ impl WritePermit<'_> {
                 |row| row.get(0),
             )
             .map_err(|error| error.to_string())?;
-        let current: ReviewSegment =
+        let current: Segment =
             serde_json::from_str(&persisted).map_err(|error| error.to_string())?;
         let samples: u64 = connection
             .query_row(
@@ -208,7 +224,7 @@ impl WritePermit<'_> {
             )
             .map_err(|error| error.to_string())?;
         if changed != 1 {
-            return Err(ReviewError::StaleRevision.to_string());
+            return Err(Error::StaleRevision.to_string());
         }
         permit
             .connection
@@ -227,7 +243,7 @@ impl WritePermit<'_> {
 impl Drop for WritePermit<'_> {
     fn drop(&mut self) {
         self.state.store(0, Ordering::Release);
-        // Expire prepared statements so a statement cannot outlive its private permit.
+
         let _ = install(self.connection, Arc::clone(&self.state));
     }
 }

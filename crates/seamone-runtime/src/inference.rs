@@ -4,7 +4,7 @@ use crate::LibraryService;
     not(any(target_os = "android", target_os = "ios"))
 ))]
 use seamone_asr::Transcriber;
-use seamone_core::review::ReviewSegment;
+use seamone_core::review::Segment;
 use std::path::Path;
 
 #[must_use]
@@ -30,7 +30,7 @@ pub fn select(state: &LibraryService, path: &Path) -> Result<(), String> {
 
 pub use seamone_asr::SMALL_SHA256;
 
-pub fn transcribe(state: &LibraryService, id: &str) -> Result<Vec<ReviewSegment>, String> {
+pub fn transcribe(state: &LibraryService, id: &str) -> Result<Vec<Segment>, String> {
     let _foreground = state.background.foreground.enter();
     #[cfg(all(
         feature = "desktop-whisper",

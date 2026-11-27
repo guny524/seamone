@@ -26,43 +26,49 @@ def test_one_changed_hangul_syllable_is_one_substitution_in_five_characters():
     assert counts.substitutions == 1
     assert counts.deletions == 0
     assert counts.insertions == 0
-    assert counts.reference_chars == 5
+    expected_reference_chars = 5
+    assert counts.reference_chars == expected_reference_chars
     assert counts.cer == pytest.approx(0.2)
 
 
 def test_empty_hypothesis_is_all_deletions():
     counts = count_errors("안녕하세요", "")
 
-    assert counts.deletions == 5
+    expected_deletions = 5
+    assert counts.deletions == expected_deletions
     assert counts.cer == 1.0
 
 
 def test_extra_characters_are_insertions_and_can_push_cer_above_one():
     counts = count_errors("가", "가나다")
 
-    assert counts.insertions == 2
-    assert counts.cer == 2.0
+    expected_insertions = 2
+    expected_cer = 2.0
+    assert counts.insertions == expected_insertions
+    assert counts.cer == expected_cer
 
 
 def test_hangul_and_english_mixed_text_counts_each_character():
-    # 정답 "나는ai를좋아해"(8글자), 가설 "나는에이아이를좋아해"(10글자), 바뀐 곳은 "ai" -> "에이아이"
     counts = count_errors("나는 AI를 좋아해", "나는 에이아이를 좋아해")
 
-    assert counts.reference_chars == 8
-    assert counts.errors == 4
+    expected_reference_chars = 8
+    expected_errors = 4
+    assert counts.reference_chars == expected_reference_chars
+    assert counts.errors == expected_errors
     assert counts.cer == pytest.approx(0.5)
 
 
 def test_digits_are_not_converted_to_words():
-    # 정답이 "오" 이고 모델이 "5" 로 쓰면 오류다
+
     assert count_errors("오", "5").cer == 1.0
 
 
 def test_symbols_other_than_punctuation_are_kept():
-    # "$" 는 문장부호가 아니라 통화 기호라 남는다
+
     counts = count_errors("$5", "5")
 
-    assert counts.reference_chars == 2
+    expected_reference_chars = 2
+    assert counts.reference_chars == expected_reference_chars
     assert counts.deletions == 1
 
 
@@ -76,9 +82,9 @@ def test_corpus_cer_divides_summed_errors_by_summed_reference_chars():
 
     counts = corpus_counts(pairs)
 
-    # 발화마다 CER 의 평균이면 (0 + 0.5) / 2 = 0.25 지만 세트 전체는 1 / 7 이다
     assert counts.errors == 1
-    assert counts.reference_chars == 7
+    expected_reference_chars = 7
+    assert counts.reference_chars == expected_reference_chars
     assert counts.cer == pytest.approx(1 / 7)
 
 
@@ -101,7 +107,7 @@ def test_normalize_removes_punctuation_and_whitespace_and_lowercases(raw, expect
 
 
 def test_normalize_composes_decomposed_hangul():
-    decomposed = "한"  # 한 을 자모로 풀어 쓴 꼴
+    decomposed = "한"
 
     assert normalize(decomposed) == "한"
 
@@ -120,8 +126,7 @@ def test_standard_error_grows_when_errors_pile_up_in_one_utterance():
 
 
 def test_standard_error_of_two_utterances_matches_the_hand_calculation():
-    # 정답 글자 4와 4, 오류 0과 2 -> CER 0.25, 잔차 (0 - 1)^2 + (2 - 1)^2 = 2, n/(n-1) = 2
-    # 표준오차 = sqrt(2 * 2) / 8 = 0.25
+
     pairs = [("가나다라", "가나다라"), ("마바사아", "마바")]
 
     assert corpus_standard_error(pairs) == pytest.approx(0.25)

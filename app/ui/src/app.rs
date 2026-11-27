@@ -8,7 +8,7 @@ use crate::{
 use leptos::{ev, prelude::*};
 use seamone_core::{
     error_marks::{Half, overlaps},
-    review::{ReviewAction, SAMPLE_RATE, Verdict},
+    review::{Action, SAMPLE_RATE, Verdict},
     review_flow::{ReviewFlow, ReviewMode, Ticket},
 };
 use std::time::Duration;
@@ -114,7 +114,7 @@ fn register_review_shortcuts(workspace: &Workspace) {
             && (event.ctrl_key() || event.meta_key())
         {
             event.prevent_default();
-            workspace.save(ReviewAction::CorrectAndConfirm {
+            workspace.save(Action::CorrectAndConfirm {
                 text: workspace.draft.get_untracked(),
             });
             return;
@@ -133,7 +133,7 @@ fn register_review_shortcuts(workspace: &Workspace) {
             }
             "1" if mode == ReviewMode::Binary => {
                 event.prevent_default();
-                workspace.save(ReviewAction::Judge {
+                workspace.save(Action::Judge {
                     verdict: Verdict::Yes,
                 });
             }
@@ -169,7 +169,7 @@ fn quick_keydown(
     ) {
         return;
     }
-    // Reserved shortcuts take precedence over the focused button.
+
     event.prevent_default();
     if key == " " {
         swallow_space_release.set_value(true);
@@ -422,8 +422,8 @@ fn ReviewPanel(workspace: Workspace) -> impl IntoView {
                 <Show when=move || workspace.flow.get().mode() == ReviewMode::Binary fallback=move || view! { <CorrectionEditor workspace/> }>
                     <p>"글이 음성과 그대로 같습니까? 잘 안 들리거나 구간이 잘렸다면 검증하지 않고 나갈 수 있습니다."</p>
                     <div class="verdicts">
-                        <button disabled=move || !workspace.flow.get().listened() || workspace.flow.get().busy() on:click=move |_| workspace.save(ReviewAction::Judge { verdict: Verdict::Yes })>"Yes, 그대로 맞음 (1)"</button>
-                        <button disabled=move || !workspace.flow.get().listened() || workspace.flow.get().busy() on:click=move |_| workspace.save(ReviewAction::Judge { verdict: Verdict::No })>"No, 다름"</button>
+                        <button disabled=move || !workspace.flow.get().listened() || workspace.flow.get().busy() on:click=move |_| workspace.save(Action::Judge { verdict: Verdict::Yes })>"Yes, 그대로 맞음 (1)"</button>
+                        <button disabled=move || !workspace.flow.get().listened() || workspace.flow.get().busy() on:click=move |_| workspace.save(Action::Judge { verdict: Verdict::No })>"No, 다름"</button>
                     </div>
                 </Show>
             </Show>
@@ -449,10 +449,10 @@ fn CorrectionEditor(workspace: Workspace) -> impl IntoView {
         </div>
         <p class="editor-help">"들은 말을 그대로 적으세요. 초안을 저장해 전사가 바뀌면 확정하기 전에 다시 들어야 합니다."</p>
         <div class="toolbar correction-save">
-            <button disabled=move || workspace.flow.get().busy() on:click=move |_| workspace.save(ReviewAction::SaveDraft { text:workspace.draft.get_untracked() })>"초안 저장"</button>
+            <button disabled=move || workspace.flow.get().busy() on:click=move |_| workspace.save(Action::SaveDraft { text:workspace.draft.get_untracked() })>"초안 저장"</button>
             <Show when=move || workspace.flow.get().mode() == ReviewMode::Correction>
                 <button class="primary" disabled=move || !workspace.flow.get().listened() || workspace.flow.get().busy() || workspace.current().is_none_or(|s| !s.can_confirm_correction(&workspace.draft.get()))
-                    on:click=move |_| workspace.save(ReviewAction::CorrectAndConfirm { text:workspace.draft.get_untracked() })>
+                    on:click=move |_| workspace.save(Action::CorrectAndConfirm { text:workspace.draft.get_untracked() })>
                     "이대로 교정 확정"<span class="desktop-shortcut">" (Ctrl/Command+Enter)"</span>
                 </button>
             </Show>
@@ -469,10 +469,10 @@ fn CorrectionEditor(workspace: Workspace) -> impl IntoView {
         </Show>
         <p>{move || workspace.current().and_then(|s| s.correction_error(&workspace.draft.get())).map(|error| error.to_string())}</p>
         <Show when=move || workspace.current().is_some_and(|s| s.verified.is_none() && s.error_marked_text.is_some())>
-            <button disabled=move || workspace.flow.get().busy() on:click=move |_| workspace.save(ReviewAction::DismissErrorMark)>"이 조각의 오류 판정 해제"</button>
+            <button disabled=move || workspace.flow.get().busy() on:click=move |_| workspace.save(Action::DismissErrorMark)>"이 조각의 오류 판정 해제"</button>
         </Show>
         <Show when=move || workspace.current().is_some_and(|s| s.error_marked_text.is_none() || s.verdict.is_some() || s.verified.is_some())>
-            <button disabled=move || workspace.flow.get().busy() on:click=move |_| workspace.save(ReviewAction::Invalidate)>
+            <button disabled=move || workspace.flow.get().busy() on:click=move |_| workspace.save(Action::Invalidate)>
                 {move || if workspace.current().is_some_and(|s| s.rejected_text_unchanged(&s.text)) { "처음 판정 취소하고 다시 검수" } else { "검증 취소, 다시 확인 목록에 남기기" }}
             </button>
         </Show>

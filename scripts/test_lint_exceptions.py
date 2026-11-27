@@ -126,6 +126,46 @@ class BaselineProtection(unittest.TestCase):
         self.save()
         self.assertIn('configuration vs HEAD', self.errors())
 
+    def test_enabling_documentation_and_names_lints_preserves_the_other_rules(self):
+        self.cargo += 'missing_errors_doc="allow"\nmissing_panics_doc="allow"\nmodule_name_repetitions="allow"\n'
+        (self.root / 'Cargo.toml').write_text(self.cargo)
+        self.data['configuration']['Cargo.toml'] = configuration(Path('Cargo.toml'), self.cargo)
+        self.data['existing'] = list(configuration_exceptions(Path('Cargo.toml'), self.cargo))
+        self.data['existing'] = [['Cargo.toml', item] for item in self.data['existing']]
+        self.save()
+        self.git('add', '.')
+        self.git('-c', 'user.name=Architecture Test', '-c', 'user.email=test@invalid',
+                 '-c', 'commit.gpgsign=false', 'commit', '-qm', 'documented baseline')
+        tightened = self.cargo.replace('"allow"', '"warn"')
+        (self.root / 'Cargo.toml').write_text(tightened)
+        self.data['existing'] = []
+        self.data['configuration']['Cargo.toml'] = configuration(Path('Cargo.toml'), tightened)
+        self.save()
+        self.assertEqual(self.errors(), '')
+        weakened = tightened.replace('priority=-1', 'priority=-2')
+        (self.root / 'Cargo.toml').write_text(weakened)
+        self.data['configuration']['Cargo.toml'] = configuration(Path('Cargo.toml'), weakened)
+        self.save()
+        self.assertIn('lint tables changed', self.errors())
+
+    def test_removing_ruff_ignores_does_not_allow_weaker_selection(self):
+        original = self.ruff.replace('select=["E","F"]', 'select=["E","F"]\nignore=["E501"]')
+        (self.root / 'pyproject.toml').write_text(original)
+        self.data['configuration']['pyproject.toml'] = configuration(Path('pyproject.toml'), original)
+        self.save()
+        self.git('add', '.')
+        self.git('-c', 'user.name=Architecture Test', '-c', 'user.email=test@invalid',
+                 '-c', 'commit.gpgsign=false', 'commit', '-qm', 'ruff baseline')
+        (self.root / 'pyproject.toml').write_text(self.ruff)
+        self.data['configuration']['pyproject.toml'] = configuration(Path('pyproject.toml'), self.ruff)
+        self.save()
+        self.assertEqual(self.errors(), '')
+        changed = self.ruff.replace('["E","F"]', '["E"]')
+        (self.root / 'pyproject.toml').write_text(changed)
+        self.data['configuration']['pyproject.toml'] = configuration(Path('pyproject.toml'), changed)
+        self.save()
+        self.assertIn('lint tables changed', self.errors())
+
     def test_alternate_configuration_files_are_forbidden(self):
         for name in ('clippy.toml', '.clippy.toml', 'ruff.toml', '.ruff.toml'):
             with self.subTest(name=name):

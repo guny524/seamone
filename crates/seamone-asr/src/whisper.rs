@@ -19,6 +19,8 @@ pub struct WhisperTranscriber {
 }
 
 impl WhisperTranscriber {
+    /// # Errors
+    /// 모델 파일 읽기, SHA-256 검증이나 Whisper context 생성이 실패하면 `ModelUnavailable`을 돌려준다
     pub fn load(path: &Path) -> Result<Self, TranscribeError> {
         static LOGGING: std::sync::Once = std::sync::Once::new();
         LOGGING.call_once(whisper_rs::install_logging_hooks);
@@ -151,7 +153,7 @@ fn align_tokens(raw: &str, line: SampleRange, tokens: &[(&[u8], i64)]) -> Option
                 return None;
             }
             previous = sample;
-            // Start a span only at an actual token boundary that is also a grapheme boundary.
+
             let clipped_start = offset.max(first);
             while boundaries
                 .peek()

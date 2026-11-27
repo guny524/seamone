@@ -77,10 +77,6 @@ fn stereo_float_wav_downmixes_and_resamples_to_exact_pcm16_values() {
 }
 
 #[test]
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "The two fixture sample rates and frame indices fit exactly in f32."
-)]
 fn normalizer_clamps_and_rejects_aliasing_above_nyquist() {
     let mut direct = Normalizer::new(16_000, 1).unwrap();
     let mut pcm = Vec::new();
@@ -98,16 +94,16 @@ fn normalizer_clamps_and_rejects_aliasing_above_nyquist() {
         [i16::MIN, i16::MIN, -16384, 0, 16384, i16::MAX, i16::MAX]
     );
 
-    for rate in [44_100, 48_000] {
+    for rate in [44_100_u16, 48_000] {
         let convert = |frequency: f32| {
-            let mut normalizer = Normalizer::new(rate, 1).unwrap();
+            let mut normalizer = Normalizer::new(u32::from(rate), 1).unwrap();
             let mut pcm = Vec::new();
             let mut collect = |sample| {
                 pcm.push(sample);
                 Ok(())
             };
             for frame in 0..(rate / 10) {
-                let sample = 0.8 * (TAU * frequency * frame as f32 / rate as f32).sin();
+                let sample = 0.8 * (TAU * frequency * f32::from(frame) / f32::from(rate)).sin();
                 normalizer.push(sample, &mut collect).unwrap();
             }
             normalizer.finish(collect).unwrap();

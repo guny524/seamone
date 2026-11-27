@@ -113,11 +113,12 @@ def test_remove_inside_refuses_the_root_and_outside_paths_and_links_out(hf_home)
 
 def test_save_wav_leaves_only_the_finished_file(tmp_path):
     buffer = io.BytesIO()
-    soundfile.write(buffer, np.zeros(16_000, dtype=np.float32), 16_000, format="WAV")
+    sample_rate = 16_000
+    soundfile.write(buffer, np.zeros(sample_rate, dtype=np.float32), sample_rate, format="WAV")
     seconds = data._save_wav(tmp_path / "a.wav", buffer.getvalue())
     assert seconds == pytest.approx(1.0)
     assert sorted(p.name for p in tmp_path.iterdir()) == ["a.wav"]
-    assert soundfile.info(tmp_path / "a.wav").frames == 16_000
+    assert soundfile.info(tmp_path / "a.wav").frames == sample_rate
 
 
 def test_a_wav_whose_size_differs_from_the_manifest_is_rejected(hf_home):

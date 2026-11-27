@@ -1,0 +1,93 @@
+{
+  "description": "Only unchanged external API, platform, format and unsafe safety constraints are retained. Express behavior with names, types and checks.",
+  "comments": [
+    {
+      "path": "app/src-tauri/src/lib.rs",
+      "sha256": "54df38b898fd1ed1a2e24ee5a28e11a4b960940904d7f891b64aa52405ff7e00"
+    },
+    {
+      "path": "crates/seamone-asr/src/whisper.rs",
+      "sha256": "90db07c923721a22353c0317736ee38f28153b08674f81f44e759b55d25f783b"
+    },
+    {
+      "path": "crates/seamone-runtime/src/audio_ingest.rs",
+      "sha256": "7e37b33b64f57614461b4c039199081b4655b1dbd98015d360bb955b78a835c6"
+    },
+    {
+      "path": "crates/seamone-runtime/src/audio_ingest.rs",
+      "sha256": "4695e9697e9ce96f8b5a1e63cd6a007e46a4ab7c7a8506513464946d569a6d49"
+    },
+    {
+      "path": "crates/seamone-runtime/src/audio_ingest.rs",
+      "sha256": "5bdae76addbee81ad44fba6781f9a35805efcc8541f403af71184b100dbca048"
+    },
+    {
+      "path": "crates/seamone-runtime/src/audio_ingest.rs",
+      "sha256": "908f3a34a7b7d1c49062da9dab89a0813bac80fe23e94ee777d2e5b9ed3e98a9"
+    },
+    {
+      "path": "crates/seamone-runtime/src/audio_ingest.rs",
+      "sha256": "dd860705e200ec9ebdaae6ede84ade98be97245dfd61b06188070435904a6794"
+    },
+    {
+      "path": "crates/seamone-runtime/src/capture.rs",
+      "sha256": "61a247ded9f5a04f773fe9a084b78d656503f51daab019bb2ba5bd3885d04c9a"
+    },
+    {
+      "path": "crates/seamone-runtime/src/capture.rs",
+      "sha256": "374a767cdfbf7aa4a2eab12cd104627c12a01e15b6eb5457a3e859fd17fc2522"
+    },
+    {
+      "path": "crates/seamone-runtime/src/capture.rs",
+      "sha256": "8ab8e2063e8008607462d455c30e9038092e0797c511d27e70e2f4b6999d703c"
+    },
+    {
+      "path": "crates/seamone-runtime/src/capture.rs",
+      "sha256": "e86917fccd288019ad04378d8e00acf908e9f5b492f694efacbff250654ed113"
+    },
+    {
+      "path": "research/seamone_research/data.py",
+      "sha256": "b3277b24692ab82bbb846cbeb4555315fbdf19d267affff5cfa3dcad6d1558b7"
+    },
+    {
+      "path": "research/seamone_research/data.py",
+      "sha256": "82a9a9848a1b3c1c31552e7aaed072348985de912915a8eb2dc9e06be7ea151c"
+    },
+    {
+      "path": "research/seamone_research/memory.py",
+      "sha256": "2964130d6e3d0975fcfb9988e2e0d24467cb0aee80c18e36053cbf80bbb1db05"
+    },
+    {
+      "path": "research/seamone_research/models.py",
+      "sha256": "544de542f7eed32377138213ab47a87ba104d200d2b0bab5d20a2b97f7a7fa18"
+    },
+    {
+      "path": "research/seamone_research/transcribe.py",
+      "sha256": "db68853016b1ee67eeb7ad231147108107dcd3f1f5a359f0157ac953a840fd0d"
+    },
+    {
+      "path": "scripts/check_crate_boundaries.py",
+      "sha256": "89c4fcbd8cc1654632927f8d4ff67574505264bd6e1bb090dbc9eb649ae03eb5"
+    },
+    {
+      "path": "scripts/check_review_writes.py",
+      "sha256": "50ca1812004f6212c21e93b051e3ed9a446a713b9f1a1786ddc777df720e127e"
+    },
+    {
+      "path": "scripts/check_review_writes.py",
+      "sha256": "59faa7526d35efb80b91863945e1367a7772d2b20640669cfbdccb809c814f27"
+    },
+    {
+      "path": "scripts/check_review_writes.py",
+      "sha256": "30d306bcec132842f9230a4b665b277679adf4661cdcfc87909b398fbf57b0f6"
+    },
+    {
+      "path": "scripts/check_review_writes.py",
+      "sha256": "816cdb59115f411456624bc944075c8530c65e4894b4c7cb8019c28c1b16033c"
+    },
+    {
+      "path": "scripts/check_runtime_api.py",
+      "sha256": "245d03964d4cce2d56b2a59ceceac557d1033d6ba16a46dc8d08d7b50fb8556b"
+    }
+  ]
+}

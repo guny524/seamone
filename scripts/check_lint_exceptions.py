@@ -85,7 +85,7 @@ def git(root, *args):
 
 
 def clippy_commands(source):
-    # Fold continued recipe lines before checking flags.
+
     source = re.sub(r"\\\n[ \t]*", " ", source)
     return sorted(line.strip() for line in source.splitlines()
                   if line.startswith("\t") and re.search(r"\bcargo\s+clippy\b", line))
@@ -126,10 +126,44 @@ def relocated(root, commit, entries):
     return [[renames.get(path, path), entry] for path, entry in entries]
 
 
+def tightens_configuration(path, current, previous):
+    if not isinstance(current, dict) or not isinstance(previous, dict):
+        return False
+    previous = json.loads(json.dumps(previous))
+    if Path(path).name == "Cargo.toml":
+        for section in ("lints", "workspace.lints"):
+            old = previous.get(section, {}).get("clippy", {})
+            new = current.get(section, {}).get("clippy", {})
+            pedantic = new.get("pedantic", {})
+            level = pedantic.get("level") if isinstance(pedantic, dict) else pedantic
+            if level not in {"warn", "deny", "forbid"}:
+                continue
+            for rule in ("missing_errors_doc", "missing_panics_doc", "module_name_repetitions"):
+                if old.get(rule) == "allow" and new.get(rule) in {"warn", "deny", "forbid"}:
+                    old[rule] = new[rule]
+    else:
+        for key in ("ignore", "extend-ignore", "per-file-ignores", "extend-per-file-ignores"):
+            old, new = previous.get(key), current.get(key)
+            if isinstance(old, list) and set(new or []) <= set(old):
+                if new is None:
+                    previous.pop(key)
+                else:
+                    previous[key] = new
+            elif isinstance(old, dict) and isinstance(new or {}, dict):
+                if all(pattern in old and set(rules) <= set(old[pattern])
+                       for pattern, rules in (new or {}).items()):
+                    if new is None:
+                        previous.pop(key)
+                    else:
+                        previous[key] = new
+    return current == previous
+
+
 def configuration_changes(current, previous, *, new_workspace_members=False):
     inherited = {"lints": {"workspace": True}, "workspace.lints": {}}
     return sorted(key for key in set(current or {}) | set(previous or {})
                   if (current or {}).get(key) != (previous or {}).get(key)
+                  and not tightens_configuration(key, (current or {}).get(key), (previous or {}).get(key))
                   and not (new_workspace_members and key not in (previous or {})
                            and Path(key).name == "Cargo.toml" and current[key] == inherited))
 
@@ -150,7 +184,7 @@ def check(root, ref):
         read_base = lambda name: git(root, "show", f"{commit}:{name}")
         base_config = base.get("configuration")
         if base_config is None:
-            # Upgrade the snapshot format using the base's actual configuration, never HEAD's.
+
             base_config = config_snapshots(root, base_names, read_base)
         base_commands = base.get("clippy_commands")
         if base_commands is None:

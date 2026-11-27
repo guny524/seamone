@@ -72,7 +72,6 @@ MODEL_SPECS: dict[str, ModelSpec] = {
 }
 
 
-# safetensors 와 설정 파일만 받는다(.bin 사본과 fp32 사본은 받지 않는다)
 ALLOW_PATTERNS = ["*.json", "*.txt", "model.safetensors", "model-*.safetensors"]
 
 

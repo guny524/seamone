@@ -348,7 +348,7 @@ def prepare_audio(set_name: str) -> None:
     if cache_is_valid(set_name, spec, ids):
         return
     with set_lock(set_name):
-        if not cache_is_valid(set_name, spec, ids):  # 기다리는 동안 다른 실행이 끝냈을 수 있다
+        if not cache_is_valid(set_name, spec, ids):
             _build_audio(set_name, spec, ids)
 
 

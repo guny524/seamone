@@ -76,7 +76,7 @@ def inventory():
                     pending.append(nested)
                 else:
                     raise ValueError(f"{path}: public module {parts[2]} must have a readable source")
-        # The source of a re-export is also part of the reviewed boundary.
+
         if path.name == "lib.rs":
             code = list(tokens(source))
             for index in range(len(code) - 4):
@@ -86,7 +86,7 @@ def inventory():
                 target = path.parent / (module + ".rs")
                 if not target.is_file():
                     continue
-                # Conservatively freeze helper declarations in that source too.
+
                 pending.append(target)
     return sorted(found)
 
