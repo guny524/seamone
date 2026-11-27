@@ -285,3 +285,7 @@
 ## 2026-11-27 15:33 PR #22 merge 와 PR #23 맞춤
 - PR #22 의 `d3fa235` CI 에서 실패한 step 은 목록 대조(`Structural policy`, `make check-architecture`, frozen base guards)뿐이고 컴파일, 시험, 다섯 플랫폼 빌드는 통과해 D4 대로 merge 했다(`9359b88`), PR #22 고치기 worktree 와 로컬, 원격 브랜치를 정리했다
 - PR #23 브랜치에 새 develop 을 merge 했다(`6d4ea4c`, 충돌 없음), 메인이 `make test` 175개(실패 0), `make test-architecture`, develop 기준 정책 대조(exit 0)를 확인했다, PR #23 은 develop 보다 늘리는 기준 목록이 없다, draft 를 풀고 CI 를 기다린다
+
+## 2026-11-27 15:47 PR #23 CI 와 관문 workflow 가 돌지 않던 원인
+- PR #23 의 `6d4ea4c` CI 는 lint, 시험, base-guards, 다섯 빌드 가운데 넷이 통과했고 `desktop (linux-x86_64)` 만 `check-imports` 의 `ModuleNotFoundError: No module named 'tomllib'` 로 실패했다(build run 45952498514), `build.yml` 의 job 에 Python 판 고정이 없어서다, worker 에게 고침과 재발 방지 시험을 맡겼다
+- `guard-rules-review-trusted` 는 PR #23 의 check 목록에 없었다, `pull_request_target` 이 default branch(main)의 workflow 파일로 도는데 그 파일이 develop 에만 있어 한 번도 돌지 않았다, 관문이 꺼져 있었고 필수 check 가 나타나지 않아 그동안의 merge 는 모두 관리자 우회였다, default branch 를 develop 으로 바꿨다(decision D9)

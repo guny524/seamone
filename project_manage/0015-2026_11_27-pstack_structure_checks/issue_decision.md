@@ -60,3 +60,8 @@
 - 상태: 확정(메인, 2026-11-27 13:50), D5 의 사용자 원문 "lint 예외가 발생하면 그건 충분히 설계가 안 된거야" 에서 나온 구현 판단
 - 정한 것: decode 부터 정규화까지 f64 로 계산하고 `Pcm16` 으로 한 번만 양자화한다, f32 가 필요한 바깥 API 는 i16 에서 손실 없이 바꾼다, 결과는 정상 범위 입력(크기가 수백 아래)에서 샘플마다 최대 1 LSB 달라질 수 있고 더 정확해지는 쪽이다
 - 근거: PR #21 Opus 검토(세션 `31d0ad1d`)가 `num-traits` 로 숨긴 `as f32` 를 억제를 옮긴 것으로 짚었다, 정밀도는 합의한 규칙이 아니라 구현이다, 재검토(세션 `3ef44bfb`)가 입력 범위 조건을 확인했다
+
+## D9. 레포의 default branch 를 develop 으로 바꾼다 [D4 위임 결정]
+- 상태: 확정(메인, 2026-11-27 15:47), D4 의 사용자 원문 "pstack 에서 말하는 주장하는 철학을 따라가, 내가 결정할 건 없어 ... 그대로 해" 에 따른 저장소 설정 결정
+- 사실: `pull_request_target` workflow 는 default branch 의 파일로 돈다, default branch 가 main 이라 develop 에만 있는 `guard-review-trusted.yml` 이 한 번도 돌지 않았다(`gh run list --event pull_request_target` 0건, PR #23 의 check run 에 없음), 그래서 검사 파일을 고친 PR 을 사람이 보게 하는 관문이 꺼져 있었고, branch protection 의 필수 check `guard-rules-review-trusted` 가 나타나지 않아 모든 PR 이 관리자 우회로만 merge 됐다
+- 정한 것: default branch 를 develop 으로 바꾼다(`gh api -X PATCH repos/guny524/seamone -f default_branch=develop`, 다시 조회해 develop 확인), 이 레포의 작업과 기록의 기준 브랜치가 develop 이고 PR 의 기본 base 도 develop 이 되어 PR #13 처럼 main 을 잘못 겨누는 일도 막는다

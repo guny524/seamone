@@ -373,3 +373,6 @@
 
 ## 2026-11-27 15:33 PR #22 merge
 - runtime 이 음성을 장치로 내보내고 끝까지 출력된 범위로만 재생 증거를 만드는 PR #22 를 merge 했다(`9359b88`), 빠른 검수 PR #23 을 새 develop 위로 맞췄다, 자세한 것은 이슈 log 2026-11-27 15:33
+
+## 2026-11-27 15:47 관문 workflow 와 default branch
+- 검사 파일을 고친 PR 을 사람이 보게 하는 `pull_request_target` 관문이 default branch(main)에 파일이 없어 한 번도 돌지 않은 것을 찾고 default branch 를 develop 으로 바꿨다(이슈 decision D9), 자세한 것은 이슈 log 2026-11-27 15:47
