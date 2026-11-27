@@ -204,3 +204,12 @@
 - worker 가 no_std 확인을 위해 노트북 rustup 에 `wasm32v1-none` target 을 더했다(Rust 도구 범위)
 - 메인이 `make test` 139개(실패 0), 주석과 예외 검사기 시험 통과, 남은 `#[expect]`, `#[allow]` 속성 0개를 확인했다, 커밋 `8c4f4d6`, PR #21 https://github.com/guny524/seamone/pull/21 , Opus 5.5 high 독립 검토를 맡겼다
 - 13단계(재생 확인 PR 1, decision D7)를 같은 worker 에게 PR #21 위 브랜치 `guny524/15-runtime-playback` 에서 시작하게 했다
+
+## 2026-11-27 13:50 PR #21 의 Opus 검토와 고치기
+- Opus 5.5 high(세션 `31d0ad1d-d3b4-407a-9a96-034920ad2e4e`) 결함 10건, 계산 결과와 IPC JSON 이 바뀐 곳은 없다
+  - f64, i32 에서 f32 로 줄이는 세 곳(`normalize.rs:25`, `:158`, `audio_ingest.rs:95`)이 `num-traits` 안에 `as f32` 를 숨긴 것뿐이다(억제를 다른 꼴로 옮김)
+  - `lint-code` 안의 차례 실행이 뒤 컴파일 진단을 가리고, CI 에 WASM step 이 따로 없다
+  - Python 은 문자열 문장으로 주석 검사를 피한다, `comments.json` 에 원문이 없어 무엇을 승인하는지 안 보인다
+  - 남긴 주석 가운데 우리 셈과 정책이 섞인 것 둘, NFD 시험 literal 이 소리 없이 약해질 수 있음, 지운 주석의 빈 줄 흔적, doctest 가 feature 합치기에 기댐(추측), macOS 에 minimal lint 없음(추측), 범위 타입이 범위를 보장하지 않음, Ruff 의 `exclude` 를 대조하지 않음
+- [결정, 메인] 1번은 축소를 승인하지 않고 계산을 고친다: decode 부터 정규화까지 f64, 마지막에 `Pcm16` 으로 한 번 양자화, f32 가 필요한 바깥 API 는 i16 에서 손실 없이, 결과는 샘플마다 최대 1 LSB 달라질 수 있어 차이를 재서 보고한다(근거: 사용자 원문 "lint 예외가 발생하면 그건 충분히 설계가 안 된거야", 정밀도는 합의한 규칙이 아니라 구현이다)
+- 10건을 두 번째 worker(Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-no-exceptions-fix`, handle `term_9cf250bf-f681-40ce-9e74-55f1e0b48e90`, `CARGO_BUILD_JOBS=1`)에게 맡겼다, 첫 worker 는 13단계를 이어 간다
