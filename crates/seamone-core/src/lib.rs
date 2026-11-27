@@ -10,6 +10,7 @@ extern crate alloc;
 pub mod capture;
 pub mod error_marks;
 pub mod ipc;
+pub mod playback;
 pub mod review;
 pub mod review_flow;
 mod transcript;

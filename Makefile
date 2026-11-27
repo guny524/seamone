@@ -149,3 +149,7 @@ site-preview:
 desktop-proof:
 	mkdir -p $(UI_DIST)
 	cargo test -p seamone-runtime --features desktop-whisper real_desktop_path -- --ignored --nocapture
+
+.PHONY: playback-device-proof
+playback-device-proof:
+	cargo test --locked -p seamone-runtime --lib real_output_device_confirms_the_tone_with_its_clock -- --ignored --nocapture

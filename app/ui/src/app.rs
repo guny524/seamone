@@ -5,15 +5,14 @@ use crate::{
     timeline::CorrectionTimeline,
     workspace::{Playback, Workspace},
 };
-use leptos::{ev, prelude::*};
+use leptos::{ev, prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{Half, overlaps},
-    review::{Action, SAMPLE_RATE, Verdict},
+    review::{Action, Verdict},
     review_flow::{ReviewFlow, ReviewMode, Ticket},
 };
 use std::time::Duration;
 use wasm_bindgen::JsCast;
-use web_sys::HtmlAudioElement;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -352,20 +351,13 @@ fn ReviewPanel(workspace: Workspace) -> impl IntoView {
             .with(|flow| flow.mode() == ReviewMode::Correction)
     };
     let position = RwSignal::new(None::<(Ticket, u64)>);
-    let on_position = Callback::new(move |(ticket, seconds): (Ticket, f64)| {
-        let Some(segment) = current.get_untracked() else {
-            return;
-        };
-        let Ok(elapsed) = Duration::try_from_secs_f64(seconds) else {
-            return;
-        };
-        let offset = (elapsed.as_nanos() * u128::from(SAMPLE_RATE) / 1_000_000_000).min(
-            u128::from(segment.range.end.saturating_sub(segment.range.start)),
-        );
-        position.set(Some((
-            ticket,
-            segment.range.start + u64::try_from(offset).unwrap_or(0),
-        )));
+    let on_position = Callback::new(move |(ticket, at): (Ticket, u64)| {
+        if let Some(segment) = current.get_untracked() {
+            position.set(Some((
+                ticket,
+                at.clamp(segment.range.start, segment.range.end),
+            )));
+        }
     });
     let cursor = Signal::derive(move || {
         workspace.playback.with(|playback| {
@@ -379,13 +371,9 @@ fn ReviewPanel(workspace: Workspace) -> impl IntoView {
         })
     });
     let wav = Signal::derive(move || {
-        workspace.playback.with(|playback| {
-            playback
-                .as_ref()?
-                .url
-                .strip_prefix("data:audio/wav;base64,")
-                .map(|wav| Ok(wav.to_owned()))
-        })
+        workspace
+            .playback
+            .with(|playback| Some(Ok(playback.as_ref()?.wav.clone())))
     });
     view! {
         <section class="review" class:correction-workspace=correcting aria-labelledby="review-heading">
@@ -414,7 +402,7 @@ fn ReviewPanel(workspace: Workspace) -> impl IntoView {
                         {move || if workspace.flow.get().listened() { "다시 재생" } else { "구간 재생" }}
                         <span class="desktop-shortcut">" (Space)"</span>
                     </button>
-                    {move || workspace.playback.get().map(|playback| view! { <RangeAudio workspace playback on_position/> })}
+                    {move || workspace.playback.get().map(|playback| view! { <RuntimePlayback workspace playback on_position/> })}
                     <p role="status" class:listened=move || workspace.flow.with(ReviewFlow::listened)>
                         {move || if workspace.flow.get().listened() { "이 수정본의 음성을 끝까지 들었습니다." } else { "현재 조각을 끝까지 들으면 확인 버튼을 쓸 수 있습니다." }}
                     </p>
@@ -479,32 +467,157 @@ fn CorrectionEditor(workspace: Workspace) -> impl IntoView {
     }
 }
 
+fn playback_controls(
+    workspace: &Workspace,
+    playback: Playback,
+    alive: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    controls: RwSignal<crate::transport::Queue>,
+    controlling: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> Callback<seamone_core::playback::Action> {
+    use std::sync::{Arc, atomic::Ordering};
+    let workspace = *workspace;
+    Callback::new(move |action| {
+        let mut start = false;
+        controls.update(|queue| start = queue.enqueue(action));
+        if !start {
+            return;
+        }
+        controlling.store(true, Ordering::Relaxed);
+        let controlling = Arc::clone(&controlling);
+        let playback = playback.clone();
+        let alive = Arc::clone(&alive);
+        spawn_local(async move {
+            loop {
+                let mut action = None;
+                controls.update(|queue| action = queue.next());
+                let Some(action) = action else {
+                    controlling.store(false, Ordering::Relaxed);
+                    return;
+                };
+                let result = Workspace::control_playback(&playback, action).await;
+                if !alive.load(Ordering::Relaxed) {
+                    Workspace::stop_session(playback.session);
+                    return;
+                }
+                match result {
+                    Ok(status) => {
+                        if !workspace.observe_playback(&playback, &status) {
+                            controlling.store(false, Ordering::Relaxed);
+                            Workspace::stop_session(playback.session);
+                            return;
+                        }
+                    }
+                    Err(error) => {
+                        controlling.store(false, Ordering::Relaxed);
+                        Workspace::stop_session(playback.session.clone());
+                        workspace.playback_error(&playback.ticket, error);
+                        return;
+                    }
+                }
+            }
+        });
+    })
+}
+
 #[component]
-fn RangeAudio(
+fn RuntimePlayback(
     workspace: Workspace,
     playback: Playback,
-    on_position: Callback<(Ticket, f64)>,
+    on_position: Callback<(Ticket, u64)>,
 ) -> impl IntoView {
-    let audio = NodeRef::<leptos::html::Audio>::new();
-    let ended = playback.clone();
-    let failed = playback.ticket.clone();
-    let timing = playback.ticket.clone();
+    use seamone_core::{
+        ipc::Command,
+        playback::{Action as Transport, State, Status},
+    };
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    let range = untrack(|| workspace.current()).map(|segment| segment.range);
+    let position = RwSignal::new(range.map_or(0, |range| range.start));
+    let state = RwSignal::new(State::Playing);
+    let dragging = RwSignal::new(false);
+    let controls = RwSignal::new(crate::transport::Queue::new());
+    let controlling = Arc::new(AtomicBool::new(false));
+    let heard = RwSignal::new(false);
+    let alive = Arc::new(AtomicBool::new(true));
+    let pending = Arc::new(AtomicBool::new(false));
+    let polling = playback.clone();
+    let active = Arc::clone(&alive);
+    let poll = move || {
+        if pending.swap(true, Ordering::Relaxed) || !active.load(Ordering::Relaxed) {
+            return;
+        }
+        let pending = Arc::clone(&pending);
+        let active = Arc::clone(&active);
+        let playback = polling.clone();
+        spawn_local(async move {
+            let result =
+                crate::api::call::<Status>(Command::GetPlaybackStatus, serde_json::json!({})).await;
+            pending.store(false, Ordering::Relaxed);
+            if !active.load(Ordering::Relaxed) {
+                return;
+            }
+            match result {
+                Ok(status) => {
+                    if workspace.observe_playback(&playback, &status) {
+                        controls.update(|queue| queue.observe(status.state));
+                        state.set(status.state);
+                        heard.set(status.heard);
+                        if !dragging.get_untracked() {
+                            position.set(status.position);
+                            on_position.run((playback.ticket.clone(), status.position));
+                        }
+                    }
+                }
+                Err(error) => workspace.playback_error(&playback.ticket, error),
+            }
+        });
+    };
+    poll();
+    let timer = set_interval_with_handle(poll, Duration::from_millis(40)).ok();
+    let session = playback.session.clone();
+    let cleanup_alive = Arc::clone(&alive);
+    let cleanup_controlling = Arc::clone(&controlling);
     on_cleanup(move || {
-        if let Some(node) = audio.get_untracked() {
-            let _ = node.pause();
-            node.set_src("");
+        cleanup_alive.store(false, Ordering::Relaxed);
+        if let Some(timer) = timer {
+            timer.clear();
+        }
+        if !cleanup_controlling.load(Ordering::Relaxed) {
+            Workspace::stop_session(session);
         }
     });
-    view! { <audio node_ref=audio src=playback.url autoplay=true aria-label="현재 조각의 음성"
-    on:timeupdate=move |event| {
-        if workspace.flow.with_untracked(|flow| flow.playing(&timing)) {
-            on_position.run((timing.clone(), event_target::<HtmlAudioElement>(&event).current_time()));
-        }
+    let control = playback_controls(&workspace, playback.clone(), alive, controls, controlling);
+    view! {
+        <div class="runtime-playback" data-runtime-playback=playback.session>
+            <button on:click=move |_| control.run(controls.with_untracked(crate::transport::Queue::toggle))>
+                {move || match state.get() { State::Playing => "일시 정지", State::Finished => "처음부터 재생", _ => "이어 재생" }}
+            </button>
+            <button on:click=move |_| control.run(Transport::Stop)>"재생 멈추기"</button>
+            {range.map(|range| view! {
+                <input type="range" min=range.start max=range.end step="1" prop:value=move || position.get()
+                    aria-label="현재 조각 재생 위치"
+                    on:pointerdown=move |_| dragging.set(true)
+                    on:pointerup=move |_| dragging.set(false)
+                    on:pointercancel=move |_| dragging.set(false)
+                    on:input=move |event| {
+                        dragging.set(true);
+                        if let Ok(at) = event_target_value(&event).parse::<u64>() {
+                            position.set(at);
+                        }
+                    }
+                    on:change=move |event| {
+                        if let Ok(at) = event_target_value(&event).parse::<u64>() {
+                            control.run(Transport::Seek { at });
+                        }
+                        dragging.set(false);
+                    }
+                    on:blur=move |_| dragging.set(false)/>
+            })}
+            <Show when=move || state.get() == State::Finished && !heard.get()>
+                <p role="status">"건너뛴 구간이 있습니다. 그 구간도 끝까지 재생하세요."</p>
+            </Show>
+        </div>
     }
-    on:ended=move |event| {
-        if event_target::<web_sys::HtmlAudioElement>(&event).ended() {
-            workspace.ended(ended.clone());
-        }
-    }
-    on:error=move |_| workspace.playback_error(&failed,"이 음성을 재생하지 못했습니다. 다시 재생하거나 검증하지 않고 나가세요.".into())/> }
 }

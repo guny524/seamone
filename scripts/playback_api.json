@@ -1,32 +1,161 @@
 {
-  "description": "Evidence module sibling declarations, trait implementations and derives; token issuance must prepare current audio before construction. Test-only helpers remain cfg(test).",
+  "description": "Output-owned played ranges, device-clock confirmation, immutable review scope, callback ownership and test-only fake output; reviewed production token hashes exclude cfg(test) module bodies.",
   "declarations": [
-    "# [ cfg ( test ) ] pub ( super ) fn mutate_after_playback ( store : & mut Store , request : & Request , ) - > Result < seamone_core : : review : : Segment , String >",
-    "pub ( super ) fn admit ( self , current : & seamone_core : : review : : Segment , next : & seamone_core : : review : : Segment , ) - > Result < ( ) , String >",
-    "pub ( super ) fn authorize_review < ' a > ( & self , request : & ' a Request , token : Option < & str > , ) - > Result < AuthorizedReview < ' a > , String >",
-    "pub ( super ) fn issue_playback_token ( & self , store : & Store , id : & str , revision : u64 , ) - > Result < PlaybackReply , String >",
-    "pub ( super ) fn mark_playback_ended ( & self , token : & str ) - > Result < ( ) , String >",
-    "pub ( super ) fn new ( ) - > Self",
-    "pub ( super ) fn request ( & self ) - > & ' a Request",
-    "pub ( super ) struct AuthorizedReview < ' a >",
-    "pub ( super ) struct PlaybackProof < ' a >",
-    "pub ( super ) struct Playbacks"
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: # [ cfg ( any ( test , feature = \"test-support\" ) ) ] pub ( super ) fn advance ( & self , frames : usize ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: # [ cfg ( any ( test , feature = \"test-support\" ) ) ] pub ( super ) fn fake ( ) - > Self",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: # [ cfg ( test ) ] pub ( super ) fn finish ( & self , session : & str ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: # [ cfg ( test ) ] pub ( super ) fn mutate_after_playback ( store : & mut Store , request : & Request , ) - > Result < seamone_core : : review : : Segment , String >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) fn admit ( self , current : & seamone_core : : review : : Segment , next : & seamone_core : : review : : Segment , ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) fn authorize_review < ' a > ( & self , request : & ' a Request , session : Option < & str > , ) - > Result < AuthorizedReview < ' a > , String >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) fn close ( & self )",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) fn control ( & self , session : & str , action : Action ) - > Result < Status , String >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) fn new ( ) - > Self",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) fn play_recording ( & self , store : impl std : : ops : : Deref < Target = Store > , id : & str , revision : u64 , range : SampleRange , ) - > Result < Status , String >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) fn prepare_review ( & self , store : impl std : : ops : : Deref < Target = Store > , id : & str , revision : u64 , ) - > Result < PlaybackReply , String >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) fn request ( & self ) - > & ' a Request",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) fn status ( & self ) - > Result < Status , String >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) struct AuthorizedReview < ' a >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) struct PlaybackProof < ' a >",
+    "crates/seamone-runtime/src/playback_evidence/mod.rs: pub ( super ) struct Playbacks",
+    "crates/seamone-runtime/src/playback_evidence/output/clock.rs: pub ( super ) fn timing ( callback : Option < Duration > , playback : Option < Duration > , latency : Option < Duration > , ) - > Option < Timing >",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: impl Device for Disconnected",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: impl Drop for Running",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: impl RenderedOutput for OutputStream",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: pub ( super ) commands : Producer < Action >",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: pub ( super ) driver : Box < dyn Driver >",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: pub ( super ) fn create ( source : Arc < [ f32 ] > , origin : u64 , device : Box < dyn Device > , ) - > Result < Stream , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: pub ( super ) reader : Reader",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: pub ( super ) struct Running",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: pub ( super ) trait Device : Send { fn start ( & self , source : Arc < [ f32 ] > , at : u64 ) - > Result < Running , String > ; }",
+    "crates/seamone-runtime/src/playback_evidence/output/engine.rs: pub ( super ) trait Driver : Send { fn stop ( & mut self ) ; # [ cfg ( any ( test , feature = \"test-support\" ) ) ] fn advance ( & mut self , _frames : usize ) - > Result < ( ) , String > { Err ( \"실제 출력 장치는 시험 시계로 진행할 수 없습니다.\" . into ( ) ) } }",
+    "crates/seamone-runtime/src/playback_evidence/output/fake.rs: impl Driver for Clock",
+    "crates/seamone-runtime/src/playback_evidence/output/fake.rs: impl engine : : Device for Device",
+    "crates/seamone-runtime/src/playback_evidence/output/fake.rs: pub ( super ) struct Device",
+    "crates/seamone-runtime/src/playback_evidence/output/heard.rs: pub ( super ) fn add ( & mut self , played : PlayedRun )",
+    "crates/seamone-runtime/src/playback_evidence/output/heard.rs: pub ( super ) fn complete ( & self ) - > bool",
+    "crates/seamone-runtime/src/playback_evidence/output/heard.rs: pub ( super ) fn invalidate ( & mut self )",
+    "crates/seamone-runtime/src/playback_evidence/output/heard.rs: pub ( super ) fn new ( len : u64 ) - > Self",
+    "crates/seamone-runtime/src/playback_evidence/output/heard.rs: pub ( super ) struct Heard",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: # [ cfg ( any ( test , feature = \"test-support\" ) ) ] pub ( super ) fn advance ( & mut self , frames : usize ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: # [ cfg ( any ( test , feature = \"test-support\" ) ) ] pub ( super ) fn fake ( source : Arc < [ f32 ] > , origin : u64 ) - > Result < Self , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: # [ cfg ( test ) ] pub ( super ) fn finish ( & mut self ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: impl Output for Platform",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: impl Output for Platform",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: pub ( super ) error : Option < String >",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: pub ( super ) fn control ( & mut self , action : Action ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: pub ( super ) fn create ( source : Arc < [ f32 ] > , origin : u64 ) - > Result < Self , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: pub ( super ) fn observation ( & mut self ) - > Observation",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: pub ( super ) heard : bool",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: pub ( super ) position : u64",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: pub ( super ) state : State",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: pub ( super ) struct Observation",
+    "crates/seamone-runtime/src/playback_evidence/output/mod.rs: pub ( super ) struct Stream",
+    "crates/seamone-runtime/src/playback_evidence/output/native.rs: impl Driver for Native",
+    "crates/seamone-runtime/src/playback_evidence/output/native.rs: impl engine : : Device for Device",
+    "crates/seamone-runtime/src/playback_evidence/output/native.rs: pub ( super ) fn open ( ) - > Result < ( cpal : : Device , Duration ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/native.rs: pub ( super ) struct Device",
+    "crates/seamone-runtime/src/playback_evidence/output/native/macos.rs: pub ( super ) fn open ( ) - > Result < ( cpal : : Device , Duration ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/native/windows.rs: pub ( super ) fn open ( ) - > Result < ( cpal : : Device , Duration ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: # [ cfg ( test ) ] pub ( super ) fn inject_error ( & self )",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: # [ derive ( Clone , Copy ) ]",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: # [ derive ( Clone , Copy ) ] pub ( super ) struct Timing",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) callback : u64",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) channels : u16",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) fn broken ( & self ) - > bool",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) fn closed ( & mut self ) - > Option < PlayedRun >",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) fn new ( source : Arc < [ f32 ] > , format : Format , at : u64 , fault : Arc < AtomicBool > , ) - > Result < ( Self , Reader , Producer < Action > ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) fn range ( self ) - > std : : ops : : Range < u64 >",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) fn render < T : Copy > ( & mut self , output : & mut [ T ] , timing : Timing , convert : impl Fn ( f32 ) - > T , )",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) fn snapshot ( & self ) - > Option < Snapshot >",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) fn validate ( & self ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) playback : u64",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) position : u64",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) rate : u32",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) run : PlayedRun",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) state : State",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) struct Format",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) struct PlayedRun",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) struct Reader",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) struct Renderer",
+    "crates/seamone-runtime/src/playback_evidence/output/renderer.rs: pub ( super ) struct Snapshot",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: # [ cfg ( any ( test , feature = \"test-support\" ) ) ] pub ( super ) fn advance ( & mut self , frames : usize ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: # [ cfg ( any ( test , feature = \"test-support\" ) ) ] pub ( super ) fn fake ( ) - > Self",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: # [ cfg ( test ) ] pub ( super ) fn finish ( & mut self ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: # [ cfg ( test ) ] pub ( super ) fn with_output ( output : OutputFactory ) - > Self",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) fn authorizes ( & mut self , request : & Request , id : Option < & str > ) - > bool",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) fn close ( & mut self )",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) fn control ( & mut self , id : & str , action : Action ) - > Result < Status , String >",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) fn load ( & mut self , samples : Vec < f32 > , origin : u64 , scope : Option < ( String , u64 ) > , ) - > Result < String , String >",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) fn new ( ) - > Self",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) fn status ( & mut self ) - > Status",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) struct Player"
+  ],
+  "modules": [
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/mod.rs",
+      "sha256": "295944f75df0156e33e30f0a1a0cb1f172ef8631bdbda76083ae6bfe3157497a"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/clock.rs",
+      "sha256": "524c8d122abe400c5c8e566e0d5fe246337bb9ffafe25116492df0aeb2af293b"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/engine.rs",
+      "sha256": "cd91660768d3daa3be32bfc9b61704a1ddcb40bc4b0812fb0c51587c80e27acd"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/fake.rs",
+      "sha256": "d9d1e6ef70aeaeac779af55a32948897706799799b90a5c4544c386930cd70e3"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/heard.rs",
+      "sha256": "496948686012f18cb84f080dedfccf664ae642aee80b6a7eddefabc9e0128e3d"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/mod.rs",
+      "sha256": "7f0426e29caa64312a70562e83f788f9805a3843baa97b7ea18fb87a4902a6a6"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/macos.rs",
+      "sha256": "dd77ac7916bd36898abcbc8e3b018f3a30d3f994803cbc4c1b20175af69b8e8a"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/windows.rs",
+      "sha256": "2378730807c283259e32c3484767e12f951b7bfae21024d2134b3d82224eb31b"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native.rs",
+      "sha256": "2fa037fc2fce44424dd00cde2e869d283f12daec21f12005759d52b9ee26813b"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/renderer.rs",
+      "sha256": "e7bdf7199d8a9c78719b5fa97925348681ec7c7e2ed9b945562e59339db540fc"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/player.rs",
+      "sha256": "4a3eaa6d79407402420d20259b940b38a96cabe53305bd13bad8cf39b817fb2b"
+    }
   ],
   "callers": [
     {
       "path": "crates/seamone-runtime/src/lib.rs",
       "function": "LibraryService::playback",
-      "method": "issue_playback_token"
-    },
-    {
-      "path": "crates/seamone-runtime/src/lib.rs",
-      "function": "LibraryService::playback_ended",
-      "method": "mark_playback_ended"
+      "method": "prepare_review"
     },
     {
       "path": "crates/seamone-runtime/src/lib.rs",
       "function": "LibraryService::review",
       "method": "authorize_review"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native.rs",
+      "function": "write",
+      "method": "render"
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/fake.rs",
+      "function": "Driver for Clock::advance",
+      "method": "render"
     }
   ]
 }

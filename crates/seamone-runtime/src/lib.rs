@@ -108,7 +108,7 @@ macro_rules! evidence_example {
             "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
             "# #[path = r#\"",
             env!("CARGO_MANIFEST_DIR"),
-            "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
+            "/src/playback_evidence/mod.rs\"#] mod playback_evidence;\n",
             "# #[path = r#\"",
             env!("CARGO_MANIFEST_DIR"),
             "/src/store.rs\"#] mod store;\n",
@@ -123,19 +123,21 @@ macro_rules! evidence_example {
     };
 }
 
-/// Owns recording, playback evidence, verified revisions and local work.
-#[doc = evidence_example!("A sibling must submit the immutable request authorized by the gate.", "compile_fail,E0308", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(request);\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling must submit the immutable request authorized by the gate.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling cannot construct the proof's private fields.", "compile_fail,E0451", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = super::playback_evidence::PlaybackProof { request };\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling cannot construct the proof's private fields.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = playbacks.authorize_review(request, Some(&token)).unwrap();\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling cannot construct proof-free authorization.", "compile_fail,E0451", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = super::playback_evidence::AuthorizedReview { authority: todo!() };\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling cannot construct proof-free authorization.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = playbacks.authorize_review(request, Some(&token)).unwrap();\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling cannot use a Default constructor.", "compile_fail,E0599", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::default();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling cannot use a Default constructor.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling cannot issue a token without preparing the audio.", "compile_fail,E0624", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.begin(&request.segment_id, request.expected_revision).unwrap();\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling cannot issue a token without preparing the audio.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling cannot retain the private SQL permit.", "compile_fail,E0603", "mod sibling {\nfn checked(connection: &rusqlite::Connection) {\nlet _: Option<super::write_guard::WritePermit<'_>> = None;\n}\n}\n# fn main() {}")]
-#[doc = evidence_example!("A sibling receives only the completed write result.", "", "mod sibling {\nfn checked(connection: &rusqlite::Transaction<'_>) {\nlet writes = super::write_guard::WriteAccess::attach(connection).unwrap();\nlet _: () = writes.clear_verification(connection, Vec::new()).unwrap();\n}\n}\n# fn main() {}")]
+/// Owns recording, device playback evidence, verified revisions and local work.
+#[doc = evidence_example!("A sibling submits only the immutable request authorized by runtime output.", "compile_fail,E0308", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = store.mutate(request);\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling submits only the immutable request authorized by runtime output.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&session)).unwrap());\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot construct private request authority.", "compile_fail,E0451", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = super::playback_evidence::PlaybackProof { request };\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot construct private request authority.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = playbacks.authorize_review(request, Some(&session)).unwrap();\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot construct proof-free authorization.", "compile_fail,E0451", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = super::playback_evidence::AuthorizedReview { authority: todo!() };\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot construct proof-free authorization.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = playbacks.authorize_review(request, Some(&session)).unwrap();\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("Playback state has no default proof constructor.", "compile_fail,E0599", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = super::playback_evidence::Playbacks::default();\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("Playback state has no default proof constructor.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = super::playback_evidence::Playbacks::new();\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("Only the output module can construct a played run.", "compile_fail,E0603", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = super::playback_evidence::output::renderer::PlayedRun { start: 0, end: 16 };\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("Only the output module can construct a played run.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = playbacks.status().unwrap();\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("Only the output module can construct or mutate listening coverage.", "compile_fail,E0603", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = super::playback_evidence::output::heard::Heard { len: 16, runs: vec![0..16], broken: false };\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("Only the output module can construct or mutate listening coverage.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::Request) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet session = playbacks.prepare_review(&*store, &request.segment_id, request.expected_revision).unwrap().session;\nlet _ = playbacks.status().unwrap();\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling receives only completed writes and cannot retain a private SQL permit.", "compile_fail,E0603", "mod sibling {\nfn checked(connection: &rusqlite::Transaction<'_>) {\nlet _: Option<super::write_guard::WritePermit<'_>> = None;\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling receives only completed writes and cannot retain a private SQL permit.", "", "mod sibling {\nfn checked(connection: &rusqlite::Transaction<'_>) {\nlet writes = super::write_guard::WriteAccess::attach(connection).unwrap();\nlet _: () = writes.clear_verification(connection, Vec::new()).unwrap();\n}\n}\n# fn main() {}")]
 pub struct LibraryService {
     store: std::sync::Arc<Mutex<Store>>,
     background: crate::training::BackgroundWork,
@@ -153,6 +155,9 @@ impl LibraryService {
             background,
             #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
             recorder: crate::capture::Recorder::default(),
+            #[cfg(test)]
+            listening: playback_evidence::Playbacks::fake(),
+            #[cfg(not(test))]
             listening: playback_evidence::Playbacks::new(),
         }
     }
@@ -163,27 +168,52 @@ impl LibraryService {
     }
 
     /// # Errors
-    /// 현재 조각이나 revision이 없거나 음성을 읽을 수 없으면 오류를 돌려준다
+    /// 현재 조각이나 revision이 없거나 음성, 출력 장치, 장치 지연을 읽지 못하면 오류를 돌려준다
     pub fn playback(&self, id: &str, revision: u64) -> Result<PlaybackReply, String> {
         let store = self.store()?;
-        self.listening.issue_playback_token(&store, id, revision)
+        self.listening.prepare_review(store, id, revision)
     }
 
     /// # Errors
-    /// token이 없거나 만료되었거나 이미 소비되었으면 오류를 돌려준다
-    pub fn playback_ended(&self, token: &str) -> Result<(), String> {
-        self.listening.mark_playback_ended(token)
+    /// session이나 위치가 유효하지 않거나 장치 조작이 실패하면 오류를 돌려준다
+    pub fn control_playback(
+        &self,
+        session: &str,
+        action: seamone_core::playback::Action,
+    ) -> Result<seamone_core::playback::Status, String> {
+        self.listening.control(session, action)
+    }
+
+    /// # Errors
+    /// 재생 상태 lock을 얻지 못하면 오류를 돌려준다
+    pub fn playback_status(&self) -> Result<seamone_core::playback::Status, String> {
+        self.listening.status()
+    }
+
+    /// # Errors
+    /// 녹음 revision, 재생 범위나 원본이 유효하지 않거나 장치를 열지 못하면 오류를 돌려준다
+    pub fn play_recording(
+        &self,
+        id: &str,
+        revision: u64,
+        range: SampleRange,
+    ) -> Result<seamone_core::playback::Status, String> {
+        let store = self.store()?;
+        self.listening.play_recording(store, id, revision, range)
     }
 
     /// # Errors
     /// 재생 증거, revision, 검수 전이, 전사문이 유효하지 않거나 저장에 실패하면 오류를 돌려준다
     pub fn review(&self, request: &Request, proof: Option<&str>) -> Result<Segment, String> {
+        if let Some(replayed) = self.store()?.replay(request)? {
+            return Ok(replayed);
+        }
+        let authorized = self.listening.authorize_review(request, proof);
         let mut store = self.store()?;
         if let Some(replayed) = store.replay(request)? {
             return Ok(replayed);
         }
-        let authorized = self.listening.authorize_review(request, proof)?;
-        let saved = store.mutate(authorized)?;
+        let saved = store.mutate(authorized?)?;
         drop(store);
         if saved.verified.is_some() {
             self.background.notify();
@@ -349,8 +379,9 @@ impl LibraryService {
     pub fn request_close(&self) -> bool {
         self.recorder.request_close()
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     pub fn close(&self) {
+        self.listening.close();
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
         self.recorder.close();
     }
 }

@@ -52,6 +52,16 @@
       "text": "// SAFETY: AVFoundation copies the heap block for its asynchronous callback; the block owns its sender."
     },
     {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/macos.rs",
+      "sha256": "b05806acf8a287d98ef992dc0539d9d00ce007b2047dc84ba8c150f306fa0de0",
+      "text": "// SAFETY: CoreAudio receives live property addresses, aligned initialized buffers and their exact byte lengths; returned sizes are checked before reading values."
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/windows.rs",
+      "sha256": "9bfef1034bcd1a4e99fadda3f6d28af7aeb30a6635bd94d83dc634bcb2d258c4",
+      "text": "// SAFETY: CPAL initializes COM on this thread; COM interfaces remain owned here, the mix-format allocation is freed after Initialize, and property values own their returned strings."
+    },
+    {
       "path": "research/seamone_research/data.py",
       "sha256": "b3277b24692ab82bbb846cbeb4555315fbdf19d267affff5cfa3dcad6d1558b7",
       "text": "# 머리글 없는 7열: id(문장), file_name, raw_transcription, transcription,"

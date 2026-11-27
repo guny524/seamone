@@ -11,10 +11,9 @@ from check_runtime_api import surface
 from rust_tokens import tokens
 from snapshot_baselines import errors as baseline_errors
 from guard_integrity import base_commit
-from check_review_writes import functions, test_files, git
+from check_review_writes import functions, test_files, git, persistence_digest
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / 'crates/seamone-runtime/src/playback_evidence.rs'
 SNAPSHOT = ROOT / 'scripts/playback_api.json'
 
 
@@ -59,8 +58,8 @@ def errors(actual, expected):
     current, reviewed = map(collections.Counter, (actual, expected))
     found = []
     for declaration in current - reviewed:
-        found.append(f'playback_evidence.rs: unreviewed evidence declaration: {declaration}; '
-                     'issue tokens only through Playbacks::issue_playback_token with current audio, '
+        found.append(f'playback_evidence: unreviewed evidence declaration: {declaration}; '
+                     'evidence requires callback-confirmed output of current audio, '
                      'review scripts/playback_api.json before changing this boundary')
     if reviewed - current:
         found.append('scripts/playback_api.json: an evidence declaration changed or disappeared; review the callers')
@@ -78,7 +77,7 @@ def caller_errors(root, policy):
         source = path.read_text(encoding='utf-8')
         code, scopes = functions(source, name in tests)
         for index, token in enumerate(code):
-            if token.text not in {'issue_playback_token', 'mark_playback_ended', 'authorize_review'} or (index > 0 and code[index - 1].text == 'fn'):
+            if token.text not in {'prepare_review', 'authorize_review', 'render'} or (index > 0 and code[index - 1].text == 'fn'):
                 continue
             enclosing = [scope for scope in scopes if scope.start < token.start < scope.end]
             scope = min(enclosing, key=lambda scope: scope.end - scope.start) if enclosing else None
@@ -87,7 +86,60 @@ def caller_errors(root, policy):
             caller = {'path': name, 'function': scope.name if scope else '<outside function>', 'method': token.text}
             if caller not in policy:
                 line = source.count('\n', 0, token.start) + 1
-                diagnostics.append(f'{name}:{line}: {caller["function"]} cannot call {token.text}; use LibraryService::playback/playback_ended/review')
+                diagnostics.append(f'{name}:{line}: {caller["function"]} cannot call {token.text}; use the reviewed runtime output entry points')
+    return diagnostics
+
+
+def inventory(root):
+    testing = test_files(root)
+    declarations_found, modules = [], []
+    folder = root / 'crates/seamone-runtime/src/playback_evidence'
+    for path in sorted(folder.rglob('*.rs')):
+        name = path.relative_to(root).as_posix()
+        if name in testing:
+            continue
+        source = path.read_text(encoding='utf-8')
+        declarations_found.extend(f'{name}: {item}' for item in declarations(source))
+        modules.append({'path': name, 'sha256': persistence_digest(source)})
+    return {'declarations': sorted(declarations_found), 'modules': modules}
+
+
+def realtime_errors(source, name):
+    code, scopes = functions(source)
+    diagnostics = []
+    realtime = {'Renderer::render', 'Renderer::publish', 'Renderer::controls',
+                'Renderer::seek', 'Renderer::fail', 'write'}
+    blocked = {'lock', 'try_lock', 'sleep', 'recv', 'recv_timeout', 'send',
+               'reserve', 'reserve_exact', 'collect', 'with_capacity', 'to_vec',
+               'to_owned', 'to_string', 'format', 'vec', 'now'}
+    for scope in scopes:
+        if scope.testing or scope.name not in realtime:
+            continue
+        body = [token.text for token in scope.body]
+        if any(word in blocked and body[index + 1] in {'(', '!'} for index, word in enumerate(body[:-1])) or any(body[i:i + 3] == [':', ':', 'new'] for i in range(len(body) - 2)):
+            diagnostics.append(f'{name}: {scope.name}: real-time callback cannot lock, block or allocate')
+    for index, token in enumerate(code):
+        if token.text not in {'store', 'fetch_add', 'swap', 'compare_exchange', 'fetch_update'}:
+            continue
+        if index == 0 or code[index - 1].text != '.':
+            continue
+        enclosing = [scope for scope in scopes if scope.start < token.start < scope.end]
+        scope = min(enclosing, key=lambda scope: scope.end - scope.start) if enclosing else None
+        if scope and scope.testing:
+            continue
+        if scope is None or scope.name not in {'Renderer::publish', 'build'}:
+            diagnostics.append(f'{name}: only Renderer::publish or the native fault callback may write output atomics')
+    return diagnostics
+
+
+def policy_errors(root, policy):
+    current = inventory(root)
+    diagnostics = errors(current['declarations'], policy['declarations'])
+    if current['modules'] != policy['modules']:
+        diagnostics.append('scripts/playback_api.json: output implementation changed; review callback ownership, clock, buffers and fake-device cfg gates')
+    diagnostics.extend(caller_errors(root, policy['callers']))
+    for module in current['modules']:
+        diagnostics.extend(realtime_errors((root / module['path']).read_text(encoding='utf-8'), module['path']))
     return diagnostics
 
 
@@ -102,9 +154,7 @@ def main():
         print('\n'.join(diagnostics), file=sys.stderr)
         return 1
     try:
-        diagnostics = errors(declarations(SOURCE.read_text(encoding='utf-8')),
-                             json.loads(SNAPSHOT.read_text(encoding='utf-8'))['declarations'])
-        diagnostics.extend(caller_errors(ROOT, json.loads(SNAPSHOT.read_text(encoding='utf-8'))['callers']))
+        diagnostics = policy_errors(ROOT, json.loads(SNAPSHOT.read_text(encoding='utf-8')))
     except (OSError, ValueError, KeyError, TypeError) as error:
         diagnostics = [f'{SNAPSHOT}: cannot read the evidence boundary: {error}']
     for diagnostic in diagnostics:

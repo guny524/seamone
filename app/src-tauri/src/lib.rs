@@ -194,6 +194,19 @@ mod tests {
         assert!(seamone_runtime::LibraryService::inference_available());
     }
 
+    fn complete_playback(window: &tauri::WebviewWindow<tauri::test::MockRuntime>, session: &str) {
+        invoke(
+            window,
+            "control_playback",
+            serde_json::json!({"session":session,"action":{"kind":"play"}}),
+        )
+        .unwrap();
+        let state = window.state::<seamone_runtime::LibraryService>();
+        seamone_runtime::test_support::advance_playback(&state, 60_000).unwrap();
+        let status = invoke(window, "get_playback_status", serde_json::json!({})).unwrap();
+        assert_eq!(status["heard"], true);
+    }
+
     fn app_fixture() -> (tempfile::TempDir, tauri::App<tauri::test::MockRuntime>) {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.tmp/native-tests");
         std::fs::create_dir_all(&root).unwrap();
@@ -301,7 +314,15 @@ mod tests {
                 "save_error_marks",
                 json!({"batch":{"id":"batch","recording_id":"missing","recording_revision":1,"ranges":[{"start":0,"end":16}]}}),
             ),
-            ("playback_ended", json!({"token":"missing"})),
+            (
+                "control_playback",
+                json!({"session":"missing","action":{"kind":"play"}}),
+            ),
+            ("get_playback_status", json!({})),
+            (
+                "play_recording",
+                json!({"recordingId":"missing","revision":1,"range":{"start":0,"end":16}}),
+            ),
             (
                 "save_review",
                 json!({"request":{"event_id":"event","segment_id":"missing","expected_revision":1,"action":{"kind":"judge","verdict":"no"}},"proof":null}),
@@ -533,7 +554,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        invoke(&window, "playback_ended", json!({"token":playback.token})).unwrap();
+        complete_playback(&window, &playback.session);
         let draft = Request {
             event_id: "event-0".into(),
             segment_id: segment.id.clone(),
@@ -576,7 +597,7 @@ mod tests {
             invoke(
                 &window,
                 "save_review",
-                json!({"request":confirm,"proof":playback.token})
+                json!({"request":confirm,"proof":playback.session})
             )
             .is_err()
         );
@@ -589,12 +610,12 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        invoke(&window, "playback_ended", json!({"token":playback.token})).unwrap();
+        complete_playback(&window, &playback.session);
         let confirmed: Segment = serde_json::from_value(
             invoke(
                 &window,
                 "save_review",
-                json!({"request":confirm,"proof":playback.token}),
+                json!({"request":confirm,"proof":playback.session}),
             )
             .unwrap(),
         )
@@ -639,9 +660,10 @@ mod tests {
             "recordingId":mark.recording_id,"revision":mark.recording_revision,"range":mark.range
         });
         assert!(invoke(&other, "get_recording_playback", preview_args.clone()).is_err());
-        let preview = invoke(&window, "get_recording_playback", preview_args).unwrap();
+        let preview = invoke(&window, "get_recording_playback", preview_args.clone()).unwrap();
         assert!(preview.as_str().is_some_and(|wav| !wav.is_empty()));
-        assert!(invoke(&window, "playback_ended", json!({"token":preview})).is_err());
+        let removed = invoke(&window, "playback_ended", json!({"token":preview})).unwrap_err();
+        assert_eq!(removed.as_str(), Some("Command playback_ended not found"));
         let old: PlaybackReply = serde_json::from_value(
             invoke(
                 &window,
@@ -651,7 +673,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        invoke(&window, "playback_ended", json!({"token":old.token})).unwrap();
+        complete_playback(&window, &old.session);
         assert!(invoke(&other, "save_error_mark", json!({"mark":mark})).is_err());
         invoke(&window, "save_error_mark", json!({"mark":mark})).unwrap();
         invoke(&window, "save_error_mark", json!({"mark":mark})).unwrap();
@@ -677,7 +699,7 @@ mod tests {
             invoke(
                 &window,
                 "save_review",
-                json!({"request":req,"proof":old.token})
+                json!({"request":req,"proof":old.session})
             )
             .is_err()
         );
@@ -690,9 +712,9 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let correction = json!({"request":req,"proof":full.token});
+        let correction = json!({"request":req,"proof":full.session});
         assert!(invoke(&window, "save_review", correction.clone()).is_err());
-        invoke(&window, "playback_ended", json!({"token":full.token})).unwrap();
+        complete_playback(&window, &full.session);
         let unchanged = Request {
             event_id: "unchanged".into(),
             action: Action::ConfirmCorrection,
@@ -702,7 +724,7 @@ mod tests {
             invoke(
                 &window,
                 "save_review",
-                json!({"request":unchanged,"proof":full.token})
+                json!({"request":unchanged,"proof":full.session})
             )
             .is_err()
         );
@@ -710,6 +732,51 @@ mod tests {
             serde_json::from_value(invoke(&window, "save_review", correction).unwrap()).unwrap();
         assert_eq!(corrected.range, segment.range);
         assert_eq!(corrected.verified.unwrap().text(), "고친 말");
+    }
+
+    #[test]
+    fn preview_output_cannot_authorize_a_review_and_stale_controls_fail() {
+        use seamone_core::review::{Action, Request, Verdict};
+        use serde_json::json;
+        let (_fixture, app, segment) = review_app_fixture();
+        let window = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .unwrap();
+        let args = json!({"recordingId":segment.recording_id,"revision":segment.recording_revision,"range":segment.range});
+        let playing = invoke(&window, "play_recording", args.clone()).unwrap();
+        let session = playing["session"].as_str().unwrap();
+        complete_playback(&window, session);
+        let request = Request {
+            event_id: "preview-is-not-review".into(),
+            segment_id: segment.id.clone(),
+            expected_revision: segment.revision,
+            action: Action::Judge {
+                verdict: Verdict::Yes,
+            },
+        };
+        assert!(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":request,"proof":session})
+            )
+            .is_err()
+        );
+        let next = invoke(&window, "play_recording", args).unwrap();
+        assert_ne!(next["session"], session);
+        assert!(
+            invoke(
+                &window,
+                "control_playback",
+                json!({"session":session,"action":{"kind":"play"}})
+            )
+            .is_err()
+        );
+        window.state::<seamone_runtime::LibraryService>().close();
+        assert_eq!(
+            invoke(&window, "get_playback_status", json!({})).unwrap()["state"],
+            "idle"
+        );
     }
 
     #[test]
@@ -746,16 +813,30 @@ mod tests {
             invoke(
                 &window,
                 "save_review",
-                json!({"request":req,"proof":playback.token})
+                json!({"request":req,"proof":playback.session})
             )
             .is_err()
         );
-        invoke(&window, "playback_ended", json!({"token":playback.token})).unwrap();
+        invoke(
+            &window,
+            "control_playback",
+            json!({"session":playback.session,"action":{"kind":"play"}}),
+        )
+        .unwrap();
+        assert!(
+            invoke(
+                &window,
+                "save_review",
+                json!({"request":req,"proof":playback.session})
+            )
+            .is_err()
+        );
+        complete_playback(&window, &playback.session);
         let rejected: Segment = serde_json::from_value(
             invoke(
                 &window,
                 "save_review",
-                json!({"request":req,"proof":playback.token}),
+                json!({"request":req,"proof":playback.session}),
             )
             .unwrap(),
         )

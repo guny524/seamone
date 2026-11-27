@@ -50,13 +50,13 @@ graph LR
 - `crates/seamone-core`: 음성 구간, 자동 전사문, 수정본, 실제 Yes/No 판정, 정답 snapshot, 학습 적격 조건과 검토 화면의 상태 전이, 화면과 native가 함께 쓴다
 - `crates/seamone-asr`: 기존 `Transcriber` interface와 시험용 `FakeTranscriber`, `whisper` feature의 실제 엔진, 시험용 전사문은 제품 화면에 넣지 않는다
 - `crates/seamone-runtime`: `LibraryService`가 CPAL 마이크, 입력 디코딩, WAV 보관, SQLite migration, 받아쓰기, 재생 증거, 검수 저장과 학습 대기열을 소유한다, Store와 raw mutate는 crate 밖에 공개하지 않아 host가 Store를 직접 바꿀 수 없다
-- runtime의 비공개 `playback_evidence` 모듈은 `Playbacks::issue_playback_token`에서 현재 조각과 revision을 대조하고 해당 구간 WAV를 준비한 뒤 token을 발급한다. token만 만드는 begin과 증거 필드는 모듈 비공개이며 Default 생성 경로는 없다. `Store::mutate`는 이 모듈이 발급한 `AuthorizedReview`만 받고 승인 값은 검사한 요청을 불변 참조로 묶는다. Yes와 No 판정, 교정 확정은 완료 알림과 token 범위를 확인한다. 초안 저장과 오류 표시 해제, 검증 취소는 기존 정책대로 재생 없이 승인한다
+- runtime의 비공개 `playback_evidence`는 현재 조각과 revision의 음성을 준비하고 `player`에 한 session을 둔다, 비공개 `output`의 Renderer가 CPAL callback의 장치 시계로 출력 완료를 확인한 범위만 `PlayedRun`으로 보내고 `Heard`가 합집합을 만든다, 조각 전체를 덮은 session만 `AuthorizedReview`를 발급한다, `Store::mutate`는 이 승인 값의 불변 요청만 저장한다, Yes와 No 판정 및 교정 확정은 이 증거를 요구하며 초안 저장과 오류 표시 해제, 검증 취소는 재생 없이 승인한다
 - `VerifiedText`의 필드는 core의 검수 전이 밖에서 직접 조립하지 못하고 getter로 읽는다. DB와 IPC의 JSON 모양을 유지하기 위해 Deserialize는 남긴다. 따라서 타입의 필드 비공개만으로 저장 권한을 보장하지 않으며 Store의 확인 전사 쓰기와 학습 대기열 삽입 위치도 검사한다
 - `app/src-tauri`: 신뢰할 창과 command 권한, 파일 dialog, mobile 문서 URI 접근과 해제, clipboard와 Tauri 이벤트를 맡고 `LibraryService`를 호출한다, Android의 seek할 수 없는 문서 스트림은 runtime이 크기를 제한해 임시 파일로 옮긴 뒤 디코딩한다
-- `app/ui`: 빠른 검수, 조각별 검증, 교정, 일반 편집 화면, 빠른 검수는 원본을 최대 30초씩 이어 재생한다, 검증과 교정 확인은 현재 조각의 HTML audio `ended` event를 확인한다
+- `app/ui`: 빠른 검수, 조각별 검증, 교정, 일반 편집 화면, 검증과 교정은 runtime의 재생 상태를 조회한다, 빠른 검수는 HTML audio로 원본을 최대 30초씩 이어 재생하며 확인 전사를 만드는 증거는 발급받지 않는다
 - `research`: 앱과 별도인 PyTorch 연구 코드, 앱은 Python을 포함하지 않고 연구 adapter를 활성화하지 않는다
 - research의 직접 삭제 API는 `seamone_research/cache.py`의 `remove_inside`에 모은다. 이 함수는 HF_HOME 아래 전용 eval-raw/seamone_eval cache 안에서 root의 자식만 삭제하고 공유 HF_HOME/hub와 root 밖의 symlink를 거절한다. manifest 파일 삭제는 기존 missing_ok 동작을 유지한다
-- host와 runtime 안 호출자는 token을 발급받은 뒤 끝 알림을 바로 보낼 수 있다. runtime은 현재 음성 준비와 완료 알림, token 범위를 확인하지만 실제 청취나 최소 재생 시간은 확인하지 않는다. 이 검수 정책을 바꾸려면 사람 결정이 필요하다
+- 재생 확인은 1배속 출력 callback에 제출한 모든 source sample의 버퍼 끝이 장치 시계를 지난 상태다, 일시 정지와 되감기, 앞으로 넘긴 뒤 빈 구간을 다시 듣는 것을 허용한다, macOS의 device, stream 지연과 safety offset, Windows의 stream 지연과 장치 period를 CPAL의 playback 시각에 더하며 ALSA는 CPAL이 읽은 get_delay를 쓴다, 지연 조회 실패와 장치 오류, 잘못된 시각은 session 전체를 무효로 하며 처음부터 다시 열어야 한다, OS mute나 실제 사람의 청취는 확인할 수 없다, 앱에 별도 음량 조절은 없다
 
 ### 2-1. 데이터와 저장
 - native가 앱 데이터 폴더의 `seamone.sqlite3`와 `audio/<UUID>.wav`를 소유한다, 화면에서 임의 파일 경로를 넘겨 읽을 수 없다
@@ -84,6 +84,15 @@ graph LR
 - `import_audio({})`는 native 파일 선택기를 연다. 선택을 취소하면 `null`, 저장하면 기존 `RecordingInfo`를 반환한다
 - `get_capture_status({})`는 `state`로 상태를 반환한다. 모바일은 `unavailable`이다. 데스크톱은 `idle`, `starting`, `recording`, `limit_reached`, `interrupted`, `finishing`, `failed` 중 하나다. 진행 중인 세션에는 `session_id`가 있고, 녹음 중과 중단 상태에는 `elapsed_seconds`가 있다. 중단은 `reason`, 시작이나 복구가 불가능한 오류는 `message`를 함께 반환한다
 - 데스크톱의 `start_recording({})`은 세션을 만들고 현재 상태를 반환한다. `finish_recording({ sessionId, save })`는 해당 세션을 마무리한다. `save: true`면 `RecordingInfo`, `save: false`면 `null`을 반환한다. 동시에 하나만 녹음할 수 있고 이전 세션의 종료 요청은 거절한다. 저장에 실패해도 완성된 음성을 같은 세션에서 다시 저장하거나 취소할 수 있다
+
+### 2-3. 음성 출력 IPC
+- 아래 명령은 `main` 로컬 창에서만 쓴다, 모든 위치는 녹음 원본의 16kHz sample 절대 위치이고 범위는 시작 포함, 끝 제외다
+- `get_playback({ segmentId, revision })`은 현재 조각 전체의 WAV와 `session`, `segment_id`, `revision`을 반환한다, 아직 재생하지 않으며 이전 session과 증거를 버린다
+- `play_recording({ recordingId, revision, range })`은 검수 증거를 만들지 않는 미리 듣기를 시작하고 Status를 반환한다, 이전 session은 닫는다, 빠른 검수의 HTML audio 연결은 다음 PR에서 이 명령으로 바꾼다
+- `control_playback({ session, action })`은 `action.kind`의 `play`, `pause`, `seek`, `stop`을 받고 Status를 반환한다, `seek`는 절대 위치 `at`을 함께 받으며 현재 구간 밖을 거절한다, `stop`은 장치를 닫고 확인된 범위를 유지해 다시 `play`할 수 있게 한다, 다른 session의 조작은 거절한다
+- `get_playback_status({})`는 `session`, `state`, `position`, `heard`, `error`를 반환한다, state는 `idle`, `ready`, `playing`, `paused`, `finished`, `failed`다, 끝 위치여도 건너뛴 구간이 남으면 heard는 false다, UI가 보내는 완료 명령은 없다
+- 데스크톱의 출력 thread가 CPAL stream을 소유한다, 출력 callback은 미리 준비한 음성과 고정 크기 queue를 쓰고 lock과 할당을 하지 않는다, 장치 buffer 시각이 거꾸로 가거나 playback 시각이 callback보다 앞이면 오류다, 벽시계를 기다려 증거를 만들지 않는다
+- Android와 iOS에는 같은 IPC와 출력 trait가 있으며 음성 출력을 요청하면 `이 기기에서는 아직 재생을 지원하지 않습니다`를 반환한다, 장치 지원은 뒤 구현에서 더한다
 
 ## 3. 실행과 검증
 ### 3-1. 준비
@@ -116,15 +125,16 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 - Rust 일반 주석과 Python 주석은 외부 API, 플랫폼과 파일 형식처럼 이 코드에서 바꿀 수 없는 사정만 남긴다. 설명은 이름과 구조로, 지켜야 할 제약은 타입과 검사와 행동 시험으로 나타낸다. `make check-comments`는 남은 주석의 경로와 원문, 원문의 SHA-256을 `scripts/comments.json` 및 기준 ref와 대조해 새 주석, 본문 수정, 복제와 목록 추가를 거절한다. 문서 주석(`///`, `//!`, 문서 block 주석), docstring, shebang과 encoding 선언은 제외하고 docstring 이외의 Python 문자열 문장과 bytes 문장, f-string은 주석처럼 거절한다. AVFoundation의 `// SAFETY:`도 외부 API의 안전 조건으로 고정한다. Makefile, YAML, TOML과 shell 주석은 이 검사의 범위가 아니다. `make lint`와 `make check-architecture`도 같은 검사를 실행한다
 - UI가 호출할 Tauri 명령 이름은 `crates/seamone-core/src/ipc.rs`에 선언한다. 같은 선언이 UI 명령 타입, native 처리 함수 등록, 빌드 시 권한 이름을 만든다. 새 명령은 허용할 창과 플랫폼의 capability에도 추가해야 권한 시험을 통과한다
 - `make test`: runtime에서 합성 녹음 수명과 저장 복구, WAV·MP3·M4A 변환, 실제 SQLite 저장과 검수 증거를 확인한다. public 서비스와 비공개 저장소의 통과/컴파일 거절 doctest도 실행한다. host는 dev 의존에서만 켜는 runtime `test-support`로 보관함을 준비하고 등록 IPC로 재생 완료, 검수 저장과 내보내기, 오류 위치, 녹음 상태의 JSON과 창 닫기 차단을 확인한다. host의 const assert는 녹음 지원 플랫폼을 제품 컴파일에서도 대조한다. fixture는 runtime에 두며 실제 마이크나 OS 파일 선택기는 열지 않는다. `make test CARGO_FEATURES=desktop-whisper`는 host feature만 켜서 runtime 엔진까지 전달되는지도 확인한다
-- 같은 crate 안의 증거 경계도 `make test`로 확인한다. 실제 Store와 증거 모듈 소스를 함께 컴파일하는 compile_fail 예제마다 머리말과 본문을 같게 두고 금지 줄 하나만 허용 호출로 바꾼 정상 짝을 둔다. 증거 없는 저장 호출, 증거와 승인 값의 직접 생성, Default 생성과 begin 직접 호출을 확인한다. 오류 번호는 예상 오류를 적은 것이며 rustdoc이 번호를 검증한다는 뜻이 아니다. `scripts/playback_api.json`과 대조하는 검사는 증거 모듈의 노출 선언과 trait 구현, derive, 시험 도우미의 cfg(test) 범위를 고정해 생성 경로 추가를 거절한다
+- 같은 crate 안의 증거 경계도 `make test`로 확인한다, 실제 Store와 증거 모듈 소스를 함께 컴파일하는 compile_fail 예제마다 금지 줄 하나를 허용 호출로 바꾼 정상 짝을 둔다, 증거 없는 저장 호출, 증거와 승인 값의 직접 생성, Default 생성 및 output 밖의 PlayedRun·Heard 생성을 거절한다, 오류 번호는 예상 번호이며 rustdoc이 번호 자체를 검증하지는 않는다, `scripts/playback_api.json`은 노출 선언, trait 구현, derive와 생산 코드의 token hash를 고정한다, cfg(test) 모듈의 시험 본문은 hash에서 뺀다, 호출 위치 검사와 실시간 callback의 lock·할당 거절 검사도 실행하며 해시 변경은 base 대조와 사람 검토를 거친다
 - `make check-research-deletions`는 research 소스와 시험의 직접 삭제, HF cache 삭제, 경로 이름 변경과 Make recipe의 rm을 확인한다. 삭제는 cache.remove_inside, 같은 폴더의 일반 .part 파일 공개는 cache.publish_partial에서만 한다. 타입을 모르는 값도 위치 인자가 하나인 replace는 경로 교체로 거절하고, old/new 두 인자를 주는 문자열 replace는 허용한다. builtins의 동적 getattr도 거절한다. eval/exec/compile은 거절한다. subprocess와 os 실행 명령은 현재 쓰는 곳이 없어 모두 거절하며, git/ffmpeg 같은 실행을 허용할지는 사람이 정할 정책으로 남긴다. path와 공유 hub 보존, symlink 거절은 행동 시험으로 확인한다. 임의의 외부 라이브러리 부작용을 모두 분석하는 sandbox는 아니다
-- `make check-unsafe`는 unsafe를 파일 전체가 아닌 `scripts/unsafe_files.json`의 함수 이름과 본문 해시로 제한한다. 기존 마이크 권한 함수 외의 unsafe, capture의 저장소·증거·transmute 접근, runtime의 include!를 거절한다. 허용 항목의 변경은 PR base와 대조하고 사람이 먼저 확인해야 한다
+- `make check-unsafe`는 unsafe를 파일 전체가 아닌 `scripts/unsafe_files.json`의 함수 이름과 본문 해시로 제한한다. 마이크 권한 함수와 macOS, Windows의 출력 지연 조회 함수 외의 unsafe, capture의 저장소·증거·transmute 접근, runtime의 include!를 거절한다. 허용 항목의 변경은 PR base와 대조하고 사람이 먼저 확인해야 한다
 - `make check-review-writes`는 보호 SQL을 비공개 WritePermit의 고정 저장 메서드로 모으고, 저장 전용 module의 타입·권한·구현을 base의 해시와 대조한다. cfg(test) module 안의 시험 본문은 이 해시에서 뺀다. 호출자에게 열린 permit을 돌려주지 않으며, 메서드 안에서 실제 저장값을 검사하고 직렬화한다. 검수 저장은 DB의 현재 값과 승인된 요청의 core 전이를 대조하고, 새 확인 전사에는 Played 승인을 요구한다. SQLite authorizer는 메서드 밖의 보호 쓰기, training_queue 대상·revision 열 UPDATE, trigger를 통한 보호 쓰기를 거절한다. 정적 검사는 SQL 인자의 리터럴 전체를 EXPLAIN하고, prepare*로 만든 Statement의 실행 인자는 데이터로 구분한다. 동적 SQL과 메서드 참조, Batch/raw API와 외부 소스 경로(cfg_attr 포함)를 막고, 시험 외의 Connection::open*은 Store::open으로 제한한다. authorizer/hooks 변경도 Store::open과 저장 module로 제한하며, migration 뒤 DDL과 writable_schema를 거절한다. migration 경로와 내용 해시도 base와 대조한다. 임의의 외부 프로그램까지 막는 sandbox는 아니다
 - `scripts/runtime_api.json`, `scripts/playback_api.json`, `scripts/review_writes.json`, `scripts/unsafe_files.json`, `scripts/comments.json`은 `LINT_BASE_REF`의 같은 목록과 비교한다. base에 목록이 없거나 현재 목록의 항목과 개수가 늘면 실패한다. 사람이 확인한 뒤에만 기준 브랜치의 목록을 늘리며, 이 PR의 CI는 사람이 보고 판단한다. 이슈 브랜치에서 목록을 함께 고쳐 검사 통과를 승인할 수 없다
 - CI의 기준 선택은 guard-base reusable workflow 한 곳에서 한다. PR은 base SHA, develop push는 첫 parent를 비교 기준으로 쓰고, 다른 브랜치 push는 origin/develop과의 merge-base를 쓴다. develop의 검사 정책은 이미 승인된 HEAD에서 읽으므로 merge한 목록·module 해시를 다시 거절하지 않는다. tag push에는 검사를 실행하지 않는다. base가 HEAD와 같은 PR은 거절하고 비교할 변경이 없는 branch push와 로컬 검사는 허용한다. guard-integrity는 base의 검사 코드와 목록으로 PR merge ref를 검사하므로 뒤처진 PR에 base가 승인한 변경도 포함한다. head의 검사 helper와 Make target은 실행하지 않는다. 보호 파일 변경은 별도 guard-review-trusted workflow의 pull_request_target job `guard-rules-review-trusted`가 merge-base부터 PR head까지 판정한다. 필수 check는 이 이름으로 지정하며 branch protection 설정은 레포 밖에서 관리한다. scripts, Makefile, research/Makefile, .github, AGENTS.md, .cargo, rust-toolchain.toml과 모든 crate의 lint 표가 보호 대상이다. trusted job은 head 코드를 실행하지 않는다. 검사 자체를 바꾸는 PR의 실패를 없애는 예외는 두지 않는다
-- `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치, HTML audio의 `ended` event와 별도 교정 화면을 확인한다. 앱의 IPC 서비스는 시험용이다. 다운로드 페이지의 화면과 빌드 링크도 확인한다
+- `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치를 확인한다, 빠른 검수의 HTML audio event와 교정 화면의 runtime 상태 조회는 각각 시험한다, 앱의 IPC 서비스와 출력 진행은 시험용이다, 다운로드 페이지의 화면과 빌드 링크도 확인한다
 - `make site-preview`: [다운로드 안내](site/index.html)를 로컬 `http://127.0.0.1:4173`에서 열어 본다. 포트가 쓰이는 중이면 `make site-preview SITE_PORT=4174`로 바꾼다
 - macOS 패키지 CI는 업로드할 DMG를 읽기 전용으로 열어 체크섬, 앱 식별자, CPU 종류와 마이크 권한 안내를 검사한다. Whisper 빌드에서는 Mach-O와 Info.plist의 최소 macOS 버전을 빌드 설정과 대조한다
+- `CARGO_BUILD_JOBS=2 make playback-device-proof`: 기본 출력 장치로 1초의 작은 400Hz tone을 내고 장치 시계와 들은 범위를 확인한다, 기본 시험에서는 ignored이며 실제 장치가 있는 macOS·Windows·Linux에서 사람이 별도로 실행한다, 소리가 나므로 자동 CI와 worker에서는 실행하지 않는다
 - `make desktop-proof`: 실제 Whisper small과 공개 음성 파일로 가져오기, 받아쓰기와 DTW 시간 저장, 짧은 구간 듣기, 오류 위치 저장, 전체 조각 교정 확인, 학습 자격과 다시 열기를 확인한다. 시험에서 학습은 실행하지 않는다
 - `make -C research test`: 연구 규칙과 optimizer 계산의 회귀시험, 실제 모델 optimizer 증명은 별도 `verified-step` target이다
 - `make fmt`와 `make -C research fmt`: 소스 형식을 맞춘다

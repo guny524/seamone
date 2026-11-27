@@ -192,12 +192,17 @@ pub async fn select_model<R: Runtime>(
 #[tauri::command]
 pub async fn get_playback<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, LibraryService>,
     segment_id: String,
     revision: u64,
 ) -> Result<PlaybackReply, String> {
     trusted(&window)?;
-    state.playback(&segment_id, revision)
+    tauri::async_runtime::spawn_blocking(move || {
+        window
+            .state::<LibraryService>()
+            .playback(&segment_id, revision)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -244,13 +249,46 @@ pub async fn save_error_marks<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn playback_ended<R: Runtime>(
+pub async fn control_playback<R: Runtime>(
     window: WebviewWindow<R>,
-    state: State<'_, LibraryService>,
-    token: String,
-) -> Result<(), String> {
+    session: String,
+    action: seamone_core::playback::Action,
+) -> Result<seamone_core::playback::Status, String> {
     trusted(&window)?;
-    state.playback_ended(&token)
+    tauri::async_runtime::spawn_blocking(move || {
+        window
+            .state::<LibraryService>()
+            .control_playback(&session, action)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn get_playback_status<R: Runtime>(
+    window: WebviewWindow<R>,
+) -> Result<seamone_core::playback::Status, String> {
+    trusted(&window)?;
+    tauri::async_runtime::spawn_blocking(move || window.state::<LibraryService>().playback_status())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn play_recording<R: Runtime>(
+    window: WebviewWindow<R>,
+    recording_id: String,
+    revision: u64,
+    range: SampleRange,
+) -> Result<seamone_core::playback::Status, String> {
+    trusted(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        window
+            .state::<LibraryService>()
+            .play_recording(&recording_id, revision, range)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

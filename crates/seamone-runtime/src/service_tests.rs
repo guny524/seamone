@@ -26,9 +26,13 @@ fn review_requires_completed_current_playback_and_replays_once() {
     );
     assert!(service.review(&request, None).is_err());
     let playback = service.playback(&segment.id, segment.revision).unwrap();
-    assert!(service.review(&request, Some(&playback.token)).is_err());
-    service.playback_ended(&playback.token).unwrap();
-    let rejected = service.review(&request, Some(&playback.token)).unwrap();
+    assert!(service.review(&request, Some(&playback.session)).is_err());
+    service
+        .control_playback(&playback.session, seamone_core::playback::Action::Play)
+        .unwrap();
+    assert!(service.review(&request, Some(&playback.session)).is_err());
+    service.listening.finish(&playback.session).unwrap();
+    let rejected = service.review(&request, Some(&playback.session)).unwrap();
     assert!(rejected.verified.is_none());
     assert_eq!(service.review(&request, None).unwrap(), rejected);
 }
@@ -51,9 +55,20 @@ fn preview_and_error_mark_require_new_full_playback_for_correction() {
         .recording_playback(&mark.recording_id, mark.recording_revision, mark.range)
         .unwrap();
     assert_ne!(preview, "");
-    assert!(service.playback_ended(&preview).is_err());
+    let preview_session = service
+        .play_recording(
+            &segment.recording_id,
+            segment.recording_revision,
+            mark.range,
+        )
+        .unwrap();
+    service
+        .listening
+        .finish(preview_session.session.as_deref().unwrap())
+        .unwrap();
+    assert!(service.playback_status().unwrap().heard);
     let old = service.playback(&segment.id, segment.revision).unwrap();
-    service.playback_ended(&old.token).unwrap();
+    service.listening.finish(&old.session).unwrap();
     service.save_error_mark(&mark).unwrap();
     service.save_error_mark(&mark).unwrap();
     assert_eq!(
@@ -67,19 +82,19 @@ fn preview_and_error_mark_require_new_full_playback_for_correction() {
         },
     );
     request.expected_revision += 1;
-    assert!(service.review(&request, Some(&old.token)).is_err());
+    assert!(service.review(&request, Some(&old.session)).is_err());
     let full = service
         .playback(&segment.id, request.expected_revision)
         .unwrap();
-    assert!(service.review(&request, Some(&full.token)).is_err());
-    service.playback_ended(&full.token).unwrap();
+    assert!(service.review(&request, Some(&full.session)).is_err());
+    service.listening.finish(&full.session).unwrap();
     let unchanged = Request {
         action: Action::ConfirmCorrection,
         event_id: "unchanged".into(),
         ..request.clone()
     };
-    assert!(service.review(&unchanged, Some(&full.token)).is_err());
-    let corrected = service.review(&request, Some(&full.token)).unwrap();
+    assert!(service.review(&unchanged, Some(&full.session)).is_err());
+    let corrected = service.review(&request, Some(&full.session)).unwrap();
     assert_eq!(corrected.range, segment.range);
     assert_eq!(corrected.verified.unwrap().text(), "고친 말");
 }
@@ -90,7 +105,7 @@ fn correction_rejects_stale_revisions_and_preserves_verified_export() {
     let (store, segment) = fixture.transcribed();
     let service = LibraryService::new(store);
     let playback = service.playback(&segment.id, segment.revision).unwrap();
-    service.playback_ended(&playback.token).unwrap();
+    service.listening.finish(&playback.session).unwrap();
     let draft = request(
         &segment,
         Action::SaveDraft {
@@ -109,10 +124,10 @@ fn correction_rejects_stale_revisions_and_preserves_verified_export() {
             .contains("다른 수정본")
     );
     let confirm = request(&saved, Action::ConfirmCorrection);
-    assert!(service.review(&confirm, Some(&playback.token)).is_err());
+    assert!(service.review(&confirm, Some(&playback.session)).is_err());
     let playback = service.playback(&saved.id, saved.revision).unwrap();
-    service.playback_ended(&playback.token).unwrap();
-    let confirmed = service.review(&confirm, Some(&playback.token)).unwrap();
+    service.listening.finish(&playback.session).unwrap();
+    let confirmed = service.review(&confirm, Some(&playback.session)).unwrap();
     assert!(
         service
             .store()

@@ -691,15 +691,15 @@ fn replay_is_idempotent_and_stale_or_colliding_events_fail() {
             verdict: Verdict::Yes,
         },
     );
-    let playbacks = crate::playback_evidence::Playbacks::new();
+    let playbacks = crate::playback_evidence::Playbacks::fake();
     let reply = playbacks
-        .issue_playback_token(&store, &segment.id, segment.revision)
+        .prepare_review(&store, &segment.id, segment.revision)
         .unwrap();
-    playbacks.mark_playback_ended(&reply.token).unwrap();
+    playbacks.finish(&reply.session).unwrap();
     let accepted = store
         .mutate(
             playbacks
-                .authorize_review(&req, Some(&reply.token))
+                .authorize_review(&req, Some(&reply.session))
                 .unwrap(),
         )
         .unwrap();
@@ -707,7 +707,7 @@ fn replay_is_idempotent_and_stale_or_colliding_events_fail() {
         store
             .mutate(
                 playbacks
-                    .authorize_review(&req, Some(&reply.token))
+                    .authorize_review(&req, Some(&reply.session))
                     .unwrap()
             )
             .unwrap(),
@@ -722,7 +722,7 @@ fn replay_is_idempotent_and_stale_or_colliding_events_fail() {
         store
             .mutate(
                 playbacks
-                    .authorize_review(&collision, Some(&reply.token))
+                    .authorize_review(&collision, Some(&reply.session))
                     .unwrap()
             )
             .is_err()
@@ -944,15 +944,15 @@ fn after_listening_a_changed_source_can_be_rejected_but_cannot_be_accepted() {
         },
     );
 
-    assert!(state.review(&no, Some(&playback.token)).is_err());
-    state.playback_ended(&playback.token).unwrap();
+    assert!(state.review(&no, Some(&playback.session)).is_err());
+    state.listening.finish(&playback.session).unwrap();
     fs::write(path, b"changed recording").unwrap();
 
     assert_eq!(
-        state.review(&yes, Some(&playback.token)).unwrap_err(),
+        state.review(&yes, Some(&playback.session)).unwrap_err(),
         seamone_core::review::Error::MissingSource.to_string()
     );
-    let rejected = state.review(&no, Some(&playback.token)).unwrap();
+    let rejected = state.review(&no, Some(&playback.session)).unwrap();
     assert_eq!(rejected.verdict, Some(Verdict::No));
     assert!(rejected.verified.is_none());
     assert_eq!(state.review(&no, None).unwrap(), rejected);
@@ -985,7 +985,7 @@ fn neither_correction_can_confirm_a_changed_recording_with_completed_playback() 
         )
         .unwrap();
     let playback = state.playback(&draft.id, draft.revision).unwrap();
-    state.playback_ended(&playback.token).unwrap();
+    state.listening.finish(&playback.session).unwrap();
     fs::write(path, b"changed recording").unwrap();
 
     for action in [
@@ -996,7 +996,7 @@ fn neither_correction_can_confirm_a_changed_recording_with_completed_playback() 
     ] {
         assert_eq!(
             state
-                .review(&request(&draft, action), Some(&playback.token))
+                .review(&request(&draft, action), Some(&playback.session))
                 .unwrap_err(),
             seamone_core::review::Error::MissingSource.to_string()
         );
@@ -1198,14 +1198,14 @@ fn one_listen_correction_atomically_stores_edited_text_and_verified_snapshot() {
     .unwrap();
     let state = LibraryService::new(store);
     let playback = state.playback(&rejected.id, rejected.revision).unwrap();
-    state.playback_ended(&playback.token).unwrap();
+    state.listening.finish(&playback.session).unwrap();
     let action = request(
         &rejected,
         Action::CorrectAndConfirm {
             text: "한 번 듣고 고친 말 그대로".into(),
         },
     );
-    let saved = state.review(&action, Some(&playback.token)).unwrap();
+    let saved = state.review(&action, Some(&playback.session)).unwrap();
     assert_eq!(saved.text, "한 번 듣고 고친 말 그대로");
     let label = saved.verified.as_ref().unwrap();
     assert_eq!(label.text(), saved.text);
@@ -1235,7 +1235,7 @@ fn one_listen_correction_atomically_stores_edited_text_and_verified_snapshot() {
             text: "오래된 재생으로 확인".into(),
         },
     );
-    assert!(state.review(&confirm, Some(&playback.token)).is_err());
+    assert!(state.review(&confirm, Some(&playback.session)).is_err());
     assert!(
         state
             .store()
@@ -1412,7 +1412,7 @@ fn real_desktop_path() {
         .find(|line| line.display_timing().is_some_and(|spans| spans.len() > 1))
         .unwrap_or_else(|| panic!("Whisper small returned no aligned text groups: {segments:?}"));
     let old_playback = state.playback(&s.id, s.revision).unwrap();
-    state.playback_ended(&old_playback.token).unwrap();
+    state.listening.finish(&old_playback.session).unwrap();
     let middle = s.range.start + (s.range.end - s.range.start) / 2;
     let mark = ErrorMark {
         id: Uuid::new_v4().to_string(),
@@ -1457,12 +1457,12 @@ fn real_desktop_path() {
     assert!(draft.display_timing().is_none());
     let confirm = request(&draft, Action::ConfirmCorrection);
     assert!(state.review(&confirm, None).is_err());
-    assert!(state.review(&confirm, Some(&old_playback.token)).is_err());
+    assert!(state.review(&confirm, Some(&old_playback.session)).is_err());
     let playback = state.playback(&draft.id, draft.revision).unwrap();
-    assert!(state.review(&confirm, Some(&playback.token)).is_err());
+    assert!(state.review(&confirm, Some(&playback.session)).is_err());
 
-    state.playback_ended(&playback.token).unwrap();
-    let confirmed = state.review(&confirm, Some(&playback.token)).unwrap();
+    state.listening.finish(&playback.session).unwrap();
+    let confirmed = state.review(&confirm, Some(&playback.session)).unwrap();
     assert!(
         state
             .store()

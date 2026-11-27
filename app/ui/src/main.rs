@@ -5,6 +5,7 @@ mod onboarding;
 mod quick_review;
 mod spectrum;
 mod timeline;
+mod transport;
 mod workspace;
 
 use app::App;

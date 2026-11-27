@@ -11,8 +11,8 @@ use serde_json::json;
 #[derive(Clone, Debug)]
 pub struct Playback {
     pub ticket: Ticket,
-    pub token: String,
-    pub url: String,
+    pub session: String,
+    pub wav: String,
 }
 
 #[derive(Clone, Copy)]
@@ -333,40 +333,93 @@ impl Workspace {
             .await;
             match result {
                 Ok(reply) => {
+                    if !self
+                        .flow
+                        .with_untracked(|flow| flow.frame() == Some(&ticket.frame))
+                    {
+                        Self::stop_session(reply.session);
+                        return;
+                    }
+                    let played = api::call::<seamone_core::playback::Status>(
+                        Command::ControlPlayback,
+                        json!({"session":reply.session,"action":{"kind":"play"}}),
+                    )
+                    .await;
                     let mut active = false;
-                    self.flow.update(|flow| active = flow.loaded(&ticket));
+                    if played.is_ok() {
+                        self.flow.update(|flow| active = flow.loaded(&ticket));
+                    }
                     if active {
                         self.playback.set(Some(Playback {
                             ticket,
-                            token: reply.token,
-                            url: format!("data:audio/wav;base64,{}", reply.wav_base64),
+                            session: reply.session,
+                            wav: reply.wav_base64,
                         }));
+                    } else {
+                        Self::stop_session(reply.session);
+                        if let Err(error) = played {
+                            self.playback_error(&ticket, error);
+                        }
                     }
                 }
-                Err(e) => self.playback_error(&ticket, e),
+                Err(error) => self.playback_error(&ticket, error),
             }
         });
     }
 
-    pub fn ended(self, playback: Playback) {
-        if !self
-            .flow
-            .with_untracked(|flow| flow.playing(&playback.ticket))
-        {
-            return;
+    pub async fn control_playback(
+        playback: &Playback,
+        action: seamone_core::playback::Action,
+    ) -> Result<seamone_core::playback::Status, String> {
+        api::call::<seamone_core::playback::Status>(
+            Command::ControlPlayback,
+            json!({"session":playback.session,"action":action}),
+        )
+        .await
+    }
+
+    pub fn observe_playback(
+        self,
+        playback: &Playback,
+        status: &seamone_core::playback::Status,
+    ) -> bool {
+        if !self.playback.with_untracked(|current| {
+            current.as_ref().is_some_and(|current| {
+                current.session == playback.session && current.ticket == playback.ticket
+            })
+        }) {
+            return false;
         }
-        spawn_local(async move {
-            match api::call::<()>(Command::PlaybackEnded, json!({"token":playback.token})).await {
-                Ok(()) => {
-                    let mut active = false;
-                    self.flow
-                        .update(|flow| active = flow.ended(&playback.ticket));
-                    if active {
-                        self.proof.set(Some(playback.token));
-                    }
-                }
-                Err(e) => self.playback_error(&playback.ticket, e),
+        if status.session.as_deref() != Some(playback.session.as_str())
+            || status.state == seamone_core::playback::State::Failed
+        {
+            self.playback_error(
+                &playback.ticket,
+                status
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| "재생이 바뀌었습니다. 현재 조각을 다시 여세요.".into()),
+            );
+            return false;
+        }
+        if status.heard && !self.flow.with_untracked(ReviewFlow::listened) {
+            let mut active = false;
+            self.flow
+                .update(|flow| active = flow.ended(&playback.ticket));
+            if active {
+                self.proof.set(Some(playback.session.clone()));
             }
+        }
+        true
+    }
+
+    pub fn stop_session(session: String) {
+        spawn_local(async move {
+            let _ = api::call::<seamone_core::playback::Status>(
+                Command::ControlPlayback,
+                json!({"session":session,"action":{"kind":"stop"}}),
+            )
+            .await;
         });
     }
 
