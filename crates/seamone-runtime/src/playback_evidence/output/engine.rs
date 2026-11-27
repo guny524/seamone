@@ -251,3 +251,6 @@ mod tests {
         assert!(end.heard);
     }
 }
+
+#[cfg(test)]
+mod concurrency_tests;

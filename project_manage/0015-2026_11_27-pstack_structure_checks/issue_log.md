@@ -258,3 +258,26 @@
   - 늦은 preview 준비가 다른 화면의 하나뿐인 session 을 덮는 경쟁(가능성 낮음)
   - 시험이 성질을 확인하지 않음(듣는 코드 없는 `ended` 단언, stale session 의 stop 미확인, JS 가짜 출력의 답 꼴이 진짜와 다름), 죽은 줄
 - 첫 worker 에게 같은 세션으로 다섯 건을 맡겼다(runtime 은 PR #22 쪽 worker 가 고치므로 UI, 검사, 시험만)
+
+## 2026-11-27 15:00 PR #22 고침과 develop merge
+- 새 worker(14:57 끝남): macOS 는 CoreAudio 의 device latency, safety offset, stream latency, Windows 는 `GetStreamLatency` 와 장치 period 를 읽어 판정 시각에 더하고 지연을 읽지 못하면 거절한다, ALSA 는 cpal 0.15.3 원본(`src/host/alsa/mod.rs:758`, `:827`)이 이미 `get_delay` 를 더해 두 번 더하지 않는다, cpal 0.16, 0.17, 0.18 은 지연 API 가 없거나 조회 실패를 0 으로 넘겨 판 올리기로는 풀리지 않아 0.15.3 을 유지하고 이미 lockfile 에 있는 `coreaudio-rs`, `windows` 를 직접 의존에 더했다, unsafe 는 플랫폼별 `read_latency` 함수 하나씩, 시각 변환은 `output/clock.rs` 순수 함수, slider 는 놓을 때만 Seek, 조작은 화면 Queue 로 한 줄, 장치 열기 전에 store lock 해제, 상태 조회 spawn_blocking, 250 ms 지연 동안 승인이 생기지 않는 시험
+- 메인이 `make test` 160개(실패 0)와 `make test-architecture` 통과를 확인하고 `db2f5cb` 로 PR #22 에 push 했다, develop(PR #21)을 merge 했다(`f78bf57`, `lib.rs` doctest 충돌은 재생 브랜치 쪽 새 설계를 남김), develop 의 `comments.json` 새 꼴(원문 포함)에 맞춰 두 SAFETY 주석 항목에 검사와 같은 추출로 원문을 채웠다(`dec0801`), merge 뒤 `make test` 164개 통과, 남은 정책 실패는 이 PR 이 늘리는 목록 항목뿐이다
+- 새 unsafe FFI 를 Opus 에게 다시 검토받는다
+
+## 2026-11-27 15:05 PR #23 고침
+- 첫 worker(15:02 끝남): 다음 묶음 준비 중의 Space 는 마지막 확인 위치로 후보를 연다, audio, video literal 과 `data:audio`, `data:video` URL, `iframe`, `embed`, `object` tag 와 `app/ui/index.html` 을 검사한다, 빠른 검수의 준비와 stale stop 이 끝날 때까지 교정과 판정의 새 재생을 막는다, JS 가짜 출력을 `app/ui/tests/fixture.mjs` 로 옮겨 command 를 다음 조회에서 처리하고 진짜 꼴의 답을 준다(Node 시험 4개), 죽은 줄 제거, 다섯 건 모두 결함을 넣어 실패하고 되돌려 통과했다
+- 메인이 `make test` 160개(실패 0)와 `make test-architecture` 통과를 확인하고 `4882111` 로 PR #23 에 push 했다, PR #22 의 새 고침과 develop 을 이 브랜치에 merge 하는 일(화면 코드가 겹침)을 같은 worker 에게 맡겼다
+
+## 2026-11-27 15:10 PR #22 고침의 Opus 재검토
+- Opus 5.5 high(세션 `a5e1498e-217a-405f-ade0-47c9f183d554`): 지연 반영과 조작 순서는 고쳐짐, macOS 는 cpal 의 버퍼 하나 앞섬과 더한 지연이 거의 상쇄돼 너무 이르거나 늦지 않고 Windows 는 period 하나쯤 늦어 안전한 쪽, 대기 버퍼 상한으로 약 20초 지연까지 버틴다, macOS 와 Windows FFI 의 property 주소, scope, 정렬, 단위, COM 수명, 누수는 결함 없음
+- 남은 결함 셋: 검수 저장이 store lock 을 쥔 채 장치를 다시 여는 player lock 을 기다린다, macOS 에서 이름이 같은 입력 전용 장치가 있으면 매번 거절(추측), 지연을 읽지 못하는 실제 경로(장치 열기 실패)를 시험이 덮지 않는다
+- 확인하지 못한 것: Windows `GetStreamLatency` 가 Bluetooth A2DP 지연을 담는지, session 중 장치 지연이 바뀌는 경우
+- 세 건을 PR #22 worker 에게 맡겼다, 실기기 시험 절차(Bluetooth, AirPlay, Windows, Linux)를 이슈 board 7-9 에 사람 몫으로 적었다
+
+## 2026-11-27 15:15 PR #23 을 PR #22 위로 맞춤
+- 첫 worker(15:12 끝남): PR #22 의 `dec0801` 을 PR #23 브랜치에 merge 했다, 충돌 네 파일(`AGENTS.md`, `Makefile`, `README.md`, `app/ui/tests/review.mjs`)은 두 쪽 동작을 모두 남겨 풀었다, 자동 merge 된 `app.rs` 와 `workspace.rs` 도 본문을 대조해 PR #22 의 조작 Queue 와 slider 규칙, PR #23 의 준비 중 재생 막기가 함께 남은 것을 확인했다, 소스의 공개 항목과 현재 목록을 대조하는 시험(`scripts/test_runtime_api.py`)을 더했다
+- 메인이 `make test` 170개(실패 0)와 `make test-architecture` 통과를 확인하고 merge 커밋 `e97596d` 로 PR #23 에 push 했다, PR #22 에 13c 고침이 더해지면 다시 merge 한다
+
+## 2026-11-27 15:23 PR #22 재검토 세 건 고침
+- PR #22 worker(15:20 끝남): 검수 저장은 replay 를 먼저 보고 store lock 을 놓은 채 재생 증거를 확인한 뒤 다시 잡아 저장한다(장치 열기 동안 목록 조회와 초안 저장이 막히지 않는 시험), macOS 는 출력을 지원하는 장치만 이름으로 비교한다(가짜 장치 목록 시험, 실제 USB 장치 시험은 안 함), 장치 열기 실패와 Stop 뒤 다시 열기 실패는 `State::Failed` 와 `heard == false` 가 된다, 세 건 모두 결함을 넣어 실패하고 되돌려 통과했다
+- 메인이 `make test` 169개(실패 0)와 `make test-architecture` 통과를 확인하고 `d3fa235` 로 PR #22 에 push 했다, worker 탭을 닫았다, CI 를 기다린다

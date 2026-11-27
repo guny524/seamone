@@ -51,6 +51,8 @@ impl AuthorizedReview<'_> {
 
 pub(super) struct Playbacks {
     player: Mutex<player::Player>,
+    #[cfg(test)]
+    authorization_started: Option<std::sync::mpsc::Sender<()>>,
 }
 
 fn samples(wav: &[u8]) -> Result<Vec<f32>, String> {
@@ -69,6 +71,8 @@ impl Playbacks {
     pub(super) fn new() -> Self {
         Self {
             player: Mutex::new(player::Player::new()),
+            #[cfg(test)]
+            authorization_started: None,
         }
     }
 
@@ -76,6 +80,8 @@ impl Playbacks {
     pub(super) fn fake() -> Self {
         Self {
             player: Mutex::new(player::Player::fake()),
+            #[cfg(test)]
+            authorization_started: None,
         }
     }
 
@@ -148,6 +154,10 @@ impl Playbacks {
         session: Option<&str>,
     ) -> Result<AuthorizedReview<'a>, String> {
         let authority = if request.action.required_evidence().requires_playback() {
+            #[cfg(test)]
+            if let Some(started) = &self.authorization_started {
+                let _ = started.send(());
+            }
             if !self
                 .player
                 .lock()

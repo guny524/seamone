@@ -19,21 +19,32 @@ struct Session {
     output: Stream,
 }
 
+enum SessionState {
+    Idle,
+    Loaded(Session),
+    Failed(String),
+}
+
+#[cfg(test)]
+type OutputFactory = Box<dyn Fn(Arc<[f32]>, u64) -> Result<Stream, String> + Send>;
+
 enum Device {
     Platform,
     #[cfg(any(test, feature = "test-support"))]
     Fake,
+    #[cfg(test)]
+    Testing(OutputFactory),
 }
 
 pub(super) struct Player {
-    session: Option<Session>,
+    session: SessionState,
     device: Device,
 }
 
 impl Player {
     pub(super) fn new() -> Self {
         Self {
-            session: None,
+            session: SessionState::Idle,
             device: Device::Platform,
         }
     }
@@ -41,8 +52,16 @@ impl Player {
     #[cfg(any(test, feature = "test-support"))]
     pub(super) fn fake() -> Self {
         Self {
-            session: None,
+            session: SessionState::Idle,
             device: Device::Fake,
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn with_output(output: OutputFactory) -> Self {
+        Self {
+            session: SessionState::Idle,
+            device: Device::Testing(output),
         }
     }
 
@@ -52,15 +71,24 @@ impl Player {
         origin: u64,
         scope: Option<(String, u64)>,
     ) -> Result<String, String> {
-        self.session = None;
+        self.session = SessionState::Idle;
         let source: Arc<[f32]> = samples.into();
-        let output = match self.device {
-            Device::Platform => Stream::create(source, origin)?,
+        let output = match &self.device {
+            Device::Platform => Stream::create(source, origin),
             #[cfg(any(test, feature = "test-support"))]
-            Device::Fake => Stream::fake(source, origin)?,
+            Device::Fake => Stream::fake(source, origin),
+            #[cfg(test)]
+            Device::Testing(create) => create(source, origin),
+        };
+        let output = match output {
+            Ok(output) => output,
+            Err(error) => {
+                self.session = SessionState::Failed(error.clone());
+                return Err(error);
+            }
         };
         let id = Uuid::new_v4().to_string();
-        self.session = Some(Session {
+        self.session = SessionState::Loaded(Session {
             id: id.clone(),
             scope: scope.map(|(segment, revision)| Scope { segment, revision }),
             output,
@@ -69,18 +97,27 @@ impl Player {
     }
 
     pub(super) fn control(&mut self, id: &str, action: Action) -> Result<Status, String> {
-        let session = self
-            .session
-            .as_mut()
-            .filter(|session| session.id == id)
-            .ok_or("재생이 바뀌었습니다. 현재 구간을 다시 여세요.")?;
+        let SessionState::Loaded(session) = &mut self.session else {
+            return Err("재생이 바뀌었습니다. 현재 구간을 다시 여세요.".into());
+        };
+        if session.id != id {
+            return Err("재생이 바뀌었습니다. 현재 구간을 다시 여세요.".into());
+        }
         session.output.control(action)?;
         Ok(self.status())
     }
 
     pub(super) fn status(&mut self) -> Status {
-        let Some(session) = &mut self.session else {
-            return Status::default();
+        let session = match &mut self.session {
+            SessionState::Idle => return Status::default(),
+            SessionState::Failed(error) => {
+                return Status {
+                    state: seamone_core::playback::State::Failed,
+                    error: Some(error.clone()),
+                    ..Status::default()
+                };
+            }
+            SessionState::Loaded(session) => session,
         };
         let observed = session.output.observation();
         Status {
@@ -93,7 +130,7 @@ impl Player {
     }
 
     pub(super) fn authorizes(&mut self, request: &Request, id: Option<&str>) -> bool {
-        let Some(session) = &mut self.session else {
+        let SessionState::Loaded(session) = &mut self.session else {
             return false;
         };
         id == Some(session.id.as_str())
@@ -104,24 +141,22 @@ impl Player {
     }
 
     pub(super) fn close(&mut self) {
-        self.session = None;
+        self.session = SessionState::Idle;
     }
 
     #[cfg(any(test, feature = "test-support"))]
     pub(super) fn advance(&mut self, frames: usize) -> Result<(), String> {
-        self.session
-            .as_mut()
-            .ok_or("진행할 재생 session이 없습니다.")?
-            .output
-            .advance(frames)
+        let SessionState::Loaded(session) = &mut self.session else {
+            return Err("진행할 재생 session이 없습니다.".into());
+        };
+        session.output.advance(frames)
     }
 
     #[cfg(test)]
     pub(super) fn finish(&mut self) -> Result<(), String> {
-        self.session
-            .as_mut()
-            .ok_or("진행할 재생 session이 없습니다.")?
-            .output
-            .finish()
+        let SessionState::Loaded(session) = &mut self.session else {
+            return Err("진행할 재생 session이 없습니다.".into());
+        };
+        session.output.finish()
     }
 }

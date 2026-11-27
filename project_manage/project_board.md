@@ -104,7 +104,7 @@
 ### #15 LLM 실수를 lint, build, compile 에서 거르게 폴더 구조와 검사를 바꾼다 (pstack 개념 적용)
 - 폴더: [0015-2026_11_27-pstack_structure_checks](0015-2026_11_27-pstack_structure_checks/issue_board.md), 상태: 진행, 2026-11-27 04:20 첫 단계 [PR #16](https://github.com/guny524/seamone/pull/16) 을 develop 에 merge 했다(`9ed37ed`), 검사 자체 지키기와 남은 우회는 `guny524/15-guard-integrity` 에서 한다
 - 실행 정보: worker Codex `gpt-6.1-sol` high 세션 `01a21898-2b74-7c02-9206-5ad88ae3fe65`(탭 닫음, `codex resume 01a21898-2b74-7c02-9206-5ad88ae3fe65` 로 이어 연다), worktree `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(브랜치 `guny524/15-guard-integrity`, PR #18), 마지막 turn 06:18, 보고 `.tmp/conductor/15-structure/`, Pi 시험 worktree 는 지웠다
-- 다음 행동(2026-11-27 14:48): PR #22 검토 4건(새 worker), PR #23 검토 5건(첫 worker)을 고친다, 그 뒤 PR #22, #23 을 develop 위로 옮겨 merge
+- 다음 행동(2026-11-27 15:23): PR #22 에 재검토 세 건 고침 `d3fa235` 을 올렸다, CI 에서 실패가 목록 대조뿐이면 D4 대로 merge, 그 뒤 PR #23 을 새 develop 위로 맞춰 merge, 실기기 재생 시험은 사람 몫(이슈 board 7-9)
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
