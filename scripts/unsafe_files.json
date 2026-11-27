@@ -1,6 +1,10 @@
 {
-  "description": "Existing Rust unsafe adapters only; the same reviewed snapshot must exist at LINT_BASE_REF and additions require human review.",
-  "files": [
-    "crates/seamone-runtime/src/capture.rs"
+  "description": "Only the reviewed native permission function may contain unsafe; both function identity and body hash are checked against the PR base.",
+  "functions": [
+    {
+      "path": "crates/seamone-runtime/src/capture.rs",
+      "function": "authorize_macos",
+      "body_sha256": "e19148846a44799543a43b8b104d50db0e46e05364e481f65485e2e0e2ce90de"
+    }
   ]
 }

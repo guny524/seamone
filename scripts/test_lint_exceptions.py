@@ -139,14 +139,15 @@ class BaselineProtection(unittest.TestCase):
         for name in ('config', 'config.toml'):
             path = self.root / '.cargo' / name
             for flags in ('[build]\nrustflags=["-A", "warnings"]\n',
-                          '[target.x86_64-unknown-linux-gnu]\nrustflags="--allow=warnings"\n'):
+                          '[target.x86_64-unknown-linux-gnu]\nrustflags="--allow=warnings"\n',
+                          '[build]\nrustflags=["--cap-lints=allow"]\n'):
                 with self.subTest(name=name, flags=flags):
                     path.write_text(flags)
-                    self.assertIn('-A/--allow rustflags are forbidden', self.errors())
+                    self.assertIn('-A/--allow/--cap-lints rustflags are forbidden', self.errors())
             path.unlink()
 
     def test_clippy_flags_cannot_be_removed_or_suppressed(self):
-        for command in (self.make.replace(' -D warnings', ''), self.make.replace('-D warnings', '-D warnings -A unused'), ''):
+        for command in (self.make.replace(' -D warnings', ''), self.make.replace('-D warnings', '-D warnings -A unused'), self.make.replace('-D warnings', '-D warnings --cap-lints=allow'), ''):
             with self.subTest(command=command):
                 (self.root / 'Makefile').write_text(command)
                 self.assertIn('Makefile: clippy', self.errors())

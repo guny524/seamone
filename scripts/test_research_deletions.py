@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from check_research_deletions import ENTRY_FILE, ROOT, violations
+from check_research_deletions import ENTRY_FILE, ROOT, recipe_violations, violations
 
 # The cache module and paths use only the standard library, unlike audio preparation.
 spec = importlib.util.spec_from_file_location('cache_boundary', ROOT / ENTRY_FILE)
@@ -116,6 +116,54 @@ text = "shutil.rmtree(path)"
 '''
         self.assertEqual(self.check(source), [])
 
+    def test_processes_hub_deletion_and_path_moves_are_rejected(self):
+        for source in [
+            'import subprocess as s\ns.run(["rm","-rf",path])',
+            'import os\nos.system(command)',
+            'import os\nos.execv(command,args)',
+            'import os\nos.spawnvp(mode,command,args)',
+            'from huggingface_hub import scan_cache_dir\nscan_cache_dir().delete_revisions("revision").execute()',
+            'import os\nos.rename(hub,trash)',
+            'import os\nos.replace(hub,trash)',
+            'from pathlib import Path\nPath("hub").rename("trash")',
+            'from pathlib import Path\np=Path("hub")/"file"\np.replace("trash")',
+            'from pathlib import Path\nPath("hub").resolve().replace("trash")',
+        ]:
+            with self.subTest(source=source):
+                self.assertTrue(self.check(source))
+
+    def test_atomic_replacement_is_confined_to_the_publish_helper(self):
+        source = 'from pathlib import Path\ndef publish_partial(partial: Path,target: Path):\n    partial.replace(target)'
+        # This entry file must still define the deletion entry.
+        source += '\ndef remove_inside(root,target): pass'
+        self.assertEqual(self.check(source, ENTRY_FILE), [])
+        self.assertTrue(self.check(source))
+        self.assertEqual(self.check('def parse(text: str | None):\n    return text.replace(","," ")'), [])
+        self.assertTrue(recipe_violations('clean:\n\trm -rf $(HF_HOME)/hub\n'))
+        self.assertEqual(recipe_violations('lint:\n\tuv run ruff check .\n'), [])
+
+    def test_string_normalization_is_allowed_and_dynamic_execution_is_rejected(self):
+        self.assertEqual(self.check('hyp.lower().replace(" ","")\nrow["ref"].replace(",","")'), [])
+        self.assertEqual(self.check('from pathlib import Path\nPath("file").name.replace("_"," ")\nPath(__file__).resolve().parents[1]'), [])
+        for source in ('eval(code)', 'exec(code)', 'compile(code,"<input>","exec")',
+                       'import builtins\nbuiltins.exec(code)',
+                       '__builtins__["exec"](code)', 'getattr(__builtins__, "eval")(code)'):
+            with self.subTest(source=source):
+                self.assertTrue(self.check(source))
+
+    def test_unknown_path_replacement_and_dynamic_builtin_lookup_are_rejected(self):
+        for source in (
+            'data.raw_cache_dir("zeroth_ko").replace(scratch)',
+            'def evict(p):\n    p.replace(other)',
+            'def evict(p: str):\n    p.replace(other)',
+            'def evict(p):\n    p.replace(target=other)',
+            'import builtins\ngetattr(builtins, name)(code)',
+        ):
+            with self.subTest(source=source):
+                self.assertTrue(self.check(source))
+        self.assertEqual(self.check('hyp.lower().replace(" ", "")'), [])
+        self.assertEqual(self.check('from dataclasses import replace\nreplace(row, text="updated")'), [])
+
     def test_syntax_errors_do_not_skip_the_check(self):
         self.assertTrue(self.check('def invalid('))
 
@@ -173,6 +221,29 @@ class CacheBoundary(unittest.TestCase):
         for root, target in [(self.root, self.home), (self.home, hub), (hub, sentinel)]:
             with self.subTest(target=target), self.assertRaises(ValueError):
                 cache.remove_inside(root, target, file=target == sentinel)
+        self.assertEqual(sentinel.read_text(), 'keep')
+
+    def test_atomic_publish_only_replaces_a_regular_sibling_part_file(self):
+        target = self.root / 'hypotheses.jsonl'
+        partial = target.with_name(target.name + '.part')
+        partial.write_text('complete')
+        target.write_text('old')
+        cache.publish_partial(partial, target)
+        self.assertEqual(target.read_text(), 'complete')
+        self.assertFalse(partial.exists())
+        with self.assertRaises(ValueError):
+            cache.publish_partial(self.home, target)
+        sentinel = self.home / 'hub/file'
+        sentinel.parent.mkdir()
+        sentinel.write_text('keep')
+        part = sentinel.with_name(sentinel.name + '.part')
+        part.write_text('forged')
+        with self.assertRaises(ValueError):
+            cache.publish_partial(part, sentinel)
+        link = self.root / 'link.part'
+        link.symlink_to(sentinel)
+        with self.assertRaises(ValueError):
+            cache.publish_partial(link, self.root / 'link')
         self.assertEqual(sentinel.read_text(), 'keep')
 
     def test_file_removal_keeps_missing_and_directory_error_semantics(self):

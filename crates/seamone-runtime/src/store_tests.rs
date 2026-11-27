@@ -712,15 +712,23 @@ fn replay_is_idempotent_and_stale_or_colliding_events_fail() {
     );
     let playbacks = crate::playback_evidence::Playbacks::new();
     let reply = playbacks
-        .issue(&store, &segment.id, segment.revision)
+        .issue_playback_token(&store, &segment.id, segment.revision)
         .unwrap();
-    playbacks.ended(&reply.token).unwrap();
+    playbacks.mark_playback_ended(&reply.token).unwrap();
     let accepted = store
-        .mutate(playbacks.authorize(&req, Some(&reply.token)).unwrap())
+        .mutate(
+            playbacks
+                .authorize_review(&req, Some(&reply.token))
+                .unwrap(),
+        )
         .unwrap();
     assert_eq!(
         store
-            .mutate(playbacks.authorize(&req, Some(&reply.token)).unwrap())
+            .mutate(
+                playbacks
+                    .authorize_review(&req, Some(&reply.token))
+                    .unwrap()
+            )
             .unwrap(),
         accepted
     );
@@ -731,7 +739,11 @@ fn replay_is_idempotent_and_stale_or_colliding_events_fail() {
     };
     assert!(
         store
-            .mutate(playbacks.authorize(&collision, Some(&reply.token)).unwrap())
+            .mutate(
+                playbacks
+                    .authorize_review(&collision, Some(&reply.token))
+                    .unwrap()
+            )
             .is_err()
     );
     let mut second = f.store();

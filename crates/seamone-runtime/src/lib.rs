@@ -62,6 +62,7 @@ mod store_tests;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 mod training;
+mod write_guard;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use seamone_core::{
@@ -88,84 +89,53 @@ pub const CAPTURE_SUPPORTED: bool = cfg!(any(
     target_os = "windows"
 ));
 
+macro_rules! evidence_example {
+    ($description:literal, $kind:literal, $body:literal) => {
+        concat!(
+            $description,
+            "\n",
+            "```",
+            $kind,
+            "\n",
+            "# #[path = r#\"",
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/audio.rs\"#] mod audio;\n",
+            "# #[path = r#\"",
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/normalize.rs\"#] mod normalize;\n",
+            "# #[path = r#\"",
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
+            "# #[path = r#\"",
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
+            "# #[path = r#\"",
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/store.rs\"#] mod store;\n",
+            "# #[path = r#\"",
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/write_guard.rs\"#] mod write_guard;\n",
+            $body,
+            "\n",
+            "```",
+            "\n"
+        )
+    };
+}
+
 /// Owns recording, playback evidence, verified revisions and local work.
-#[doc = concat!(
-    "A sibling must submit the immutable request authorized by the gate.\n",
-    "```compile_fail,E0308\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.ended(&token).unwrap();\nlet _ = store.mutate(request);\n}\n}\n# fn main() {}\n```\n",
-    "```\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}\n```\n",
-    "A sibling cannot construct the proof's private fields.\n",
-    "```compile_fail,E0451\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.ended(&token).unwrap();\nlet _ = super::playback_evidence::PlaybackProof { request };\n}\n}\n# fn main() {}\n```\n",
-    "```\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.ended(&token).unwrap();\nlet _ = playbacks.authorize(request, Some(&token)).unwrap();\n}\n}\n# fn main() {}\n```\n",
-    "A sibling cannot construct proof-free authorization.\n",
-    "```compile_fail,E0451\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.ended(&token).unwrap();\nlet _ = super::playback_evidence::AuthorizedReview { authority: todo!() };\n}\n}\n# fn main() {}\n```\n",
-    "```\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.ended(&token).unwrap();\nlet _ = playbacks.authorize(request, Some(&token)).unwrap();\n}\n}\n# fn main() {}\n```\n",
-    "A sibling cannot use a Default constructor.\n",
-    "```compile_fail,E0599\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::default();\nlet token = playbacks.issue(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}\n```\n",
-    "```\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}\n```\n",
-    "A sibling cannot issue a token without preparing the audio.\n",
-    "```compile_fail,E0624\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.begin(&request.segment_id, request.expected_revision).unwrap();\nplaybacks.ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}\n```\n",
-    "```\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio.rs\"#] mod audio;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/normalize.rs\"#] mod normalize;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/audio_ingest.rs\"#] mod audio_ingest;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/playback_evidence.rs\"#] mod playback_evidence;\n",
-    "# #[path = r#\"", env!("CARGO_MANIFEST_DIR"), "/src/store.rs\"#] mod store;\n",
-    "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}\n```\n",
-)]
+#[doc = evidence_example!("A sibling must submit the immutable request authorized by the gate.", "compile_fail,E0308", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(request);\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling must submit the immutable request authorized by the gate.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot construct the proof's private fields.", "compile_fail,E0451", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = super::playback_evidence::PlaybackProof { request };\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot construct the proof's private fields.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = playbacks.authorize_review(request, Some(&token)).unwrap();\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot construct proof-free authorization.", "compile_fail,E0451", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = super::playback_evidence::AuthorizedReview { authority: todo!() };\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot construct proof-free authorization.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = playbacks.authorize_review(request, Some(&token)).unwrap();\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot use a Default constructor.", "compile_fail,E0599", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::default();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot use a Default constructor.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot issue a token without preparing the audio.", "compile_fail,E0624", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.begin(&request.segment_id, request.expected_revision).unwrap();\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot issue a token without preparing the audio.", "", "mod sibling {\nfn checked(store: &mut super::store::Store, request: &seamone_core::review::ReviewRequest) {\nlet playbacks = super::playback_evidence::Playbacks::new();\nlet token = playbacks.issue_playback_token(store, &request.segment_id, request.expected_revision).unwrap().token;\nplaybacks.mark_playback_ended(&token).unwrap();\nlet _ = store.mutate(playbacks.authorize_review(request, Some(&token)).unwrap());\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling cannot retain the private SQL permit.", "compile_fail,E0603", "mod sibling {\nfn checked(connection: &rusqlite::Connection) {\nlet _: Option<super::write_guard::WritePermit<'_>> = None;\n}\n}\n# fn main() {}")]
+#[doc = evidence_example!("A sibling receives only the completed write result.", "", "mod sibling {\nfn checked(connection: &rusqlite::Transaction<'_>) {\nlet writes = super::write_guard::WriteAccess::attach(connection).unwrap();\nlet _: () = writes.insert_unverified(connection, &[]).unwrap();\n}\n}\n# fn main() {}")]
 pub struct LibraryService {
     store: std::sync::Arc<Mutex<Store>>,
     background: crate::training::BackgroundWork,
@@ -194,11 +164,11 @@ impl LibraryService {
 
     pub fn playback(&self, id: &str, revision: u64) -> Result<PlaybackReply, String> {
         let store = self.store()?;
-        self.listening.issue(&store, id, revision)
+        self.listening.issue_playback_token(&store, id, revision)
     }
 
     pub fn playback_ended(&self, token: &str) -> Result<(), String> {
-        self.listening.ended(token)
+        self.listening.mark_playback_ended(token)
     }
 
     pub fn review(
@@ -210,7 +180,7 @@ impl LibraryService {
         if let Some(replayed) = store.replay(request)? {
             return Ok(replayed);
         }
-        let authorized = self.listening.authorize(request, proof)?;
+        let authorized = self.listening.authorize_review(request, proof)?;
         let saved = store.mutate(authorized)?;
         drop(store);
         if saved.verified.is_some() {

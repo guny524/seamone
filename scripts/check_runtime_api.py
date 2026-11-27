@@ -2,11 +2,14 @@
 
 import collections
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
 from rust_tokens import tokens
 from snapshot_baselines import errors as baseline_errors
+from guard_integrity import base_commit
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT = Path(__file__).with_name("runtime_api.json")
@@ -89,6 +92,11 @@ def inventory():
 
 
 def main():
+    try:
+        base_commit(ROOT, os.environ.get('LINT_BASE_REF', 'origin/develop'))
+    except (ValueError, subprocess.CalledProcessError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
     diagnostics = baseline_errors(ROOT, 'scripts/runtime_api.json')
     if diagnostics:
         print('\n'.join(diagnostics), file=sys.stderr)
