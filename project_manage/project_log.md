@@ -376,3 +376,6 @@
 
 ## 2026-11-27 15:47 관문 workflow 와 default branch
 - 검사 파일을 고친 PR 을 사람이 보게 하는 `pull_request_target` 관문이 default branch(main)에 파일이 없어 한 번도 돌지 않은 것을 찾고 default branch 를 develop 으로 바꿨다(이슈 decision D9), 자세한 것은 이슈 log 2026-11-27 15:47
+
+## 2026-11-27 15:57 PR #23 Linux 빌드 고침
+- make 를 부르는 모든 workflow job 에 Python 판을 고정하고 빠지면 구성 시험이 실패하게 한 `2d40b14` 를 PR #23 에 올렸다, 자세한 것은 이슈 log 2026-11-27 15:57
