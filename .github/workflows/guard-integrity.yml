@@ -1,9 +1,9 @@
 name: guard-integrity
 
 on:
-  push:
-    branches: ['**']
   pull_request:
+    branches: [develop]
+    types: [closed]
 
 permissions:
   contents: read
@@ -14,9 +14,11 @@ concurrency:
 
 jobs:
   guard-base:
+    if: github.event.pull_request.merged == true
     uses: ./.github/workflows/guard-base.yml
 
   base-guards:
+    if: github.event.pull_request.merged == true
     needs: guard-base
     runs-on: ubuntu-22.04
     env:

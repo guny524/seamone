@@ -1,15 +1,15 @@
 name: ci
 
 on:
-  push:
-    branches: ['**']
   pull_request:
+    branches: [develop]
+    types: [closed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.sha }}
   cancel-in-progress: true
 
 env:
@@ -17,9 +17,11 @@ env:
 
 jobs:
   guard-base:
+    if: github.event.pull_request.merged == true
     uses: ./.github/workflows/guard-base.yml
 
   lint-test:
+    if: github.event.pull_request.merged == true
     needs: guard-base
     env:
       LINT_BASE_REF: ${{ needs.guard-base.outputs.policy-commit }}
@@ -95,6 +97,7 @@ jobs:
           SEAMONE_CHROME="$chrome_path" make ui-test
 
   domain:
+    if: github.event.pull_request.merged == true
     needs: guard-base
     env:
       LINT_BASE_REF: ${{ needs.guard-base.outputs.policy-commit }}
@@ -115,6 +118,7 @@ jobs:
         run: make check-domain
 
   macos-native-lint:
+    if: github.event.pull_request.merged == true
     needs: guard-base
     env:
       LINT_BASE_REF: ${{ needs.guard-base.outputs.policy-commit }}
@@ -146,6 +150,7 @@ jobs:
         run: make lint-native-code CARGO_FEATURES=desktop-whisper
 
   research-test:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
