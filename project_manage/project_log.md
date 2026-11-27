@@ -349,3 +349,6 @@
 
 ## 2026-11-27 14:45 PR #21 merge 와 PR #23
 - lint 예외 0개와 주석 정리 PR #21 을 merge 했다(`59c3cc2`), 빠른 검수를 runtime 출력으로 옮긴 draft PR #23 을 올렸다, 자세한 것은 이슈 log 2026-11-27 14:45
+
+## 2026-11-27 14:44 develop CI 초록
+- PR #21 merge 뒤 develop 최신 커밋 `0409cfe` 의 ci 가 모두 통과했다, PR #18 merge 뒤 드러난 iOS lint 실패가 풀렸다, 자세한 것은 이슈 log 2026-11-27 14:45 절 끝
