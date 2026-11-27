@@ -249,3 +249,4 @@
 - 14단계(worker, 14:37 끝남): 빠른 검수의 연속 재생, Space 표시, 좁힌 구간 다시 듣기를 `play_recording` 과 상태 조회로 옮겼다, 늦은 준비 요청이 새 session 을 덮지 않게 준비를 한 줄로 세웠다, UI 의 web-sys feature 에서 `HtmlAudioElement`, `HtmlMediaElement` 를 빼고 다시 넣거나 제품 UI 소스에 audio tag, media 타입, media 이벤트 처리기를 쓰면 `make check-imports` 가 거절한다
 - worker 가 찾은 한계: Leptos 의 tachys 0.2.19 가 두 binding 을 간접으로 켜서, feature 를 빼는 것만으로는 컴파일러가 타입을 막지 못한다(임시 시험에서 `Option<web_sys::HtmlAudioElement>` 가 컴파일됐다), 그래서 검사로 막는다
 - 메인이 `make test` 157개(실패 0, 장치 시험 1개 ignored), `make check-imports` 통과, UI 의 audio 흔적 0곳을 확인하고 `485bd95` 로 draft PR #23 https://github.com/guny524/seamone/pull/23 (PR #22 위)을 열었다, Opus 검토를 맡겼다
+- 14:43 develop 의 최신 커밋 `0409cfe` 에서 ci run 45947110943 이 모두 통과했다(lint-test, macos-native-lint 의 iOS lint 포함, domain, research-test), PR #21 merge 커밋의 ci 는 뒤 기록 커밋 push 로 `cancel-in-progress` 취소됐다, develop 의 iOS lint 실패는 풀렸다
