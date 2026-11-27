@@ -2,6 +2,7 @@ use seamone_core::{
     AppInfo,
     capture::Status,
     error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage},
+    ipc::{SaveReview, SaveReviewReply},
     review::{LibraryPage, PlaybackReply, RecordingInfo, Request, SampleRange, Segment},
 };
 use seamone_runtime::LibraryService;
@@ -297,9 +298,10 @@ pub async fn save_review<R: Runtime>(
     state: State<'_, LibraryService>,
     request: Request,
     proof: Option<String>,
-) -> Result<Segment, String> {
+) -> Result<SaveReviewReply, String> {
     trusted(&window)?;
-    state.review(&request, proof.as_deref())
+    let args = SaveReview { request, proof };
+    state.review(&args.request, args.proof.as_deref())
 }
 
 #[tauri::command]
