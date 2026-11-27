@@ -13,16 +13,34 @@ pub(super) fn open() -> Result<(cpal::Device, Duration), String> {
     let name = device.name().map_err(|error| error.to_string())?;
     let ids = macos_helpers::get_audio_device_ids_for_scope(Scope::Output)
         .map_err(|error| error.to_string())?;
-    let mut matching = ids
-        .into_iter()
-        .filter(|id| macos_helpers::get_device_name(*id).is_ok_and(|candidate| candidate == name));
-    let id = matching
-        .next()
-        .ok_or("출력 장치 지연을 읽을 수 없습니다.")?;
-    if matching.next().is_some() {
-        return Err("출력 장치 이름이 중복되어 지연을 확인할 수 없습니다.".into());
-    }
+    let id = output_id(
+        ids,
+        &name,
+        |id| {
+            macos_helpers::get_audio_device_supports_scope(id, Scope::Output)
+                .map_err(|error| error.to_string())
+        },
+        |id| macos_helpers::get_device_name(id).map_err(|error| error.to_string()),
+    )?;
     Ok((device, read_latency(id)?))
+}
+
+fn output_id(
+    ids: Vec<sys::AudioDeviceID>,
+    name: &str,
+    mut supports_output: impl FnMut(sys::AudioDeviceID) -> Result<bool, String>,
+    mut device_name: impl FnMut(sys::AudioDeviceID) -> Result<String, String>,
+) -> Result<sys::AudioDeviceID, String> {
+    let mut selected = None;
+    for id in ids {
+        if !supports_output(id)? || device_name(id)? != name {
+            continue;
+        }
+        if selected.replace(id).is_some() {
+            return Err("출력 장치 이름이 중복되어 지연을 확인할 수 없습니다.".into());
+        }
+    }
+    selected.ok_or_else(|| "출력 장치 지연을 읽을 수 없습니다.".into())
 }
 
 fn read_latency(device: sys::AudioDeviceID) -> Result<Duration, String> {
@@ -123,5 +141,48 @@ fn read_latency(device: sys::AudioDeviceID) -> Result<Duration, String> {
             .to_u64()
             .ok_or("출력 지연 범위가 잘못됐습니다.")?;
         Ok(Duration::from_nanos(nanos))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn matching_input_only_devices_do_not_hide_the_output_device() {
+        let selected = output_id(
+            vec![11, 22, 33],
+            "headset",
+            |id| Ok(id != 11),
+            |id| {
+                assert_ne!(id, 11, "input-only device names must not be queried");
+                Ok(if id == 22 { "headset" } else { "speaker" }.into())
+            },
+        )
+        .unwrap();
+        assert_eq!(selected, 22);
+    }
+
+    #[test]
+    fn duplicate_output_names_and_unknown_capabilities_are_rejected() {
+        assert!(
+            output_id(
+                vec![11, 22],
+                "headset",
+                |_| Ok(true),
+                |_| Ok("headset".into())
+            )
+            .is_err()
+        );
+        assert!(
+            output_id(
+                vec![11],
+                "headset",
+                |_| Err("unknown output scope".into()),
+                |_| Ok("headset".into())
+            )
+            .is_err()
+        );
+        assert!(output_id(vec![11], "headset", |_| Ok(false), |_| Ok("headset".into())).is_err());
     }
 }

@@ -81,6 +81,7 @@
     "crates/seamone-runtime/src/playback_evidence/player.rs: # [ cfg ( any ( test , feature = \"test-support\" ) ) ] pub ( super ) fn advance ( & mut self , frames : usize ) - > Result < ( ) , String >",
     "crates/seamone-runtime/src/playback_evidence/player.rs: # [ cfg ( any ( test , feature = \"test-support\" ) ) ] pub ( super ) fn fake ( ) - > Self",
     "crates/seamone-runtime/src/playback_evidence/player.rs: # [ cfg ( test ) ] pub ( super ) fn finish ( & mut self ) - > Result < ( ) , String >",
+    "crates/seamone-runtime/src/playback_evidence/player.rs: # [ cfg ( test ) ] pub ( super ) fn with_output ( output : OutputFactory ) - > Self",
     "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) fn authorizes ( & mut self , request : & Request , id : Option < & str > ) - > bool",
     "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) fn close ( & mut self )",
     "crates/seamone-runtime/src/playback_evidence/player.rs: pub ( super ) fn control ( & mut self , id : & str , action : Action ) - > Result < Status , String >",
@@ -92,7 +93,7 @@
   "modules": [
     {
       "path": "crates/seamone-runtime/src/playback_evidence/mod.rs",
-      "sha256": "e747b9ff9ff79e510ac813d6243cf6b3d9f73957a195a1066ba3dd1c3e39643f"
+      "sha256": "295944f75df0156e33e30f0a1a0cb1f172ef8631bdbda76083ae6bfe3157497a"
     },
     {
       "path": "crates/seamone-runtime/src/playback_evidence/output/clock.rs",
@@ -100,7 +101,7 @@
     },
     {
       "path": "crates/seamone-runtime/src/playback_evidence/output/engine.rs",
-      "sha256": "a25f74b3fb0c955f2a9ef34e5aada91ea1493c9e4f98c666ac6be933d284fb55"
+      "sha256": "cd91660768d3daa3be32bfc9b61704a1ddcb40bc4b0812fb0c51587c80e27acd"
     },
     {
       "path": "crates/seamone-runtime/src/playback_evidence/output/fake.rs",
@@ -116,7 +117,7 @@
     },
     {
       "path": "crates/seamone-runtime/src/playback_evidence/output/native/macos.rs",
-      "sha256": "4ed353dbf3f9bce5f3bccef9cec856e35b089873361f6d6b9914288c79b2b5d2"
+      "sha256": "dd77ac7916bd36898abcbc8e3b018f3a30d3f994803cbc4c1b20175af69b8e8a"
     },
     {
       "path": "crates/seamone-runtime/src/playback_evidence/output/native/windows.rs",
@@ -132,7 +133,7 @@
     },
     {
       "path": "crates/seamone-runtime/src/playback_evidence/player.rs",
-      "sha256": "2340b836712f85710017bf27251f0ec439ea40d20446f459f447981a3427ffe6"
+      "sha256": "4a3eaa6d79407402420d20259b940b38a96cabe53305bd13bad8cf39b817fb2b"
     }
   ],
   "callers": [

@@ -205,12 +205,15 @@ impl LibraryService {
     /// # Errors
     /// 재생 증거, revision, 검수 전이, 전사문이 유효하지 않거나 저장에 실패하면 오류를 돌려준다
     pub fn review(&self, request: &Request, proof: Option<&str>) -> Result<Segment, String> {
+        if let Some(replayed) = self.store()?.replay(request)? {
+            return Ok(replayed);
+        }
+        let authorized = self.listening.authorize_review(request, proof);
         let mut store = self.store()?;
         if let Some(replayed) = store.replay(request)? {
             return Ok(replayed);
         }
-        let authorized = self.listening.authorize_review(request, proof)?;
-        let saved = store.mutate(authorized)?;
+        let saved = store.mutate(authorized?)?;
         drop(store);
         if saved.verified.is_some() {
             self.background.notify();
