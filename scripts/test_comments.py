@@ -50,6 +50,14 @@ if True:
         self.assertEqual(list(python_comments(source)), [
             (10, '"""conditional explanation"""'), (7, '"hidden explanation"')])
 
+    def test_f_strings_and_bytes_are_statements_and_never_docstrings(self):
+        for statement in ('f"message"', 'f"message {value}"', 'b"message"'):
+            with self.subTest(statement=statement):
+                source = 'def work():\n    ' + statement + '\n'
+                self.assertEqual(list(python_comments(source)), [(2, statement)])
+                source = '"""module docs"""\nvalue = ' + statement + '\n'
+                self.assertEqual(list(python_comments(source)), [])
+
     def test_unclosed_rust_comment_fails_closed(self):
         with self.assertRaises(ValueError):
             list(rust_comments('/* unfinished'))

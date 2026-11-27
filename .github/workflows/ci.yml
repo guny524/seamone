@@ -69,6 +69,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: make test
 
+      - name: Runtime doctests without test-support
+        if: ${{ !cancelled() }}
+        run: make test-runtime-doc
+
       - name: Optional offline desktop engine lint
         if: ${{ !cancelled() }}
         run: make lint-code CARGO_FEATURES=desktop-whisper

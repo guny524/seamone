@@ -7,6 +7,7 @@ use seamone_core::{
     TimedText,
     error_marks::{ErrorMark, overlaps},
     review::{SampleRange, Segment},
+    sample_count_as_f64,
 };
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{CanvasRenderingContext2d, ImageData};
@@ -262,16 +263,10 @@ fn span_style(viewport: SampleRange, span: SampleRange) -> String {
     format!("left:{left}%;width:{}%", right - left)
 }
 
-fn sample_count(samples: u64) -> f64 {
-    let [low0, low1, low2, low3, high0, high1, high2, high3] = samples.to_le_bytes();
-    f64::from(u32::from_le_bytes([high0, high1, high2, high3])) * 4_294_967_296.0
-        + f64::from(u32::from_le_bytes([low0, low1, low2, low3]))
-}
-
 fn percentage(range: SampleRange, sample: u64) -> f64 {
     let offset = sample.clamp(range.start, range.end) - range.start;
     let duration = range.end - range.start;
-    100.0 * sample_count(offset) / sample_count(duration)
+    100.0 * sample_count_as_f64(offset) / sample_count_as_f64(duration)
 }
 
 #[cfg(test)]

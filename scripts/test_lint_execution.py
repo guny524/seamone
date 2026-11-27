@@ -14,7 +14,8 @@ class LintExecution(unittest.TestCase):
     def test_ci_compiler_steps_remain_independent_after_failures(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         for job, required in (
-            ('lint-test', ('lint-runtime-minimal', 'lint-workspace-code', 'lint-wasm-code')),
+            ('lint-test', ('lint-runtime-minimal', 'lint-format', 'lint-workspace-code',
+                           'lint-wasm-code', 'test-runtime-doc')),
             ('macos-native-lint', ('lint-runtime-minimal', 'lint-native-code', 'lint-ios-code')),
         ):
             start = workflow.index('  ' + job + ':\n')

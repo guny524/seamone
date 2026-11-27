@@ -40,7 +40,7 @@ def configuration(path, source):
                 "workspace.lints": data.get("workspace", {}).get("lints", {})}
     ruff = data.get("tool", {}).get("ruff", {})
     return {**ruff.get("lint", {}),
-            **{f"ruff.{key}": ruff[key] for key in ("exclude", "extend-exclude") if key in ruff}}
+            **{f"ruff.{key}": value for key, value in ruff.items() if key != "lint"}}
 
 
 def configuration_exceptions(path, source):
@@ -90,6 +90,29 @@ def clippy_commands(source):
     source = re.sub(r"\\\n[ \t]*", " ", source)
     return sorted(line.strip() for line in source.splitlines()
                   if line.startswith("\t") and re.search(r"\bcargo\s+clippy\b", line))
+
+
+def ruff_commands(source):
+    source = re.sub(r"\\\n[ \t]*", " ", source)
+    return sorted(line.strip() for line in source.splitlines()
+                  if line.startswith("\t") and re.search(r"\bruff\s+(?:check|format)\b", line))
+
+
+def ruff_recipes(names, read):
+    found = {}
+    for name in names:
+        if Path(name).name == "Makefile":
+            commands = ruff_commands(read(name))
+            if commands:
+                found[name] = commands
+    return found
+
+
+def ruff_recipe_errors(current, required, previous):
+    return [f"{path}: ruff recipes differ from the reviewed baseline; preserve the checked targets"
+            for path in sorted(set(current) | set(required) | set(previous))
+            if collections.Counter(required.get(path, [])) != collections.Counter(previous.get(path, []))
+            or collections.Counter(required.get(path, [])) - collections.Counter(current.get(path, []))]
 
 
 def command_errors(path, commands):
@@ -186,6 +209,9 @@ def check(root, ref):
         base_config = base.get("configuration")
         if base_config is None:
             base_config = config_snapshots(root, base_names, read_base)
+        base_ruff = base.get("ruff_commands")
+        if base_ruff is None:
+            base_ruff = ruff_recipes(base_names, read_base)
         base_commands = base.get("clippy_commands")
         if base_commands is None:
             base_commands = clippy_commands(read_base("Makefile"))
@@ -216,7 +242,11 @@ def check(root, ref):
             or collections.Counter(required_commands) - collections.Counter(actual_commands)):
         errors.append(f"Makefile: clippy recipes differ from {BASELINE} or {ref}; preserve the reviewed commands")
     errors.extend(command_errors("Makefile", actual_commands))
+    errors.extend(ruff_recipe_errors(ruff_recipes(names, read_current),
+                                     baseline.get("ruff_commands", {}), base_ruff))
     for path in paths:
+        if path.name == "pyproject.toml" and "ruff.extend" in configuration(path, read_current(path.relative_to(root).as_posix())):
+            errors.append(f"{path.relative_to(root)}: Ruff extend is forbidden; keep all rules in the reviewed tables")
         if path.name in ALTERNATE:
             errors.append(f"{path.relative_to(root)}: alternate lint configuration is forbidden; use the reviewed Cargo/Ruff tables")
         if path.name in ("config", "config.toml") and path.parent.name == ".cargo":

@@ -46,8 +46,10 @@ def python_comments(source):
                 if isinstance(value, ast.Constant) and isinstance(value.value, str):
                     documentation.add(id(node.body[0]))
     for node in ast.walk(tree):
-        if (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
-                and isinstance(node.value.value, str) and id(node) not in documentation):
+        if (isinstance(node, ast.Expr) and id(node) not in documentation
+                and (isinstance(node.value, ast.JoinedStr)
+                     or (isinstance(node.value, ast.Constant)
+                         and isinstance(node.value.value, (str, bytes))))):
             yield node.lineno, ast.get_source_segment(source, node)
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type != tokenize.COMMENT:

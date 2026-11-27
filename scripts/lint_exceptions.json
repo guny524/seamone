@@ -76,12 +76,21 @@
       "pylint": {
         "max-args": 8,
         "max-statements": 50
-      }
+      },
+      "ruff.line-length": 100,
+      "ruff.target-version": "py312"
     }
   },
   "clippy_commands": [
     "cargo clippy --locked -p seamone -p seamone-runtime --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings",
     "cargo clippy --workspace --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings",
     "cargo clippy -p seamone-core -p seamone-ui --target wasm32-unknown-unknown -- -D warnings"
-  ]
+  ],
+  "ruff_commands": {
+    "research/Makefile": [
+      "uv run ruff check .",
+      "uv run ruff format --check .",
+      "uv run ruff format ."
+    ]
+  }
 }
