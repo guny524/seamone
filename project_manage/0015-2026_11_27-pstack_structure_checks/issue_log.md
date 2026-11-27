@@ -243,3 +243,9 @@
   - `(callback, playback)` 을 시각으로 바꾸는 부분이 자동 시험 밖이다
 - [결정, 메인] 1번은 D7 의 뜻을 좁히지 않고 출력 장치 지연(macOS CoreAudio 의 장치, stream latency 와 safety offset, Windows `GetStreamLatency`)을 읽어 판정 시각에 더한다, 지연을 읽지 못하면 들은 것으로 판정하지 않는다, 바깥 API 라 필요한 unsafe 는 플랫폼 adapter 의 함수 하나에 두고 unsafe 허용 목록에 근거와 함께 더한다(외부 사정)
 - 이 네 건을 새 worker(Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-playback-fix`, handle `term_cf27c207-f261-4d45-aa49-8332ee097a5c`)에게 맡겼다, 두 번째 worker 세션을 `codex resume` 으로 다른 worktree 에서 이어 열었더니 예전 cwd 로 열려 닫고 새로 띄웠다(이어 열기는 원래 worktree 에서만 쓴다)
+
+## 2026-11-27 14:45 PR #21 merge 와 재생 확인 PR 2(PR #23)
+- PR #21 의 `87e602f` CI 에서 실패한 step 은 목록 대조(`Structural policy`, `make check-architecture`, frozen base guards)뿐이고 컴파일, 시험, 다섯 플랫폼 빌드는 통과해 D4 대로 merge 했다(`59c3cc2`), 고치기 worktree 와 로컬, 원격 브랜치를 정리했다
+- 14단계(worker, 14:37 끝남): 빠른 검수의 연속 재생, Space 표시, 좁힌 구간 다시 듣기를 `play_recording` 과 상태 조회로 옮겼다, 늦은 준비 요청이 새 session 을 덮지 않게 준비를 한 줄로 세웠다, UI 의 web-sys feature 에서 `HtmlAudioElement`, `HtmlMediaElement` 를 빼고 다시 넣거나 제품 UI 소스에 audio tag, media 타입, media 이벤트 처리기를 쓰면 `make check-imports` 가 거절한다
+- worker 가 찾은 한계: Leptos 의 tachys 0.2.19 가 두 binding 을 간접으로 켜서, feature 를 빼는 것만으로는 컴파일러가 타입을 막지 못한다(임시 시험에서 `Option<web_sys::HtmlAudioElement>` 가 컴파일됐다), 그래서 검사로 막는다
+- 메인이 `make test` 157개(실패 0, 장치 시험 1개 ignored), `make check-imports` 통과, UI 의 audio 흔적 0곳을 확인하고 `485bd95` 로 draft PR #23 https://github.com/guny524/seamone/pull/23 (PR #22 위)을 열었다, Opus 검토를 맡겼다
