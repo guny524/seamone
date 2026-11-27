@@ -46,7 +46,7 @@ def check(root, ref):
             for index, token in enumerate(code):
                 line = source.count('\n', 0, token.start) + 1
                 if token.text == 'unsafe' and not any(scope.start <= token.start < scope.end for scope in allowed):
-                    diagnostics.append(f'{name}:{line}: unsafe is forbidden here; keep it in the exact reviewed capture function')
+                    diagnostics.append(f'{name}:{line}: unsafe is forbidden here; keep it in the exact reviewed platform adapter function')
                 if name.startswith('crates/seamone-runtime/src/') and token.text == 'include' and index + 1 < len(code) and code[index + 1].text == '!':
                     diagnostics.append(f'{name}:{line}: runtime include! is forbidden; keep Rust code in inspected modules')
                 if name == 'crates/seamone-runtime/src/capture.rs' and (

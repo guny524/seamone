@@ -188,3 +188,73 @@
 - 남긴 것(사람에게 올림): runtime 에 다른 SQLite crate 더하기, 필수 check 목록(branch protection 은 레포 설정), `EligibleExample::check` 가 pub 이라 학습 예시를 직접 만들 수 있는 길(이번 이슈 전부터), 재생 최소 시간
 - 정리: cron 두 개를 지웠다, worker 탭(codex 세션 `01a21898-2b74-7c02-9206-5ad88ae3fe65`, 이어 열기 `codex resume 01a21898-2b74-7c02-9206-5ad88ae3fe65`)과 Pi 탭을 닫았다, 시험용 worktree 셋(`15-pi-trap`, `13-cer-rebase`, `14-jsonl-rebase`)과 그 로컬 브랜치, Pi target 복제본(7.6G), 15-structure-checks 의 공유 `target`(6.3G)을 지웠다, 디스크 여유 32Gi
 - 남긴 것과 지울 조건: `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(PR #18 브랜치)와 그 `.tmp/structure-checks/`(검증 target 5.4G 와 증거 로그)는 PR #18 이 merge 되거나 닫히면 지운다, `.tmp/conductor/15-structure/`(지시서, 보고, Opus 검토, Pi patch)는 이슈 #15 를 닫을 때 지운다
+
+## 2026-11-27 13:10 PR #18 merge, develop 의 iOS lint 실패, branch protection, 12단계
+- D4 에 따라 메인이 확인자로서 PR #18 을 merge 했다(`393f3d8`), PR CI 의 실패는 새 목록 항목이 base 에 없는 것과 base 의 옛 검사가 바뀐 증거 선언을 잡는 것뿐이라고 로그로 확인했다
+- 그런데 merge 뒤 develop push CI run 45937608832 의 `macos-native-lint` 에서 `make lint-ios` 가 `insert_unverified is never used` 로 실패했다, iOS 처럼 `desktop-whisper` 와 시험이 없는 빌드에서 받아쓰기 commit 경로가 컴파일되지 않아 생긴 죽은 코드다, PR CI 에서는 `lint-ios` 의 앞 단계(목록 대조)가 먼저 실패해 iOS 컴파일까지 가지 않아 보이지 않았다, 메인이 그 실패를 "예상한 것" 으로만 보고 merge 한 잘못이다, 목록 대조 실패가 컴파일 단계를 가리지 않게 CI 를 고치는 일을 12단계에 넣었다
+- PR #18 worktree 와 로컬, 원격 브랜치를 정리했다(디스크 여유 37Gi)
+- develop 에 branch protection 을 걸었다: 필수 check 12개(`lint-test`, `domain`, `macos-native-lint`, `research-test`, `base-guards`, `guard-rules-review-trusted`, 다섯 플랫폼 빌드 job 6개), force push 와 삭제 금지, 관리자 우회는 남겼다(검사 파일을 바꾼 PR 처럼 관문이 일부러 실패할 때 D4 의 확인자가 근거를 기록하고 merge 하는 길), `strict` 는 끔
+- 새 worker(Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-no-exceptions`, 브랜치 `guny524/15-no-exceptions`, handle `term_1f155908-3d76-4535-abc3-92ca9cf95b20`)에게 12단계를 맡겼다: iOS 오류 고침과 CI 단계 분리, lint 예외 15곳을 설계로 없애기(D5), 주석 정리와 금지 검사(D5)
+- 재생 확인의 근본 해결(D6) 설계를 Opus 5.5 high 에게 자문했다, 지금은 화면이 웹뷰 `HtmlAudioElement` 로 재생하고 `ended` 이벤트에서 `playback_ended(token)` 을 보낸다(`app/ui/src/app.rs:504`, `app/ui/src/workspace.rs:364`)
+
+## 2026-11-27 13:40 12단계와 PR #21, 13단계 시작
+- 12단계(worker, 13:36 끝남): lint 억제 기준 목록 14개(Cargo 3, Rust 10, Ruff 1, 메인이 앞서 15곳이라 한 것은 잘못 센 것)를 모두 설계로 없앴다, 숫자 변환은 `FftIndex`, `Intensity`, `Pcm16`, `KernelRadius`, `RecordingOffset` 범위 타입과 명시적 변환, 결과가 같은지는 checksum 시험, 플랫폼별 미사용 인자는 picker 책임 옮기기, 꺼 둔 clippy lint 셋을 켜고 core 타입 이름을 고쳤다(IPC JSON 그대로), research 시험 magic number 와 긴 줄
+- 주석: 실제 일반 주석은 69개였다(메인이 앞서 Rust 207줄, Python 31줄이라 한 것은 문서 주석까지 센 틀린 수), 47개를 지우고 바꿀 수 없는 외부 사정 22개를 `scripts/comments.json` 에 고정했다, 새 주석은 `make check-comments` 가 거절한다
+- iOS 빌드의 `insert_unverified` 죽은 코드를 쓰는 조건에서만 두고, 목록 대조 실패가 native, iOS, WASM, domain 컴파일을 가리지 않게 Makefile 과 CI step 을 나눴다
+- worker 가 no_std 확인을 위해 노트북 rustup 에 `wasm32v1-none` target 을 더했다(Rust 도구 범위)
+- 메인이 `make test` 139개(실패 0), 주석과 예외 검사기 시험 통과, 남은 `#[expect]`, `#[allow]` 속성 0개를 확인했다, 커밋 `8c4f4d6`, PR #21 https://github.com/guny524/seamone/pull/21 , Opus 5.5 high 독립 검토를 맡겼다
+- 13단계(재생 확인 PR 1, decision D7)를 같은 worker 에게 PR #21 위 브랜치 `guny524/15-runtime-playback` 에서 시작하게 했다
+
+## 2026-11-27 13:50 PR #21 의 Opus 검토와 고치기
+- Opus 5.5 high(세션 `31d0ad1d-d3b4-407a-9a96-034920ad2e4e`) 결함 10건, 계산 결과와 IPC JSON 이 바뀐 곳은 없다
+  - f64, i32 에서 f32 로 줄이는 세 곳(`normalize.rs:25`, `:158`, `audio_ingest.rs:95`)이 `num-traits` 안에 `as f32` 를 숨긴 것뿐이다(억제를 다른 꼴로 옮김)
+  - `lint-code` 안의 차례 실행이 뒤 컴파일 진단을 가리고, CI 에 WASM step 이 따로 없다
+  - Python 은 문자열 문장으로 주석 검사를 피한다, `comments.json` 에 원문이 없어 무엇을 승인하는지 안 보인다
+  - 남긴 주석 가운데 우리 셈과 정책이 섞인 것 둘, NFD 시험 literal 이 소리 없이 약해질 수 있음, 지운 주석의 빈 줄 흔적, doctest 가 feature 합치기에 기댐(추측), macOS 에 minimal lint 없음(추측), 범위 타입이 범위를 보장하지 않음, Ruff 의 `exclude` 를 대조하지 않음
+- [결정, 메인] 1번은 축소를 승인하지 않고 계산을 고친다: decode 부터 정규화까지 f64, 마지막에 `Pcm16` 으로 한 번 양자화, f32 가 필요한 바깥 API 는 i16 에서 손실 없이, 결과는 샘플마다 최대 1 LSB 달라질 수 있어 차이를 재서 보고한다(근거: 사용자 원문 "lint 예외가 발생하면 그건 충분히 설계가 안 된거야", 정밀도는 합의한 규칙이 아니라 구현이다)
+- 10건을 두 번째 worker(Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-no-exceptions-fix`, handle `term_9cf250bf-f681-40ce-9e74-55f1e0b48e90`, `CARGO_BUILD_JOBS=1`)에게 맡겼다, 첫 worker 는 13단계를 이어 간다
+
+## 2026-11-27 14:15 PR #21 의 검토 지적 고침
+- 두 번째 worker(14:10 끝남): decode 부터 정규화까지 f64 로 계산하고 `Pcm16` 으로 한 번 양자화했다, 결정적 PCM32 stereo 입력 다섯 rate 의 247,691 샘플 가운데 97개가 1 LSB 달랐고 최대 차이 1 LSB, 기존 2,048 프레임 시험 파형은 차이 0개, `as f32` 와 `to_f32` 는 0곳, `check_input` 이 `InputRate` 를 돌려주고 안쪽은 그 타입만 받는다, lint-code 를 minimal, format, native, WASM target 으로 나누고 CI 에 WASM 과 macOS minimal step 을 따로 두었다, docstring 이 아닌 Python 문자열 문장도 주석으로 센다, `comments.json` 에 원문을 넣고 hash 와 대조한다, Ruff `exclude` 와 `extend-exclude` 대조, decoder 한도 셈과 MP3 trim 정책을 이름으로 옮겼다, NFD literal escape, runtime 단독 doctest target, 지운 주석의 빈 줄 흔적 정리
+- 메인이 `make test` 142개(실패 0)와 `make test-architecture` 통과, 남은 f32 축소 0곳을 확인하고 `16527b8` 로 PR #21 에 push 했다, 두 번째 worker 탭을 닫았다(worktree 는 PR #21 merge 뒤 정리), Opus 재검토와 PR CI 를 기다린다
+
+## 2026-11-27 14:22 PR #21 재검토와 남은 다섯 건
+- Opus 5.5 high 재검토(세션 `3ef44bfb-dca2-4da1-9c19-fd066de74dcf`): 앞 11건 가운데 8건 고쳐짐, 3건 일부, f64 계산으로 현실적 입력에서 1 LSB 넘게 바뀌는 곳은 없다
+- 남은 다섯 건: Ruff 위층의 `include`, `extend`, `line-length` 와 `research/Makefile` 의 Ruff 실행 명령을 대조하지 않음, f-string 과 bytes 문장이 주석 검사를 피함, `test-runtime-doc` target 이 어디서도 돌지 않음, CI 구성 시험이 서식 step 을 요구하지 않음, u64 를 f64 로 바꾸는 손 변환이 두 crate 에 복제됨
+- 확인: 1 LSB 상한은 입력 크기가 수백 아래일 때 성립한다(정상 범위 ±1, 넘쳐도 ±8 정도), ±1000 의 고주파 성분이 든 float WAV 는 몇 LSB 달라질 수 있다, 새 계산이 더 정확해 코드는 그대로 두고 결정 기록에 조건을 붙인다, "247,691 샘플 가운데 97개" 는 worker 의 일회성 측정이라 레포 시험으로 다시 만들 수 없다
+- 두 번째 worker 세션(`01a21b55-6ab5-7ef0-8282-5dd07426d266`, cache 살아 있음)을 이어 열어 다섯 건을 맡겼다
+
+## 2026-11-27 14:30 13단계(재생 확인 PR 1)와 PR #22
+- worker(14:21 끝남): `playback_evidence.rs` 를 `git mv` 로 폴더 module 로 옮기고 player, output(renderer, heard, engine, native, fake)으로 나눴다, 출력 thread 가 CPAL stream 을 소유하고 callback 은 lock 없는 rtrb queue 와 미리 할당한 buffer 만 쓴다, 장치 시계로 버퍼 끝을 지난 source 범위만 합집합에 넣는다, 장치 오류와 잘못된 시각, Stop 뒤 재열기 실패는 session 을 무효로 한다
+- IPC: `playback_ended` 를 없앴다(host 시험이 `Command playback_ended not found` 확인), `control_playback`, `get_playback_status`, `play_recording` 을 더했다, 교정과 판정 화면은 runtime 상태의 heard 로만 확인한다, 빠른 검수와 web-sys feature 는 PR 2
+- `PlayedRun` 과 `Heard` 를 output module 밖에서 만들면 E0603(compile_fail 과 통과 짝), 구조 검사가 callback 안의 lock, 할당, 외부 atomics 쓰기를 거절한다
+- 메인이 `make test` 154개(실패 0, 실제 장치 시험 1개 ignored)를 확인하고 `3150bb5` 로 커밋해 draft PR #22 https://github.com/guny524/seamone/pull/22 를 열었다(PR #21 위), Opus 5.5 high 검토를 맡겼다
+- 사람 시험으로 남김: `make playback-device-proof`(기본 출력 장치로 1초 400 Hz tone, 장치 시계로 들은 범위 확인), macOS, Windows, Linux 실제 기기
+
+## 2026-11-27 14:35 PR #21 남은 다섯 건 고침
+- 두 번째 worker(14:29 끝남): lint 밖의 `[tool.ruff]` 표 전체와 research Ruff 실행 명령을 기준과 대조하고 `extend` 를 거절, docstring 이 아닌 f-string 과 bytes 문장도 주석으로 셈, `test-runtime-doc` 을 CI step 으로, CI 구성 시험이 `lint-format` 을 요구, sample 수의 u64 에서 f64 변환을 core 함수 하나로 모음, 다섯 건 모두 결함을 넣어 실패하고 되돌려 통과하는 것을 증명했다
+- 메인이 `make test` 143개(실패 0)와 `make test-architecture` 통과를 확인하고 `87e602f` 로 PR #21 에 push 했다, 두 번째 worker 탭을 닫았다
+
+## 2026-11-27 14:38 PR #22 의 Opus 검토
+- Opus 5.5 high(세션 `494cd11a-56a2-4238-8db7-20a7fb671df1`) 결함 4건, 증거를 출력 callback 밖에서 만들거나 늘리는 길은 없다
+  - 판정이 cpal 의 재생 시각 추정에 기댄다: macOS 는 `callback + 버퍼 길이` 고정(cpal 0.15.3 `host/coreaudio/macos/mod.rs:699-704` 의 TODO), Windows 도 추정, 그래서 Bluetooth(150~300 ms)나 AirPlay(약 2초)에서는 소리가 나기 전에 들은 것으로 판정될 수 있다
+  - slider Seek 의 순서가 보장되지 않고 polling 이 끄는 위치를 덮는다
+  - 장치를 열고 닫는 동안 store lock 을 쥐어 다른 일이 멈추고 `get_playback_status` 가 async worker 를 막는다
+  - `(callback, playback)` 을 시각으로 바꾸는 부분이 자동 시험 밖이다
+- [결정, 메인] 1번은 D7 의 뜻을 좁히지 않고 출력 장치 지연(macOS CoreAudio 의 장치, stream latency 와 safety offset, Windows `GetStreamLatency`)을 읽어 판정 시각에 더한다, 지연을 읽지 못하면 들은 것으로 판정하지 않는다, 바깥 API 라 필요한 unsafe 는 플랫폼 adapter 의 함수 하나에 두고 unsafe 허용 목록에 근거와 함께 더한다(외부 사정)
+- 이 네 건을 새 worker(Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-playback-fix`, handle `term_cf27c207-f261-4d45-aa49-8332ee097a5c`)에게 맡겼다, 두 번째 worker 세션을 `codex resume` 으로 다른 worktree 에서 이어 열었더니 예전 cwd 로 열려 닫고 새로 띄웠다(이어 열기는 원래 worktree 에서만 쓴다)
+
+## 2026-11-27 14:45 PR #21 merge 와 재생 확인 PR 2(PR #23)
+- PR #21 의 `87e602f` CI 에서 실패한 step 은 목록 대조(`Structural policy`, `make check-architecture`, frozen base guards)뿐이고 컴파일, 시험, 다섯 플랫폼 빌드는 통과해 D4 대로 merge 했다(`59c3cc2`), 고치기 worktree 와 로컬, 원격 브랜치를 정리했다
+- 14단계(worker, 14:37 끝남): 빠른 검수의 연속 재생, Space 표시, 좁힌 구간 다시 듣기를 `play_recording` 과 상태 조회로 옮겼다, 늦은 준비 요청이 새 session 을 덮지 않게 준비를 한 줄로 세웠다, UI 의 web-sys feature 에서 `HtmlAudioElement`, `HtmlMediaElement` 를 빼고 다시 넣거나 제품 UI 소스에 audio tag, media 타입, media 이벤트 처리기를 쓰면 `make check-imports` 가 거절한다
+- worker 가 찾은 한계: Leptos 의 tachys 0.2.19 가 두 binding 을 간접으로 켜서, feature 를 빼는 것만으로는 컴파일러가 타입을 막지 못한다(임시 시험에서 `Option<web_sys::HtmlAudioElement>` 가 컴파일됐다), 그래서 검사로 막는다
+- 메인이 `make test` 157개(실패 0, 장치 시험 1개 ignored), `make check-imports` 통과, UI 의 audio 흔적 0곳을 확인하고 `485bd95` 로 draft PR #23 https://github.com/guny524/seamone/pull/23 (PR #22 위)을 열었다, Opus 검토를 맡겼다
+- 14:43 develop 의 최신 커밋 `0409cfe` 에서 ci run 45947110943 이 모두 통과했다(lint-test, macos-native-lint 의 iOS lint 포함, domain, research-test), PR #21 merge 커밋의 ci 는 뒤 기록 커밋 push 로 `cancel-in-progress` 취소됐다, develop 의 iOS lint 실패는 풀렸다
+
+## 2026-11-27 14:48 PR #23 의 Opus 검토
+- Opus 5.5 high(세션 `7a7e4e8c-d4c2-4a6e-b59a-cd1a9f84a3e6`) 결함 5건, 증거를 출력 callback 밖에서 만드는 길은 없다
+  - 회귀: 다음 30초 묶음 준비 중에 누른 Space 가 알림 없이 사라진다(옛 코드는 앞 묶음 끝의 후보를 열었다)
+  - 웹뷰 audio 검사를 `create_element("audio")`, `iframe`, `embed`, `object`, `data:audio` URL, 검사하지 않는 `app/ui/index.html` 로 비켜 간다
+  - 늦은 preview 준비가 다른 화면의 하나뿐인 session 을 덮는 경쟁(가능성 낮음)
+  - 시험이 성질을 확인하지 않음(듣는 코드 없는 `ended` 단언, stale session 의 stop 미확인, JS 가짜 출력의 답 꼴이 진짜와 다름), 죽은 줄
+- 첫 worker 에게 같은 세션으로 다섯 건을 맡겼다(runtime 은 PR #22 쪽 worker 가 고치므로 UI, 검사, 시험만)

@@ -68,3 +68,24 @@ test('a fully output preview remains unable to authorize review',async () => {
   await assert.rejects(invoke('save_review',{proof:preview.session,request:{event_id:'attempt',
     segment_id:'s1',expected_revision:1,action:{kind:'judge',verdict:'yes'}}}));
 });
+
+test('held control replies record session and intent while status queries keep running',async () => {
+  const {state,invoke} = fixture();
+  const {session} = await invoke('play_recording',args);
+  await invoke('get_playback_status',{});
+  state.controlCalls = [];
+  state.holdControl = true;
+  let answered = false;
+  const delayed = invoke('control_playback',{session,action:{kind:'pause'}}).then(reply => {
+    answered = true;
+    return reply;
+  });
+  assert.deepEqual(state.controlCalls,[{session,action:{kind:'pause'}}]);
+  const polls = state.statusPolls;
+  assert.equal((await invoke('get_playback_status',{})).state,'playing');
+  assert.equal(state.statusPolls,polls+1);
+  assert.equal(answered,false);
+  state.releaseControl();
+  assert.equal((await delayed).state,'playing');
+  assert.equal((await invoke('get_playback_status',{})).state,'paused');
+});

@@ -7,6 +7,7 @@ use seamone_core::{
     TimedText,
     error_marks::{ErrorMark, overlaps},
     review::{SampleRange, Segment},
+    sample_count_as_f64,
 };
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{CanvasRenderingContext2d, ImageData};
@@ -262,18 +263,10 @@ fn span_style(viewport: SampleRange, span: SampleRange) -> String {
     format!("left:{left}%;width:{}%", right - left)
 }
 
-struct RecordingOffset(u32);
-
-impl RecordingOffset {
-    fn new(samples: u64) -> Self {
-        Self(u32::try_from(samples).expect("30-minute recording offsets fit in u32"))
-    }
-}
-
 fn percentage(range: SampleRange, sample: u64) -> f64 {
-    let offset = RecordingOffset::new(sample.clamp(range.start, range.end) - range.start);
-    let duration = RecordingOffset::new(range.end - range.start);
-    100.0 * f64::from(offset.0) / f64::from(duration.0)
+    let offset = sample.clamp(range.start, range.end) - range.start;
+    let duration = range.end - range.start;
+    100.0 * sample_count_as_f64(offset) / sample_count_as_f64(duration)
 }
 
 #[cfg(test)]

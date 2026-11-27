@@ -39,6 +39,7 @@ wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28); wav.writeUInt16LE(2,
 wav.write('data', 36); wav.writeUInt32LE(wav.length - 44, 40);
 const browser = await chromium.launch({
   ...(process.env.SEAMONE_CHROME ? { executablePath: process.env.SEAMONE_CHROME } : {}),
+  args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio'],
 });
 let completed = 0;
 async function captureReview(page, state) {
@@ -86,6 +87,46 @@ async function seekAndPause(page, seconds) {
   await expect(page.locator('.timeline-playhead')).toHaveAttribute('data-sample',String(at));
 }
 try {
+  {
+    const {page,errors} = await fixture();
+    await startBinary(page);
+    await page.evaluate(() => { window.__REVIEW_TEST__.autoOutput = false; });
+    await page.getByRole('button',{name:'구간 재생 (Space)',exact:true}).click();
+    const slider = page.getByRole('slider',{name:'현재 조각 재생 위치',exact:true});
+    await expect(slider).toBeVisible();
+    await page.evaluate(() => { window.__REVIEW_TEST__.controlCalls = []; });
+    const pollingBeforeDrag = await readState(page,'statusPolls');
+    await slider.evaluate(node => {
+      node.value = '3200'; node.dispatchEvent(new Event('input',{bubbles:true}));
+    });
+    await expect.poll(() => slider.inputValue()).toBe('3200');
+    await expect.poll(() => page.evaluate(() => window.__REVIEW_TEST__.controlCalls.length)).toBe(0);
+    await expect.poll(() => readState(page,'statusPolls')).toBeGreaterThan(pollingBeforeDrag + 1);
+    await expect(slider).toHaveValue('3200');
+    await slider.evaluate(node => node.dispatchEvent(new Event('change',{bubbles:true})));
+    await expect.poll(async () => (await readState(page,'controlCalls')).map(call => call.action)).toEqual([{kind:'seek',at:3200}]);
+    await expect.poll(() => readState(page,'output')).toMatchObject({position:3200});
+    await slider.evaluate(node => {
+      node.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
+      node.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));
+      window.__REVIEW_TEST__.output.position = 4000;
+    });
+    await expect(slider).toHaveValue('4000');
+    await page.evaluate(() => {
+      window.__REVIEW_TEST__.controlCalls = [];
+      window.__REVIEW_TEST__.holdControl = true;
+    });
+    const toggle = page.locator('.runtime-playback button').first();
+    await toggle.click();
+    await expect.poll(async () => (await readState(page,'controlCalls')).map(call => call.action)).toEqual([{kind:'pause'}]);
+    await toggle.click();
+    await page.getByRole('button',{name:'재생 멈추기',exact:true}).click();
+    expect((await readState(page,'controlCalls')).map(call => call.action)).toEqual([{kind:'pause'}]);
+    await page.evaluate(() => window.__REVIEW_TEST__.releaseControl());
+    await expect.poll(async () => (await readState(page,'controlCalls')).map(call => call.action)).toEqual([{kind:'pause'},{kind:'play'},{kind:'stop'}]);
+    await expect.poll(() => readState(page,'output')).toMatchObject({state:'paused'});
+    await finish(page,errors,'slider commits once and controls remain ordered while an IPC reply is pending');
+  }
   {
     const {page, errors} = await fixture({microphone: true});
     const start = page.getByRole('button', {name:'녹음 시작', exact:true});

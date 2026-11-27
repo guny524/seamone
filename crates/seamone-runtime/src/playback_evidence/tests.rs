@@ -3,6 +3,61 @@ use crate::store_tests::Fixture;
 use seamone_core::review::{Action as ReviewAction, Verdict};
 
 #[test]
+fn device_open_wait_does_not_hold_the_store_lock() {
+    use std::{
+        sync::{Arc, mpsc},
+        thread,
+        time::{Duration, Instant},
+    };
+    for preview in [false, true] {
+        let fixture = Fixture::new();
+        let (store, segment) = fixture.transcribed();
+        let store = Arc::new(Mutex::new(store));
+        let playbacks = Arc::new(Playbacks::fake());
+        let player = playbacks.player.lock().unwrap();
+        let (locked, acquired) = mpsc::channel();
+        let (proceed, ready) = mpsc::channel();
+        let worker_store = Arc::clone(&store);
+        let worker_playbacks = Arc::clone(&playbacks);
+        let worker = thread::spawn(move || {
+            let store = worker_store.lock().unwrap();
+            locked.send(()).unwrap();
+            ready.recv().unwrap();
+            if preview {
+                worker_playbacks
+                    .play_recording(
+                        store,
+                        &segment.recording_id,
+                        segment.recording_revision,
+                        segment.range,
+                    )
+                    .map(|_| ())
+            } else {
+                worker_playbacks
+                    .prepare_review(store, &segment.id, segment.revision)
+                    .map(|_| ())
+            }
+        });
+        acquired.recv().unwrap();
+        assert!(store.try_lock().is_err());
+        proceed.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let released = loop {
+            if store.try_lock().is_ok() {
+                break true;
+            }
+            if Instant::now() >= deadline {
+                break false;
+            }
+            thread::sleep(Duration::from_millis(10));
+        };
+        drop(player);
+        worker.join().unwrap().unwrap();
+        assert!(released, "opening the device held the library store");
+    }
+}
+
+#[test]
 fn platform_factory_starts_without_opening_a_device() {
     let playbacks = Playbacks::new();
     assert_eq!(playbacks.status().unwrap(), Status::default());

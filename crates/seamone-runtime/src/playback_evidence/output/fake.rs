@@ -49,10 +49,15 @@ impl Driver for Clock {
             let time = self.frames * 1_000_000_000 / 48_000 + self.sequence;
             self.renderer.render(
                 &mut output[..count * 2],
-                Timing {
-                    callback: time,
-                    playback: time + 20_000_000,
-                },
+                super::clock::timing(
+                    Some(std::time::Duration::from_nanos(time)),
+                    Some(std::time::Duration::from_nanos(time + 20_000_000)),
+                    Some(std::time::Duration::ZERO),
+                )
+                .unwrap_or(Timing {
+                    callback: 1,
+                    playback: 0,
+                }),
                 |sample| sample,
             );
             self.frames += u64::try_from(count).map_err(|e| e.to_string())?;

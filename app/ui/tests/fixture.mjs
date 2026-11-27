@@ -30,6 +30,8 @@ export const installReviewFixture = ({ wav, infoSeen, invalidFirst, quick, long,
       marks: [], markCalls: [], rangeCalls: [], playCalls: [], controlCalls: [], reviewCalls: 0, reviewPlaybackCalls: 0, endedCalls: 0, holdNextPlayback: false, holdNextStop: false, failNextMark: false, lostMarkReply: false };
     state.output = {session:null, state:'idle', position:0, heard:false, error:null};
     state.autoOutput = true;
+    state.statusPolls = 0;
+    state.holdControl = false;
     state.outputCommands = [];
     state.processOutput = () => {
       for (const action of state.outputCommands.splice(0)) {
@@ -172,6 +174,10 @@ export const installReviewFixture = ({ wav, infoSeen, invalidFirst, quick, long,
       }
       if (command === 'control_playback') {
         state.controlCalls.push(copy(args));
+        if (state.holdControl) {
+          state.holdControl = false;
+          await new Promise(resolve => { state.releaseControl = resolve; });
+        }
         if (args.session !== state.output.session) throw 'stale playback session';
         const proof = proofs.get(args.session), action = args.action;
         if (action.kind === 'stop') {
@@ -192,6 +198,7 @@ export const installReviewFixture = ({ wav, infoSeen, invalidFirst, quick, long,
         return copy(state.output);
       }
       if (command === 'get_playback_status') {
+        state.statusPolls++;
         state.advanceOutput(state.autoOutput ? 640 : 0);
         return copy(state.output);
       }

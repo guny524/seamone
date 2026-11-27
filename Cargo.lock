@@ -4031,6 +4031,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "block2",
+ "coreaudio-rs",
  "cpal",
  "hound",
  "num-traits",
@@ -4046,6 +4047,7 @@ dependencies = [
  "symphonia",
  "tempfile",
  "uuid",
+ "windows 0.54.0",
 ]
 
 [[package]]

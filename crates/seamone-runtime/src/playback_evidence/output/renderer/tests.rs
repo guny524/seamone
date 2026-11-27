@@ -109,6 +109,32 @@ fn submitted_buffers_are_not_heard_until_the_device_clock_reaches_their_end() {
 }
 
 #[test]
+fn device_latency_delays_coverage_and_cursor_until_the_buffer_has_left_the_device() {
+    use std::time::Duration;
+    let mut device = Device::new(vec![0.5; 16_000], 48_000, 1);
+    device.action(Action::Play);
+    let stamp = |callback| {
+        super::super::clock::timing(
+            Some(Duration::from_nanos(callback)),
+            Some(Duration::from_nanos(callback + 20_000_000)),
+            Some(Duration::from_millis(250)),
+        )
+        .unwrap()
+    };
+    device.render(48_000, stamp(0));
+    device.render(512, stamp(1_020_000_000));
+    assert!(!device.heard.complete());
+    assert_eq!(device.sync().position, 0);
+    device.action(Action::Pause);
+    device.render(512, stamp(1_269_999_999));
+    assert!(!device.heard.complete());
+    assert_eq!(device.sync().position, 0);
+    device.render(512, stamp(1_270_000_000));
+    assert!(device.heard.complete());
+    assert_eq!(device.sync().position, 16_000);
+}
+
+#[test]
 fn pausing_retains_only_played_audio_and_resuming_can_complete_it() {
     let mut device = Device::new(vec![0.5; 16_000], 48_000, 1);
     device.action(Action::Play);
@@ -165,6 +191,22 @@ fn seeking_forward_leaves_a_gap_that_a_later_run_can_fill() {
     device.tick(12_000);
     device.tick(512);
     assert!(device.heard.complete());
+}
+
+#[test]
+fn missing_device_latency_invalidates_the_output_session() {
+    use std::time::Duration;
+    let mut device = Device::new(vec![0.5; 16_000], 48_000, 1);
+    device.action(Action::Play);
+    let timing = super::super::clock::timing(Some(Duration::ZERO), Some(Duration::ZERO), None)
+        .unwrap_or(Timing {
+            callback: 1,
+            playback: 0,
+        });
+    device.render(48_000, timing);
+    assert_eq!(device.sync().state, State::Failed);
+    assert!(!device.heard.complete());
+    assert_eq!(device.sync().position, 0);
 }
 
 #[test]

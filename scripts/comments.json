@@ -3,91 +3,118 @@
   "comments": [
     {
       "path": "app/src-tauri/src/lib.rs",
-      "sha256": "54df38b898fd1ed1a2e24ee5a28e11a4b960940904d7f891b64aa52405ff7e00"
+      "sha256": "54df38b898fd1ed1a2e24ee5a28e11a4b960940904d7f891b64aa52405ff7e00",
+      "text": "// 창이 열린 주소를 그대로 쓴다, 플랫폼마다 앱의 로컬 주소가 달라 고정한 주소는 원격으로 취급돼 거절된다"
     },
     {
       "path": "crates/seamone-asr/src/whisper.rs",
-      "sha256": "90db07c923721a22353c0317736ee38f28153b08674f81f44e759b55d25f783b"
+      "sha256": "90db07c923721a22353c0317736ee38f28153b08674f81f44e759b55d25f783b",
+      "text": "// whisper.cpp stores DTW anchors in 10 ms ticks on the original audio axis."
     },
     {
       "path": "crates/seamone-runtime/src/audio_ingest.rs",
-      "sha256": "7e37b33b64f57614461b4c039199081b4655b1dbd98015d360bb955b78a835c6"
+      "sha256": "a7c4838705b38cfc449f5aef70fa0fa5e7057fb5f3fd5f58e59af9fa65c72b84",
+      "text": "// Untagged MP3 duration is estimated."
     },
     {
       "path": "crates/seamone-runtime/src/audio_ingest.rs",
-      "sha256": "4695e9697e9ce96f8b5a1e63cd6a007e46a4ab7c7a8506513464946d569a6d49"
+      "sha256": "5bdae76addbee81ad44fba6781f9a35805efcc8541f403af71184b100dbca048",
+      "text": "// The demuxer reports the same EOF when scanning for a header and when reading"
     },
     {
       "path": "crates/seamone-runtime/src/audio_ingest.rs",
-      "sha256": "5bdae76addbee81ad44fba6781f9a35805efcc8541f403af71184b100dbca048"
+      "sha256": "908f3a34a7b7d1c49062da9dab89a0813bac80fe23e94ee777d2e5b9ed3e98a9",
+      "text": "// a partial frame. Only diagnose truncation if a matching next header at the"
     },
     {
       "path": "crates/seamone-runtime/src/audio_ingest.rs",
-      "sha256": "908f3a34a7b7d1c49062da9dab89a0813bac80fe23e94ee777d2e5b9ed3e98a9"
-    },
-    {
-      "path": "crates/seamone-runtime/src/audio_ingest.rs",
-      "sha256": "dd860705e200ec9ebdaae6ede84ade98be97245dfd61b06188070435904a6794"
+      "sha256": "dd860705e200ec9ebdaae6ede84ade98be97245dfd61b06188070435904a6794",
+      "text": "// end of the last known-good frame declares more bytes than are present."
     },
     {
       "path": "crates/seamone-runtime/src/capture.rs",
-      "sha256": "61a247ded9f5a04f773fe9a084b78d656503f51daab019bb2ba5bd3885d04c9a"
+      "sha256": "61a247ded9f5a04f773fe9a084b78d656503f51daab019bb2ba5bd3885d04c9a",
+      "text": "// The same input thread pauses and drops the non-Send, non-Sync CPAL stream."
     },
     {
       "path": "crates/seamone-runtime/src/capture.rs",
-      "sha256": "374a767cdfbf7aa4a2eab12cd104627c12a01e15b6eb5457a3e859fd17fc2522"
+      "sha256": "374a767cdfbf7aa4a2eab12cd104627c12a01e15b6eb5457a3e859fd17fc2522",
+      "text": "// SAFETY: AVFoundation provides this immutable framework constant on the checked macOS version."
     },
     {
       "path": "crates/seamone-runtime/src/capture.rs",
-      "sha256": "8ab8e2063e8008607462d455c30e9038092e0797c511d27e70e2f4b6999d703c"
+      "sha256": "8ab8e2063e8008607462d455c30e9038092e0797c511d27e70e2f4b6999d703c",
+      "text": "// SAFETY: media is the non-null AVFoundation audio media type."
     },
     {
       "path": "crates/seamone-runtime/src/capture.rs",
-      "sha256": "e86917fccd288019ad04378d8e00acf908e9f5b492f694efacbff250654ed113"
+      "sha256": "e86917fccd288019ad04378d8e00acf908e9f5b492f694efacbff250654ed113",
+      "text": "// SAFETY: AVFoundation copies the heap block for its asynchronous callback; the block owns its sender."
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/macos.rs",
+      "sha256": "b05806acf8a287d98ef992dc0539d9d00ce007b2047dc84ba8c150f306fa0de0",
+      "text": "// SAFETY: CoreAudio receives live property addresses, aligned initialized buffers and their exact byte lengths; returned sizes are checked before reading values."
+    },
+    {
+      "path": "crates/seamone-runtime/src/playback_evidence/output/native/windows.rs",
+      "sha256": "9bfef1034bcd1a4e99fadda3f6d28af7aeb30a6635bd94d83dc634bcb2d258c4",
+      "text": "// SAFETY: CPAL initializes COM on this thread; COM interfaces remain owned here, the mix-format allocation is freed after Initialize, and property values own their returned strings."
     },
     {
       "path": "research/seamone_research/data.py",
-      "sha256": "b3277b24692ab82bbb846cbeb4555315fbdf19d267affff5cfa3dcad6d1558b7"
+      "sha256": "b3277b24692ab82bbb846cbeb4555315fbdf19d267affff5cfa3dcad6d1558b7",
+      "text": "# 머리글 없는 7열: id(문장), file_name, raw_transcription, transcription,"
     },
     {
       "path": "research/seamone_research/data.py",
-      "sha256": "82a9a9848a1b3c1c31552e7aaed072348985de912915a8eb2dc9e06be7ea151c"
+      "sha256": "82a9a9848a1b3c1c31552e7aaed072348985de912915a8eb2dc9e06be7ea151c",
+      "text": "# 글자 나눔, num_samples, gender"
     },
     {
       "path": "research/seamone_research/memory.py",
-      "sha256": "2964130d6e3d0975fcfb9988e2e0d24467cb0aee80c18e36053cbf80bbb1db05"
+      "sha256": "2964130d6e3d0975fcfb9988e2e0d24467cb0aee80c18e36053cbf80bbb1db05",
+      "text": "# macOS 의 ru_maxrss 는 byte 단위다"
     },
     {
       "path": "research/seamone_research/models.py",
-      "sha256": "544de542f7eed32377138213ab47a87ba104d200d2b0bab5d20a2b97f7a7fa18"
+      "sha256": "544de542f7eed32377138213ab47a87ba104d200d2b0bab5d20a2b97f7a7fa18",
+      "text": "# CPU 에서 학습 시험을 할 때의 dtype(float16 은 CPU 의 역전파에 맞지 않는다)"
     },
     {
       "path": "research/seamone_research/transcribe.py",
-      "sha256": "db68853016b1ee67eeb7ad231147108107dcd3f1f5a359f0157ac953a840fd0d"
+      "sha256": "fb4bb9f73ae13a16f4e8b86b600c9171c1b2d3eb414614ede6b3f558d4b907b6",
+      "text": "# Whisper 의 디코더 길이 한도는 448 이다"
     },
     {
       "path": "scripts/check_crate_boundaries.py",
-      "sha256": "89c4fcbd8cc1654632927f8d4ff67574505264bd6e1bb090dbc9eb649ae03eb5"
+      "sha256": "89c4fcbd8cc1654632927f8d4ff67574505264bd6e1bb090dbc9eb649ae03eb5",
+      "text": "# Cargo reports the package name separately from its import alias."
     },
     {
       "path": "scripts/check_review_writes.py",
-      "sha256": "50ca1812004f6212c21e93b051e3ed9a446a713b9f1a1786ddc777df720e127e"
+      "sha256": "50ca1812004f6212c21e93b051e3ed9a446a713b9f1a1786ddc777df720e127e",
+      "text": "# These optional/newer functions need names and arities for schema preparation and EXPLAIN,"
     },
     {
       "path": "scripts/check_review_writes.py",
-      "sha256": "59faa7526d35efb80b91863945e1367a7772d2b20640669cfbdccb809c814f27"
+      "sha256": "59faa7526d35efb80b91863945e1367a7772d2b20640669cfbdccb809c814f27",
+      "text": "# not their runtime results. Override built-ins too so inspection uses the same definitions."
     },
     {
       "path": "scripts/check_review_writes.py",
-      "sha256": "30d306bcec132842f9230a4b665b277679adf4661cdcfc87909b398fbf57b0f6"
+      "sha256": "30d306bcec132842f9230a4b665b277679adf4661cdcfc87909b398fbf57b0f6",
+      "text": "# Authorization runs during preparation, before parameter binding."
     },
     {
       "path": "scripts/check_review_writes.py",
-      "sha256": "816cdb59115f411456624bc944075c8530c65e4894b4c7cb8019c28c1b16033c"
+      "sha256": "816cdb59115f411456624bc944075c8530c65e4894b4c7cb8019c28c1b16033c",
+      "text": "# EXPLAIN never creates fixture triggers, so their later teardown has no live target."
     },
     {
       "path": "scripts/check_runtime_api.py",
-      "sha256": "245d03964d4cce2d56b2a59ceceac557d1033d6ba16a46dc8d08d7b50fb8556b"
+      "sha256": "245d03964d4cce2d56b2a59ceceac557d1033d6ba16a46dc8d08d7b50fb8556b",
+      "text": "# Variants and trait members are public without a `pub` token."
     }
   ]
 }

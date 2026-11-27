@@ -18,7 +18,6 @@ def test_ratio_estimate_of_one_utterance_has_no_standard_error():
 
 
 def test_pooled_rate_matches_the_hand_calculation():
-
     rate, stderr = pooled_rate([counts(0, 4), counts(2, 4)])
 
     assert rate == pytest.approx(0.25)
@@ -32,7 +31,6 @@ def test_paired_difference_is_negative_when_model_a_has_fewer_errors():
 
 
 def test_paired_difference_standard_error_matches_the_hand_calculation():
-
     delta, stderr = paired_difference([counts(0, 4), counts(2, 4)], [counts(1, 4), counts(1, 4)])
 
     assert delta == pytest.approx(0.0)

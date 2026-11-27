@@ -3,7 +3,6 @@ use crate::{
     normalize::{EMPTY_ERROR, LENGTH_ERROR, Normalizer, channel_average, check_input, finite},
 };
 use hound::{SampleFormat, WavReader};
-use num_traits::ToPrimitive;
 use seamone_core::capture::MAX_RECORDING_SECONDS;
 use std::{
     fs::File,
@@ -60,7 +59,7 @@ fn decode_wav(input: File, output: &mut AudioWriter) -> Result<(), String> {
     let mut wav = WavReader::new(BufReader::new(input)).map_err(wav_error)?;
     let spec = wav.spec();
     let channels = usize::from(spec.channels);
-    check_input(spec.sample_rate, channels)?;
+    let rate = check_input(spec.sample_rate, channels)?;
     if u64::from(wav.duration()) > u64::from(spec.sample_rate) * u64::from(MAX_RECORDING_SECONDS) {
         return Err(LENGTH_ERROR.into());
     }
@@ -71,12 +70,12 @@ fn decode_wav(input: File, output: &mut AudioWriter) -> Result<(), String> {
         return Ok(());
     }
 
-    let mut converter = Normalizer::new(spec.sample_rate, channels)?;
+    let mut converter = Normalizer::new(rate);
     let mut write = |sample| output.write(sample);
     let mut sum = 0.0;
     let mut channel = 0;
     let mut push = |sample| {
-        sum += f64::from(finite(sample));
+        sum += finite(sample);
         channel += 1;
         if channel == spec.channels {
             converter.push(channel_average(sum, spec.channels), &mut write)?;
@@ -87,20 +86,14 @@ fn decode_wav(input: File, output: &mut AudioWriter) -> Result<(), String> {
     };
     match spec.sample_format {
         SampleFormat::Int => {
-            let scale = 2_f32.powi(i32::from(spec.bits_per_sample) - 1);
+            let scale = 2_f64.powi(i32::from(spec.bits_per_sample) - 1);
             for sample in wav.samples::<i32>() {
-                push(
-                    sample
-                        .map_err(wav_error)?
-                        .to_f32()
-                        .expect("PCM32 converts to f32")
-                        / scale,
-                )?;
+                push(f64::from(sample.map_err(wav_error)?) / scale)?;
             }
         }
         SampleFormat::Float => {
             for sample in wav.samples::<f32>() {
-                push(sample.map_err(wav_error)?)?;
+                push(f64::from(sample.map_err(wav_error)?))?;
             }
         }
     }
@@ -123,15 +116,13 @@ fn decode_compressed(input: File, output: &mut AudioWriter) -> Result<(), String
         .ok_or("파일에 지원하는 오디오 트랙이 없습니다. MP3 또는 AAC-LC 오디오를 사용하세요.")?;
     let track_id = track.id;
     let params = &track.codec_params;
-    let expected_ticks = params.n_frames.filter(|&count| {
-        count > 0
-            && (params.codec == CODEC_TYPE_AAC
-                || params.delay.is_some()
-                || params.padding.is_some())
-    });
+    let has_reliable_duration =
+        params.codec == CODEC_TYPE_AAC || params.delay.is_some() || params.padding.is_some();
+    let expected_ticks = params
+        .n_frames
+        .filter(|&count| count > 0 && has_reliable_duration);
     let start = params.start_ts;
-    // Untagged MP3 duration is estimated. Trim only when the encoder provided
-    // both a reliable length and padding information.
+    // Untagged MP3 duration is estimated.
     let mp3_trim = (params.codec == CODEC_TYPE_MP3)
         .then_some(expected_ticks)
         .flatten()
@@ -168,13 +159,13 @@ fn decode_compressed(input: File, output: &mut AudioWriter) -> Result<(), String
         let spec = *audio.spec();
         let channels = spec.channels.count();
         if pipeline.is_none() {
-            pipeline = Some((spec, Normalizer::new(spec.rate, channels)?));
+            pipeline = Some((spec, Normalizer::new(check_input(spec.rate, channels)?)));
         }
         let (input_spec, converter) = pipeline.as_mut().unwrap();
         if spec != *input_spec {
             return Err("파일 중간에 오디오 채널이나 샘플링 주파수가 바뀝니다.".into());
         }
-        let mut interleaved = SampleBuffer::<f32>::new(audio.capacity() as u64, spec);
+        let mut interleaved = SampleBuffer::<f64>::new(audio.capacity() as u64, spec);
         interleaved.copy_interleaved_ref(audio);
         let channel_count = u16::try_from(channels).unwrap();
         let samples = interleaved.samples();
@@ -188,7 +179,7 @@ fn decode_compressed(input: File, output: &mut AudioWriter) -> Result<(), String
         let last = usize::try_from(last).unwrap() * channels;
         let first = (usize::try_from(first).unwrap() * channels).min(last);
         for frame in samples[first..last].chunks_exact(channels) {
-            let sum = frame.iter().copied().map(finite).map(f64::from).sum();
+            let sum = frame.iter().copied().map(finite).sum();
             let mono = channel_average(sum, channel_count);
             converter.push(mono, |sample| output.write(sample))?;
         }

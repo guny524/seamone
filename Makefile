@@ -18,7 +18,7 @@ TAURI_BUILD_ARGS ?=
 # 앱 껍데기 crate 는 컴파일할 때 화면 산출물 폴더가 있어야 한다, lint 와 test 는 화면을 빌드하지 않으므로 빈 폴더만 만든다.
 UI_DIST = app/ui/dist
 
-.PHONY: check-comments check-lint-policy lint-native-code lint-ios-code lint-code lint-runtime-minimal
+.PHONY: check-comments check-lint-policy lint-native-code lint-ios-code lint-code lint-runtime-minimal lint-workspace-code lint-wasm-code lint-format
 
 .PHONY: install install-ci-tools fmt lint lint-native lint-ios check-imports check-runtime-api check-unsafe check-review-writes check-research-deletions check-architecture check-domain check-lint-exceptions test build dev clean
 
@@ -99,19 +99,29 @@ lint-runtime-minimal:
 	cargo clippy --locked -p seamone-runtime --lib --no-default-features -- -D warnings
 
 lint-code:
-	$(MAKE) lint-runtime-minimal
-	mkdir -p $(UI_DIST)
+	$(MAKE) -k lint-runtime-minimal lint-format lint-workspace-code lint-wasm-code
+
+lint-format:
 	cargo fmt --all --check
 	node --check app/ui/tests/review.mjs
 	node --check app/ui/tests/fixture.mjs
 	node --check app/ui/tests/fixture.test.mjs
+
+lint-workspace-code:
+	mkdir -p $(UI_DIST)
 	cargo clippy --workspace --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings
+
+lint-wasm-code:
 	cargo clippy -p seamone-core -p seamone-ui --target wasm32-unknown-unknown -- -D warnings
 
 test:
 	mkdir -p $(UI_DIST)
 	cargo test --workspace $(WORKSPACE_FEATURE_ARGS) $(TEST_PATTERN)
 	$(MAKE) test-ui-fixture
+
+.PHONY: test-runtime-doc
+test-runtime-doc:
+	cargo test --locked -p seamone-runtime --doc
 
 .PHONY: check-macos-dmg
 check-macos-dmg:

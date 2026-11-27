@@ -1,7 +1,7 @@
 //! The input thread owns the stream from open through release. IPC only handles session state.
 use crate::{
     audio::{AudioLibrary, AudioWriter, StagedAudio},
-    normalize::{Normalizer, channel_average, check_input, finite},
+    normalize::{InputRate, Normalizer, channel_average, check_input, finite},
     training::ForegroundGuard,
 };
 use cpal::{
@@ -159,8 +159,7 @@ impl Recorder {
                 Ok(Some(Input {
                     stream: (),
                     consumer,
-                    rate: 48_000,
-                    channels: 2,
+                    rate: check_input(48_000, 2)?,
                 }))
             });
         }
@@ -330,9 +329,8 @@ impl Drop for Recorder {
 
 struct Input<S> {
     stream: S,
-    consumer: Consumer<f32>,
-    rate: u32,
-    channels: u16,
+    consumer: Consumer<f64>,
+    rate: InputRate,
 }
 
 fn record<S>(
@@ -349,17 +347,16 @@ fn record<S>(
         stream,
         mut consumer,
         rate,
-        channels,
     }) = open(Arc::clone(control))?
     else {
         return Ok(None);
     };
-    let mut converter = Normalizer::new(rate, usize::from(channels))?;
+    let mut converter = Normalizer::new(rate);
     let mut write = |sample| output.write(sample);
     let started = Instant::now();
     let mut last_input = started;
     let mut frames = 0;
-    let limit = u64::from(rate) * u64::from(max_seconds);
+    let limit = u64::from(rate.hz()) * u64::from(max_seconds);
     let mut interruption = None;
     while control.request.load(Ordering::Acquire) == RUNNING
         && frames < limit
@@ -370,7 +367,6 @@ fn record<S>(
             break;
         }
         let mut count = 0;
-
         for _ in 0..(limit - frames).min(u64::from(FRAMES_BEFORE_CONTROL_CHECK)) {
             let Ok(sample) = consumer.pop() else { break };
             converter.push(sample, &mut write)?;
@@ -386,7 +382,7 @@ fn record<S>(
             }
             frames += count;
             control.seconds.store(
-                u32::try_from(frames / u64::from(rate)).unwrap_or(MAX_RECORDING_SECONDS),
+                u32::try_from(frames / u64::from(rate.hz())).unwrap_or(MAX_RECORDING_SECONDS),
                 Ordering::Relaxed,
             );
             last_input = Instant::now();
@@ -402,7 +398,6 @@ fn record<S>(
         return Ok(None);
     }
     interruption = interruption.or_else(|| control.input_fault());
-
     while frames < limit && !control.discarded() {
         let Ok(sample) = consumer.pop() else { break };
         converter.push(sample, &mut write)?;
@@ -425,7 +420,7 @@ fn record<S>(
         let status = match interruption.or((request == PAUSE_TO_CLOSE).then_some(CLOSE_PAUSED)) {
             Some(reason) => Status::Interrupted {
                 session_id,
-                elapsed_seconds: u32::try_from(frames / u64::from(rate))
+                elapsed_seconds: u32::try_from(frames / u64::from(rate.hz()))
                     .unwrap_or(MAX_RECORDING_SECONDS),
                 reason: reason.into(),
             },
@@ -458,9 +453,7 @@ fn open_native_input(control: Arc<Control>) -> Result<Option<Input<NativeStream>
         format!("기본 마이크 설정을 읽지 못했습니다. 입력 장치와 권한을 확인하세요. {e}")
     })?;
     let config = supported.config();
-    let rate = config.sample_rate.0;
-    let channels = config.channels;
-    check_input(rate, usize::from(channels))?;
+    let rate = check_input(config.sample_rate.0, usize::from(config.channels))?;
     let (producer, consumer) = RingBuffer::new(QUEUE_FRAMES);
     macro_rules! build {
         ($sample:ty) => {
@@ -491,18 +484,17 @@ fn open_native_input(control: Arc<Control>) -> Result<Option<Input<NativeStream>
         stream,
         consumer,
         rate,
-        channels,
     }))
 }
 
 fn input_stream<T: Sample + SizedSample>(
     device: &Device,
     config: &StreamConfig,
-    mut producer: Producer<f32>,
+    mut producer: Producer<f64>,
     control: Arc<Control>,
 ) -> Result<Stream, cpal::BuildStreamError>
 where
-    f32: FromSample<T>,
+    f64: FromSample<T>,
 {
     let channels = usize::from(config.channels);
     let channel_count = config.channels;
@@ -521,7 +513,7 @@ where
                 }
                 let sum = frame
                     .iter()
-                    .map(|&sample| f64::from(finite(sample.to_sample::<f32>())))
+                    .map(|&sample| finite(sample.to_sample::<f64>()))
                     .sum();
                 let mono = channel_average(sum, channel_count);
                 if producer.push(mono).is_err() {

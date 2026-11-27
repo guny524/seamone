@@ -144,7 +144,6 @@ def violations(packages):
                 continue
             owner = ADAPTER_OWNERS.get(target)
             if name == "seamone-ui" and target == "hound":
-
                 continue
             if target.startswith("objc2-"):
                 owner = "seamone-runtime"

@@ -59,12 +59,10 @@ def test_hangul_and_english_mixed_text_counts_each_character():
 
 
 def test_digits_are_not_converted_to_words():
-
     assert count_errors("오", "5").cer == 1.0
 
 
 def test_symbols_other_than_punctuation_are_kept():
-
     counts = count_errors("$5", "5")
 
     expected_reference_chars = 2
@@ -107,8 +105,7 @@ def test_normalize_removes_punctuation_and_whitespace_and_lowercases(raw, expect
 
 
 def test_normalize_composes_decomposed_hangul():
-    decomposed = "한"
-
+    decomposed = "\u1112\u1161\u11ab"
     assert normalize(decomposed) == "한"
 
 
@@ -126,7 +123,6 @@ def test_standard_error_grows_when_errors_pile_up_in_one_utterance():
 
 
 def test_standard_error_of_two_utterances_matches_the_hand_calculation():
-
     pairs = [("가나다라", "가나다라"), ("마바사아", "마바")]
 
     assert corpus_standard_error(pairs) == pytest.approx(0.25)

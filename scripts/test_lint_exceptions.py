@@ -8,7 +8,7 @@ from pathlib import Path
 
 from check_lint_exceptions import (
     additions, check, clippy_commands, configuration, configuration_exceptions,
-    python_exceptions, rust_exceptions,
+    python_exceptions, ruff_commands, rust_exceptions,
 )
 
 
@@ -60,10 +60,14 @@ class BaselineProtection(unittest.TestCase):
         self.make = 'lint:\n\tcargo clippy --workspace -- -D warnings\n'
         for name, content in [('Cargo.toml', self.cargo), ('pyproject.toml', self.ruff), ('Makefile', self.make)]:
             (self.root / name).write_text(content)
+        (self.root / "research").mkdir()
+        self.research_make = "lint:\n\tuv run ruff check .\n\tuv run ruff format --check .\n"
+        (self.root / "research/Makefile").write_text(self.research_make)
         self.data = {'existing': [], 'configuration': {
             'Cargo.toml': configuration(Path('Cargo.toml'), self.cargo),
             'pyproject.toml': configuration(Path('pyproject.toml'), self.ruff),
-        }, 'clippy_commands': clippy_commands(self.make)}
+        }, 'clippy_commands': clippy_commands(self.make),
+            'ruff_commands': {'research/Makefile': ruff_commands(self.research_make)}}
         self.save()
         self.git('init', '-q')
         self.git('add', '.')
@@ -165,6 +169,50 @@ class BaselineProtection(unittest.TestCase):
         self.data['configuration']['pyproject.toml'] = configuration(Path('pyproject.toml'), changed)
         self.save()
         self.assertIn('lint tables changed', self.errors())
+
+    def test_ruff_file_exclusions_cannot_bypass_lint(self):
+        for key in ('exclude', 'extend-exclude'):
+            with self.subTest(key=key):
+                (self.root / 'pyproject.toml').write_text(
+                    f'[tool.ruff]\n{key}=["tests/**"]\n' + self.ruff)
+                self.assertIn('lint tables changed', self.errors())
+
+    def test_all_top_level_ruff_options_are_frozen(self):
+        for option in (
+            'include=["seamone_research/**/*.py"]', 'extend="lintcfg.toml"',
+            'line-length=1000', 'ignore=["F401"]', 'extend-ignore=["E501"]',
+            'target-version="py313"',
+        ):
+            with self.subTest(option=option):
+                (self.root / 'pyproject.toml').write_text('[tool.ruff]\n' + option + '\n' + self.ruff)
+                (self.root / 'lintcfg.toml').write_text('[lint]\nper-file-ignores={"tests/**"=["F401"]}\n')
+                self.assertIn('lint tables changed', self.errors())
+
+    def test_ruff_extend_cannot_be_approved_by_a_snapshot(self):
+        source = '[tool.ruff]\nextend="lintcfg.toml"\n' + self.ruff
+        (self.root / 'pyproject.toml').write_text(source)
+        self.data['configuration']['pyproject.toml'] = configuration(Path('pyproject.toml'), source)
+        self.save()
+        self.git('add', '.')
+        self.git('-c', 'user.name=Architecture Test', '-c', 'user.email=test@invalid',
+                 '-c', 'commit.gpgsign=false', 'commit', '-qm', 'snapshot with extend')
+        self.assertIn('Ruff extend is forbidden', self.errors())
+
+    def test_ruff_recipes_preserve_scope_and_format_checks(self):
+        for changed in (
+            self.research_make.replace('ruff check .', 'ruff check seamone_research'),
+            self.research_make.replace('format --check .', 'format .'),
+            self.research_make.replace('ruff check .', 'ruff check . --exclude tests'),
+            '',
+        ):
+            with self.subTest(changed=changed):
+                self.data['ruff_commands']['research/Makefile'] = ruff_commands(self.research_make)
+                self.save()
+                (self.root / 'research/Makefile').write_text(changed)
+                self.assertIn('research/Makefile: ruff recipes differ', self.errors())
+                self.data['ruff_commands']['research/Makefile'] = ruff_commands(changed)
+                self.save()
+                self.assertIn('research/Makefile: ruff recipes differ', self.errors())
 
     def test_alternate_configuration_files_are_forbidden(self):
         for name in ('clippy.toml', '.clippy.toml', 'ruff.toml', '.ruff.toml'):
