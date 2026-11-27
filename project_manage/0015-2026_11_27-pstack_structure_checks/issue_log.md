@@ -250,3 +250,11 @@
 - worker 가 찾은 한계: Leptos 의 tachys 0.2.19 가 두 binding 을 간접으로 켜서, feature 를 빼는 것만으로는 컴파일러가 타입을 막지 못한다(임시 시험에서 `Option<web_sys::HtmlAudioElement>` 가 컴파일됐다), 그래서 검사로 막는다
 - 메인이 `make test` 157개(실패 0, 장치 시험 1개 ignored), `make check-imports` 통과, UI 의 audio 흔적 0곳을 확인하고 `485bd95` 로 draft PR #23 https://github.com/guny524/seamone/pull/23 (PR #22 위)을 열었다, Opus 검토를 맡겼다
 - 14:43 develop 의 최신 커밋 `0409cfe` 에서 ci run 45947110943 이 모두 통과했다(lint-test, macos-native-lint 의 iOS lint 포함, domain, research-test), PR #21 merge 커밋의 ci 는 뒤 기록 커밋 push 로 `cancel-in-progress` 취소됐다, develop 의 iOS lint 실패는 풀렸다
+
+## 2026-11-27 14:48 PR #23 의 Opus 검토
+- Opus 5.5 high(세션 `7a7e4e8c-d4c2-4a6e-b59a-cd1a9f84a3e6`) 결함 5건, 증거를 출력 callback 밖에서 만드는 길은 없다
+  - 회귀: 다음 30초 묶음 준비 중에 누른 Space 가 알림 없이 사라진다(옛 코드는 앞 묶음 끝의 후보를 열었다)
+  - 웹뷰 audio 검사를 `create_element("audio")`, `iframe`, `embed`, `object`, `data:audio` URL, 검사하지 않는 `app/ui/index.html` 로 비켜 간다
+  - 늦은 preview 준비가 다른 화면의 하나뿐인 session 을 덮는 경쟁(가능성 낮음)
+  - 시험이 성질을 확인하지 않음(듣는 코드 없는 `ended` 단언, stale session 의 stop 미확인, JS 가짜 출력의 답 꼴이 진짜와 다름), 죽은 줄
+- 첫 worker 에게 같은 세션으로 다섯 건을 맡겼다(runtime 은 PR #22 쪽 worker 가 고치므로 UI, 검사, 시험만)
