@@ -84,7 +84,12 @@ class QwenAsrTranscriber:
 
 def build_transcriber(spec: ModelSpec, device: str, dtype: str) -> Transcriber:
     torch_dtype = getattr(torch, dtype)
-    model_path = resolve_model_path(spec)
-    if spec.family == "whisper":
-        return WhisperTranscriber(model_path, device, torch_dtype)
-    return QwenAsrTranscriber(model_path, device, torch_dtype, spec.batch_size)
+    match spec.family:
+        case "whisper":
+            return WhisperTranscriber(resolve_model_path(spec), device, torch_dtype)
+        case "qwen3-asr":
+            return QwenAsrTranscriber(
+                resolve_model_path(spec), device, torch_dtype, spec.batch_size
+            )
+        case _:
+            raise ValueError(f"{spec.key}: 지원하지 않는 ASR 계열 {spec.family!r}")
