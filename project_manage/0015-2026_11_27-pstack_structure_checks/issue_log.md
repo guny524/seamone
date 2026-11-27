@@ -217,3 +217,9 @@
 ## 2026-11-27 14:15 PR #21 의 검토 지적 고침
 - 두 번째 worker(14:10 끝남): decode 부터 정규화까지 f64 로 계산하고 `Pcm16` 으로 한 번 양자화했다, 결정적 PCM32 stereo 입력 다섯 rate 의 247,691 샘플 가운데 97개가 1 LSB 달랐고 최대 차이 1 LSB, 기존 2,048 프레임 시험 파형은 차이 0개, `as f32` 와 `to_f32` 는 0곳, `check_input` 이 `InputRate` 를 돌려주고 안쪽은 그 타입만 받는다, lint-code 를 minimal, format, native, WASM target 으로 나누고 CI 에 WASM 과 macOS minimal step 을 따로 두었다, docstring 이 아닌 Python 문자열 문장도 주석으로 센다, `comments.json` 에 원문을 넣고 hash 와 대조한다, Ruff `exclude` 와 `extend-exclude` 대조, decoder 한도 셈과 MP3 trim 정책을 이름으로 옮겼다, NFD literal escape, runtime 단독 doctest target, 지운 주석의 빈 줄 흔적 정리
 - 메인이 `make test` 142개(실패 0)와 `make test-architecture` 통과, 남은 f32 축소 0곳을 확인하고 `16527b8` 로 PR #21 에 push 했다, 두 번째 worker 탭을 닫았다(worktree 는 PR #21 merge 뒤 정리), Opus 재검토와 PR CI 를 기다린다
+
+## 2026-11-27 14:22 PR #21 재검토와 남은 다섯 건
+- Opus 5.5 high 재검토(세션 `3ef44bfb-dca2-4da1-9c19-fd066de74dcf`): 앞 11건 가운데 8건 고쳐짐, 3건 일부, f64 계산으로 현실적 입력에서 1 LSB 넘게 바뀌는 곳은 없다
+- 남은 다섯 건: Ruff 위층의 `include`, `extend`, `line-length` 와 `research/Makefile` 의 Ruff 실행 명령을 대조하지 않음, f-string 과 bytes 문장이 주석 검사를 피함, `test-runtime-doc` target 이 어디서도 돌지 않음, CI 구성 시험이 서식 step 을 요구하지 않음, u64 를 f64 로 바꾸는 손 변환이 두 crate 에 복제됨
+- 확인: 1 LSB 상한은 입력 크기가 수백 아래일 때 성립한다(정상 범위 ±1, 넘쳐도 ±8 정도), ±1000 의 고주파 성분이 든 float WAV 는 몇 LSB 달라질 수 있다, 새 계산이 더 정확해 코드는 그대로 두고 결정 기록에 조건을 붙인다, "247,691 샘플 가운데 97개" 는 worker 의 일회성 측정이라 레포 시험으로 다시 만들 수 없다
+- 두 번째 worker 세션(`01a21b55-6ab5-7ef0-8282-5dd07426d266`, cache 살아 있음)을 이어 열어 다섯 건을 맡겼다
