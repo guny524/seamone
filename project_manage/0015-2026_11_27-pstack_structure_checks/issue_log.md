@@ -267,3 +267,9 @@
 ## 2026-11-27 15:05 PR #23 고침
 - 첫 worker(15:02 끝남): 다음 묶음 준비 중의 Space 는 마지막 확인 위치로 후보를 연다, audio, video literal 과 `data:audio`, `data:video` URL, `iframe`, `embed`, `object` tag 와 `app/ui/index.html` 을 검사한다, 빠른 검수의 준비와 stale stop 이 끝날 때까지 교정과 판정의 새 재생을 막는다, JS 가짜 출력을 `app/ui/tests/fixture.mjs` 로 옮겨 command 를 다음 조회에서 처리하고 진짜 꼴의 답을 준다(Node 시험 4개), 죽은 줄 제거, 다섯 건 모두 결함을 넣어 실패하고 되돌려 통과했다
 - 메인이 `make test` 160개(실패 0)와 `make test-architecture` 통과를 확인하고 `4882111` 로 PR #23 에 push 했다, PR #22 의 새 고침과 develop 을 이 브랜치에 merge 하는 일(화면 코드가 겹침)을 같은 worker 에게 맡겼다
+
+## 2026-11-27 15:10 PR #22 고침의 Opus 재검토
+- Opus 5.5 high(세션 `a5e1498e-217a-405f-ade0-47c9f183d554`): 지연 반영과 조작 순서는 고쳐짐, macOS 는 cpal 의 버퍼 하나 앞섬과 더한 지연이 거의 상쇄돼 너무 이르거나 늦지 않고 Windows 는 period 하나쯤 늦어 안전한 쪽, 대기 버퍼 상한으로 약 20초 지연까지 버틴다, macOS 와 Windows FFI 의 property 주소, scope, 정렬, 단위, COM 수명, 누수는 결함 없음
+- 남은 결함 셋: 검수 저장이 store lock 을 쥔 채 장치를 다시 여는 player lock 을 기다린다, macOS 에서 이름이 같은 입력 전용 장치가 있으면 매번 거절(추측), 지연을 읽지 못하는 실제 경로(장치 열기 실패)를 시험이 덮지 않는다
+- 확인하지 못한 것: Windows `GetStreamLatency` 가 Bluetooth A2DP 지연을 담는지, session 중 장치 지연이 바뀌는 경우
+- 세 건을 PR #22 worker 에게 맡겼다, 실기기 시험 절차(Bluetooth, AirPlay, Windows, Linux)를 이슈 board 7-9 에 사람 몫으로 적었다

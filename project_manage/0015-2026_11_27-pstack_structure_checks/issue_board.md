@@ -50,5 +50,7 @@
 - [ ] 7-7. 열린 초안 PR #11, #13, #14 rebase
 - [ ] 7-8. local LLM 실수 유도 시험과 빠진 곳 메우기
 
+- [ ] 7-9. 재생 확인의 실제 장치 시험(사람): `make playback-device-proof` 를 macOS 내장 스피커, Bluetooth 이어폰, AirPlay 와 Windows, Linux 실제 기기에서 돌려 보고된 추가 출력 지연과 통과 여부를 이슈 log 에 적는다(Windows 의 `GetStreamLatency` 가 Bluetooth A2DP 지연을 담는지는 이 시험으로만 안다)
+
 ## 9. 지금 상태
 - 2026-11-27 01:05 이슈와 기록을 만들었다, worker 를 띄운다
