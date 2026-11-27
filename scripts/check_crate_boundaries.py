@@ -5,8 +5,10 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from html.parser import HTMLParser
 
 from rust_tokens import tokens
+from check_review_writes import string_value
 
 
 WORKSPACE_IMPORTS = {
@@ -42,14 +44,50 @@ WEB_OUTPUT_FEATURES = {'HtmlAudioElement', 'HtmlMediaElement', 'HtmlVideoElement
                        'OscillatorNode', 'AudioWorkletNode'}
 
 
+MEDIA_TAGS = {'audio', 'video', 'iframe', 'embed', 'object'}
+
+
+def media_literal(value):
+    lowered = value.lower()
+    return lowered in {'audio', 'video'} or 'data:audio' in lowered or 'data:video' in lowered
+
+
+def ui_html_errors(source):
+    class Page(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.errors = []
+            self.script = False
+
+        def handle_starttag(self, tag, attrs):
+            self.script = tag == 'script'
+            if tag in MEDIA_TAGS:
+                self.errors.append('UI media elements are forbidden; use runtime output')
+            if any(media_literal(value) for _, value in attrs if value is not None):
+                self.errors.append('UI media URL is forbidden; use runtime output')
+
+        def handle_endtag(self, tag):
+            if tag == 'script':
+                self.script = False
+
+        def handle_data(self, data):
+            if self.script and re.search(r'\b(?:Audio|AudioContext|BaseAudioContext|AudioWorkletNode)\b|data:(?:audio|video)', data, re.I):
+                self.errors.append('UI media JavaScript is forbidden; use runtime output')
+
+    page = Page()
+    page.feed(source)
+    return page.errors
+
+
 def ui_output_errors(source):
     code = list(tokens(source))
     for index, token in enumerate(code):
         if token.text in WEB_OUTPUT_FEATURES | {'Audio'}:
             yield 'UI media API is forbidden; use runtime play_recording/control_playback/get_playback_status'
-        if token.text in {'audio', 'video'} and index and code[index - 1].text in {'<', ':'}:
+        if token.text in MEDIA_TAGS and index and code[index - 1].text in {'<', ':'}:
             yield 'UI media elements are forbidden; use runtime output'
-        if re.search(r'<\s*(?:audio|video)\b|\b(?:Audio|AudioContext|BaseAudioContext|AudioWorkletNode)\b', token.text) and ('"' in token.text):
+        literal = string_value(token)
+        if literal is not None and (media_literal(literal) or ui_html_errors(literal) or re.search(r'\b(?:Audio|AudioContext|BaseAudioContext|AudioWorkletNode)\b', literal)):
             yield 'UI media markup or JavaScript is forbidden; use runtime output'
 
 
@@ -69,6 +107,10 @@ def violations(packages):
                     owner, _, forwarded = item.partition('/')
                     if owner.rstrip('?') in aliases and forwarded in WEB_OUTPUT_FEATURES:
                         yield f"{manifest}: {feature}: UI web-sys output feature {forwarded} is forbidden; use runtime output"
+            html = Path(manifest).parent / 'index.html'
+            if html.is_file():
+                for error in ui_html_errors(html.read_text(encoding='utf-8')):
+                    yield f"{html}: {error}"
             for path in sorted((Path(manifest).parent / 'src').rglob('*.rs')):
                 for error in ui_output_errors(path.read_text(encoding='utf-8')):
                     yield f"{path}: {error}"

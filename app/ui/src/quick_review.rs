@@ -55,7 +55,7 @@ pub struct QuickReview {
     analysis_request: StoredValue<u64>,
     clip: RwSignal<Option<Clip>>,
     last_scan: RwSignal<Option<Clip>>,
-    preparing: StoredValue<bool>,
+    preparing: RwSignal<bool>,
     flagging: StoredValue<bool>,
     error: RwSignal<String>,
     status: RwSignal<String>,
@@ -76,7 +76,7 @@ impl QuickReview {
             analysis_request: StoredValue::new(0),
             clip: RwSignal::new(None),
             last_scan: RwSignal::new(None),
-            preparing: StoredValue::new(false),
+            preparing: RwSignal::new(false),
             flagging: StoredValue::new(false),
             error,
             status,
@@ -151,7 +151,7 @@ impl QuickReview {
     }
 
     fn prepare_current(self) {
-        if self.preparing.get_value() {
+        if self.preparing.get_untracked() {
             return;
         }
         let Some(recording) = self.recording.get_untracked() else {
@@ -164,7 +164,7 @@ impl QuickReview {
         else {
             return;
         };
-        self.preparing.set_value(true);
+        self.preparing.set(true);
         spawn_local(async move {
             let result = api::call::<PlaybackStatus>(Command::PlayRecording,
                 json!({"recordingId":recording.id,"revision":recording.revision,"range":clip.range})).await;
@@ -178,11 +178,11 @@ impl QuickReview {
                     )
                     .await;
                 }
-                self.preparing.set_value(false);
+                self.preparing.set(false);
                 self.prepare_current();
                 return;
             }
-            self.preparing.set_value(false);
+            self.preparing.set(false);
             match result {
                 Ok(status) => {
                     let mut ready = clip.clone();
@@ -238,8 +238,8 @@ impl QuickReview {
             .with_untracked(|clip| clip.as_ref().is_some_and(|clip| clip.id == id))
     }
 
-    fn playhead(self) -> u64 {
-        self.cursor.get_untracked()
+    pub fn preparation_pending(self) -> bool {
+        self.preparing.get()
     }
 
     pub fn flag(self, segments: RwSignal<Vec<Segment>>) {
@@ -251,6 +251,8 @@ impl QuickReview {
             return;
         };
         let Some(session) = clip.session.clone() else {
+            self.stop_audio();
+            self.flag_at(segments, self.cursor.get_untracked());
             return;
         };
         self.flagging.set_value(true);
@@ -339,7 +341,7 @@ impl QuickReview {
         if self.narrowing.with_untracked(Option::is_some) {
             return;
         }
-        let playhead = self.playhead();
+        let playhead = self.cursor.get_untracked();
         let next = segments.with_untracked(|segments| {
             segments
                 .iter()
@@ -504,7 +506,6 @@ impl QuickReview {
 
     fn failed(self, id: u64, message: String) {
         if self.is_current(id) {
-            self.cursor.set(self.playhead());
             self.stop_audio();
             self.error.set(message);
         }
@@ -826,6 +827,88 @@ fn QuickOutput(quick: QuickReview) -> impl IntoView {
 mod tests {
     use super::*;
 
+    struct DeferredIo;
+
+    impl any_spawner::CustomExecutor for DeferredIo {
+        fn spawn(&self, _future: any_spawner::PinnedFuture<()>) {}
+        fn spawn_local(&self, _future: any_spawner::PinnedLocalFuture<()>) {}
+        fn poll_local(&self) {}
+    }
+
+    fn owner() -> Owner {
+        let _ = any_spawner::Executor::init_custom_executor(DeferredIo);
+        Owner::new()
+    }
+
+    fn segment() -> Segment {
+        serde_json::from_value(json!({
+            "id":"s","recording_id":"r","recording_revision":1,"revision":1,
+            "range":{"start":473_600,"end":505_600},"machine_text":"글","text":"글",
+            "verdict":null,"needs_correction":false,"verified":null
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn space_during_next_chunk_preparation_marks_the_last_confirmed_position() {
+        owner().with(|| {
+            let quick =
+                QuickReview::new(RwSignal::new(String::new()), RwSignal::new(String::new()));
+            quick.recording.set(Some(RecordingInfo {
+                id: "r".into(),
+                name: "음성".into(),
+                samples: 960_000,
+                revision: 1,
+                engine: "test".into(),
+                model: "test".into(),
+            }));
+            quick.cursor.set(480_000);
+            quick.preparing.set(true);
+            quick.clip.set(Some(Clip {
+                id: 2,
+                range: SampleRange {
+                    start: 480_000,
+                    end: 960_000,
+                },
+                scan: true,
+                session: None,
+                wav: None,
+            }));
+            let segments = RwSignal::new(vec![segment()]);
+            quick.flag(segments);
+            assert!(quick.narrowing.with_untracked(Option::is_some));
+            assert_eq!(
+                quick.narrowing.get_untracked().unwrap().path()[0],
+                SampleRange {
+                    start: 457_600,
+                    end: 480_000
+                }
+            );
+            assert!(quick.clip.with_untracked(Option::is_none));
+            assert!(!quick.is_current(2));
+            assert_eq!(quick.cursor.get_untracked(), 480_000);
+            assert!(quick.preparation_pending());
+        });
+    }
+
+    #[test]
+    fn leaving_quick_review_blocks_other_playback_until_preparation_cleanup_finishes() {
+        owner().with(|| {
+            let workspace = crate::workspace::Workspace::new();
+            workspace.flow.update(|flow| {
+                flow.start(seamone_core::review_flow::ReviewMode::Binary, &[segment()]);
+            });
+            workspace.quick.preparing.set(true);
+            workspace.quick.exit();
+            assert!(workspace.quick.preparation_pending());
+            workspace.play();
+            assert!(!workspace.flow.get_untracked().busy());
+            assert!(workspace.playback.with_untracked(Option::is_none));
+            workspace.quick.preparing.set(false);
+            assert!(!workspace.quick.preparation_pending());
+        });
+    }
+
     fn clip() -> Clip {
         Clip {
             id: 7,
@@ -890,6 +973,32 @@ mod tests {
         let mut missing = status(32_000, PlaybackState::Ready);
         missing.session = None;
         assert!(clip.observe(&missing).is_err());
+    }
+
+    #[test]
+    fn a_failed_preview_keeps_the_last_position_without_republishing_it() {
+        owner().with(|| {
+            use std::sync::{
+                Arc,
+                atomic::{AtomicUsize, Ordering},
+            };
+            let quick =
+                QuickReview::new(RwSignal::new(String::new()), RwSignal::new(String::new()));
+            quick.cursor.set(36_000);
+            quick.clip.set(Some(clip()));
+            let reads = Arc::new(AtomicUsize::new(0));
+            let observed = Arc::clone(&reads);
+            let position = Memo::new(move |_| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                quick.cursor.get()
+            });
+            assert_eq!(position.get(), 36_000);
+            quick.failed(7, "device disconnected".into());
+            assert_eq!(position.get(), 36_000);
+            assert_eq!(reads.load(Ordering::Relaxed), 1);
+            assert!(quick.clip.with_untracked(Option::is_none));
+            assert_eq!(quick.error.get_untracked(), "device disconnected");
+        });
     }
 
     #[test]

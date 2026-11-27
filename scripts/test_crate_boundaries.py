@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from check_crate_boundaries import ui_output_errors
+from check_crate_boundaries import ui_output_errors, ui_html_errors
 
 CHECK = Path(__file__).with_name("check_crate_boundaries.py").resolve()
 
@@ -180,6 +180,30 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('UI media API is forbidden', result.stderr)
+
+    def test_static_dom_literals_urls_and_embedded_documents_are_rejected(self):
+        for source in ['document.create_element("audio")', 'document.create_element("video")',
+                       'node.set_attribute("src", "data:audio/wav;base64,AAA")',
+                       'format!("data:video/mp4;base64,{wav}")',
+                       'let name = r#"audio"#;', r'let name = "\x61udio";',
+                       'view! { <iframe/> }', 'view! { <embed/> }', 'view! { <object/> }']:
+            with self.subTest(source=source):
+                self.assertTrue(list(ui_output_errors(source)))
+        self.assertEqual(list(ui_output_errors('let caption = "audio recording"; view! { <canvas/> }')), [])
+
+    def test_trunk_html_is_checked_and_normal_html_still_passes(self):
+        page = self.root / 'ui-layer/index.html'
+        for markup in ['<audio autoplay></audio>', '<IFRAME src="song.wav"></IFRAME>',
+                       '<embed src="data:audio/wav;base64,AAA"/>', '<object></object>',
+                       '<a href="data:video/mp4;base64,AAA">open</a>', '<script>new Audio()</script>']:
+            with self.subTest(markup=markup):
+                self.assertTrue(ui_html_errors(markup))
+                page.write_text(markup)
+                result = self.check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('index.html: UI media', result.stderr)
+        page.write_text('<!doctype html><html><head><title>seamone</title></head><body><p>audio recording</p></body></html>')
+        self.assertEqual(self.check().returncode, 0)
 
 
 if __name__ == "__main__":

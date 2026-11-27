@@ -12,6 +12,7 @@
 [빠른 검수 키와 시간축 예시](project_manage/0005-2026_11_19-record_transcribe_edit/quick_review_design.md)에서 한 줄의 오류 두 곳을 함께 저장하는 흐름을 볼 수 있다. [녹음·받아쓰기·수정 화면 이슈](https://github.com/guny524/seamone/issues/5)에 첫 전사와 설치본 검증 순서가 있다.
 
 - 첫 실행 안내에서 데스크톱 마이크를 바로 시작하거나 음성 파일을 고를 수 있다. 닫은 뒤에는 `개인정보와 학습 안내`로 다시 읽을 수 있다
+- 다음 30초 음성을 준비하는 동안에도 Space로 마지막 재생 위치의 오류를 표시할 수 있다, 검수를 나간 뒤 준비와 취소가 끝날 때까지 다른 화면의 재생 버튼은 기다린다
 - 빠른 검수에서 지나간 미확인 조각은 그대로 남으며 학습에서 제외한다, 짧은 무음과 줄 경계에서는 최대 2초 동안 앞서 들은 전사 줄도 보여 준다
 - 좁은 창과 터치 환경의 빠른 검수에는 후보 선택과 듣기, 범위 좁히기, 보관 후 올라가기, 선택 취소, 저장 후 이어듣기 버튼이 표시된다
 - 교정 화면에는 원본 음성의 전체 조각과 저장한 오류 위치, 자동 전사 원문과 수정 초안, 남은 조각을 표시한다. 확정하면 다음 조각으로 이동하며 새 조각을 들을 때까지 확정이 잠긴다
@@ -56,7 +57,7 @@ graph LR
 - `app/ui`: 빠른 검수, 조각별 검증, 교정, 일반 편집 화면, 빠른 검수와 검증·교정은 runtime의 재생 상태를 조회한다, 빠른 검수는 preview session으로 원본을 최대 30초씩 이어 재생하며 확인 전사를 만드는 증거는 발급받지 않는다
 - `research`: 앱과 별도인 PyTorch 연구 코드, 앱은 Python을 포함하지 않고 연구 adapter를 활성화하지 않는다
 - research의 직접 삭제 API는 `seamone_research/cache.py`의 `remove_inside`에 모은다. 이 함수는 HF_HOME 아래 전용 eval-raw/seamone_eval cache 안에서 root의 자식만 삭제하고 공유 HF_HOME/hub와 root 밖의 symlink를 거절한다. manifest 파일 삭제는 기존 missing_ok 동작을 유지한다
-- UI는 HTML audio·video node와 media API로 소리를 내지 않는다, UI Cargo의 HtmlAudioElement·HtmlMediaElement feature를 제거했으며 Cargo 경계 검사가 별칭·platform·optional feature 전달의 재도입을 거절한다, Leptos의 tachys가 media binding을 간접 활성화하므로 타입 자체가 compiler에서 사라지지는 않는다, 구조 검사는 제품 UI의 media 타입·tag와 명시적인 media JavaScript도 거절한다, 임의의 동적 JavaScript를 격리하는 sandbox는 아니다
+- UI는 HTML audio·video node와 media API로 소리를 내지 않는다, UI Cargo의 HtmlAudioElement·HtmlMediaElement feature를 제거했으며 Cargo 경계 검사가 별칭·platform·optional feature 전달의 재도입을 거절한다, Leptos의 tachys가 media binding을 간접 활성화하므로 타입 자체가 compiler에서 사라지지는 않는다, 구조 검사는 제품 UI Rust와 index.html의 media 타입·tag, audio/video literal, data:audio/data:video URL과 명시적인 media JavaScript도 거절하며 iframe·embed·object도 허용하지 않는다, 임의의 동적 JavaScript를 격리하는 sandbox는 아니다
 - 재생 확인은 1배속 출력 callback에 제출한 모든 source sample의 버퍼 끝이 장치 시계를 지난 상태다, 일시 정지와 되감기, 앞으로 넘긴 뒤 빈 구간을 다시 듣는 것을 허용한다, 장치 오류와 잘못된 시각은 session 전체를 무효로 하며 처음부터 다시 열어야 한다, OS mute나 실제 사람의 청취는 확인할 수 없다, 앱에 별도 음량 조절은 없다
 
 ### 2-1. 데이터와 저장
@@ -131,7 +132,8 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 - `make check-review-writes`는 보호 SQL을 비공개 WritePermit의 고정 저장 메서드로 모으고, 저장 전용 module의 타입·권한·구현을 base의 해시와 대조한다. cfg(test) module 안의 시험 본문은 이 해시에서 뺀다. 호출자에게 열린 permit을 돌려주지 않으며, 메서드 안에서 실제 저장값을 검사하고 직렬화한다. 검수 저장은 DB의 현재 값과 승인된 요청의 core 전이를 대조하고, 새 확인 전사에는 Played 승인을 요구한다. SQLite authorizer는 메서드 밖의 보호 쓰기, training_queue 대상·revision 열 UPDATE, trigger를 통한 보호 쓰기를 거절한다. 정적 검사는 SQL 인자의 리터럴 전체를 EXPLAIN하고, prepare*로 만든 Statement의 실행 인자는 데이터로 구분한다. 동적 SQL과 메서드 참조, Batch/raw API와 외부 소스 경로(cfg_attr 포함)를 막고, 시험 외의 Connection::open*은 Store::open으로 제한한다. authorizer/hooks 변경도 Store::open과 저장 module로 제한하며, migration 뒤 DDL과 writable_schema를 거절한다. migration 경로와 내용 해시도 base와 대조한다. 임의의 외부 프로그램까지 막는 sandbox는 아니다
 - `scripts/runtime_api.json`, `scripts/playback_api.json`, `scripts/review_writes.json`, `scripts/unsafe_files.json`, `scripts/comments.json`은 `LINT_BASE_REF`의 같은 목록과 비교한다. base에 목록이 없거나 현재 목록의 항목과 개수가 늘면 실패한다. 사람이 확인한 뒤에만 기준 브랜치의 목록을 늘리며, 이 PR의 CI는 사람이 보고 판단한다. 이슈 브랜치에서 목록을 함께 고쳐 검사 통과를 승인할 수 없다
 - CI의 기준 선택은 guard-base reusable workflow 한 곳에서 한다. PR은 base SHA, develop push는 첫 parent를 비교 기준으로 쓰고, 다른 브랜치 push는 origin/develop과의 merge-base를 쓴다. develop의 검사 정책은 이미 승인된 HEAD에서 읽으므로 merge한 목록·module 해시를 다시 거절하지 않는다. tag push에는 검사를 실행하지 않는다. base가 HEAD와 같은 PR은 거절하고 비교할 변경이 없는 branch push와 로컬 검사는 허용한다. guard-integrity는 base의 검사 코드와 목록으로 PR merge ref를 검사하므로 뒤처진 PR에 base가 승인한 변경도 포함한다. head의 검사 helper와 Make target은 실행하지 않는다. 보호 파일 변경은 별도 guard-review-trusted workflow의 pull_request_target job `guard-rules-review-trusted`가 merge-base부터 PR head까지 판정한다. 필수 check는 이 이름으로 지정하며 branch protection 설정은 레포 밖에서 관리한다. scripts, Makefile, research/Makefile, .github, AGENTS.md, .cargo, rust-toolchain.toml과 모든 crate의 lint 표가 보호 대상이다. trusted job은 head 코드를 실행하지 않는다. 검사 자체를 바꾸는 PR의 실패를 없애는 예외는 두지 않는다
-- `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치를 확인한다, 빠른 검수의 chunk 전환과 늦은 준비 취소, 교정 화면의 확인은 runtime 상태 조회로 시험하며 DOM ended event는 재생을 끝내지 못한다, 앱의 IPC 서비스와 출력 진행은 시험용이다, 다운로드 페이지의 화면과 빌드 링크도 확인한다
+- `make test-ui-state`는 native에서 빠른 검수의 준비 중 Space, 화면 전환 때 재생 차단과 실패 위치 보존을 확인한다, 시험 executor는 실제 IPC future를 실행하지 않고 상태 전이만 확인한다, `make test-ui-fixture`는 브라우저 없이 Node로 command가 callback 전에 ready/playing을 반환하는 것과 preview의 검수 권한 거절을 확인하며 `make test`에도 포함된다
+- `make ui-test`: 실제 WASM 화면을 Chrome에서 실행해 첫 실행, 녹음과 파일 가져오기, 키보드와 터치 오류 탐색, 원본 PCM 스펙트로그램과 미리 듣기의 샘플 위치를 확인한다, 빠른 검수의 chunk 전환과 늦은 준비 취소, 교정 화면의 확인은 runtime 상태 조회로 시험하며 준비 중 오류 표시와 다른 화면의 재생 대기, 오래된 session의 stop을 확인한다, 앱의 IPC 서비스와 출력 진행은 시험용이다, 다운로드 페이지의 화면과 빌드 링크도 확인한다
 - `make site-preview`: [다운로드 안내](site/index.html)를 로컬 `http://127.0.0.1:4173`에서 열어 본다. 포트가 쓰이는 중이면 `make site-preview SITE_PORT=4174`로 바꾼다
 - macOS 패키지 CI는 업로드할 DMG를 읽기 전용으로 열어 체크섬, 앱 식별자, CPU 종류와 마이크 권한 안내를 검사한다. Whisper 빌드에서는 Mach-O와 Info.plist의 최소 macOS 버전을 빌드 설정과 대조한다
 - `CARGO_BUILD_JOBS=2 make playback-device-proof`: 기본 출력 장치로 1초의 작은 400Hz tone을 내고 장치 시계와 들은 범위를 확인한다, 기본 시험에서는 ignored이며 실제 장치가 있는 macOS·Windows·Linux에서 사람이 별도로 실행한다, 소리가 나므로 자동 CI와 worker에서는 실행하지 않는다

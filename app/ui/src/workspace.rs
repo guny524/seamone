@@ -317,6 +317,9 @@ impl Workspace {
     }
 
     pub fn play(self) {
+        if untrack(|| self.quick.preparation_pending()) {
+            return;
+        }
         let mut ticket = None;
         self.flow.update(|flow| ticket = flow.play());
         let Some(ticket) = ticket else {

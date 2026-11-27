@@ -103,12 +103,15 @@ lint-code:
 	mkdir -p $(UI_DIST)
 	cargo fmt --all --check
 	node --check app/ui/tests/review.mjs
+	node --check app/ui/tests/fixture.mjs
+	node --check app/ui/tests/fixture.test.mjs
 	cargo clippy --workspace --all-targets $(WORKSPACE_FEATURE_ARGS) -- -D warnings
 	cargo clippy -p seamone-core -p seamone-ui --target wasm32-unknown-unknown -- -D warnings
 
 test:
 	mkdir -p $(UI_DIST)
 	cargo test --workspace $(WORKSPACE_FEATURE_ARGS) $(TEST_PATTERN)
+	$(MAKE) test-ui-fixture
 
 .PHONY: check-macos-dmg
 check-macos-dmg:
@@ -143,3 +146,10 @@ desktop-proof:
 .PHONY: playback-device-proof
 playback-device-proof:
 	cargo test --locked -p seamone-runtime --lib real_output_device_confirms_the_tone_with_its_clock -- --ignored --nocapture
+
+.PHONY: test-ui-state test-ui-fixture
+test-ui-state:
+	cargo test --locked -p seamone-ui
+
+test-ui-fixture:
+	node --test app/ui/tests/fixture.test.mjs
