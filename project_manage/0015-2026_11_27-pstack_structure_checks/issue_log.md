@@ -213,3 +213,7 @@
   - 남긴 주석 가운데 우리 셈과 정책이 섞인 것 둘, NFD 시험 literal 이 소리 없이 약해질 수 있음, 지운 주석의 빈 줄 흔적, doctest 가 feature 합치기에 기댐(추측), macOS 에 minimal lint 없음(추측), 범위 타입이 범위를 보장하지 않음, Ruff 의 `exclude` 를 대조하지 않음
 - [결정, 메인] 1번은 축소를 승인하지 않고 계산을 고친다: decode 부터 정규화까지 f64, 마지막에 `Pcm16` 으로 한 번 양자화, f32 가 필요한 바깥 API 는 i16 에서 손실 없이, 결과는 샘플마다 최대 1 LSB 달라질 수 있어 차이를 재서 보고한다(근거: 사용자 원문 "lint 예외가 발생하면 그건 충분히 설계가 안 된거야", 정밀도는 합의한 규칙이 아니라 구현이다)
 - 10건을 두 번째 worker(Codex `gpt-6.1-sol` high, worktree `/Users/min-jo/orca/workspaces/seamone/15-no-exceptions-fix`, handle `term_9cf250bf-f681-40ce-9e74-55f1e0b48e90`, `CARGO_BUILD_JOBS=1`)에게 맡겼다, 첫 worker 는 13단계를 이어 간다
+
+## 2026-11-27 14:15 PR #21 의 검토 지적 고침
+- 두 번째 worker(14:10 끝남): decode 부터 정규화까지 f64 로 계산하고 `Pcm16` 으로 한 번 양자화했다, 결정적 PCM32 stereo 입력 다섯 rate 의 247,691 샘플 가운데 97개가 1 LSB 달랐고 최대 차이 1 LSB, 기존 2,048 프레임 시험 파형은 차이 0개, `as f32` 와 `to_f32` 는 0곳, `check_input` 이 `InputRate` 를 돌려주고 안쪽은 그 타입만 받는다, lint-code 를 minimal, format, native, WASM target 으로 나누고 CI 에 WASM 과 macOS minimal step 을 따로 두었다, docstring 이 아닌 Python 문자열 문장도 주석으로 센다, `comments.json` 에 원문을 넣고 hash 와 대조한다, Ruff `exclude` 와 `extend-exclude` 대조, decoder 한도 셈과 MP3 trim 정책을 이름으로 옮겼다, NFD literal escape, runtime 단독 doctest target, 지운 주석의 빈 줄 흔적 정리
+- 메인이 `make test` 142개(실패 0)와 `make test-architecture` 통과, 남은 f32 축소 0곳을 확인하고 `16527b8` 로 PR #21 에 push 했다, 두 번째 worker 탭을 닫았다(worktree 는 PR #21 merge 뒤 정리), Opus 재검토와 PR CI 를 기다린다
