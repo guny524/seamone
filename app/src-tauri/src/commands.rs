@@ -196,7 +196,7 @@ pub async fn get_playback<R: Runtime>(
     window: WebviewWindow<R>,
     message: ipc::Request<'_>,
 ) -> Result<<command::GetPlayback as TypedCommand>::Reply, String> {
-    let args = ipc_args::<command::GetPlayback>(message)?;
+    let args = ipc_args::<command::GetPlayback>(message.body())?;
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         window
@@ -213,7 +213,7 @@ pub async fn get_recording_playback<R: Runtime>(
     state: State<'_, LibraryService>,
     message: ipc::Request<'_>,
 ) -> Result<<command::GetRecordingPlayback as TypedCommand>::Reply, String> {
-    let args = ipc_args::<command::GetRecordingPlayback>(message)?;
+    let args = ipc_args::<command::GetRecordingPlayback>(message.body())?;
     trusted(&window)?;
     state.recording_playback(&args.recording_id, args.revision, args.range)
 }
@@ -254,7 +254,7 @@ pub async fn control_playback<R: Runtime>(
     window: WebviewWindow<R>,
     message: ipc::Request<'_>,
 ) -> Result<<command::ControlPlayback as TypedCommand>::Reply, String> {
-    let args = ipc_args::<command::ControlPlayback>(message)?;
+    let args = ipc_args::<command::ControlPlayback>(message.body())?;
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         window
@@ -280,7 +280,7 @@ pub async fn play_recording<R: Runtime>(
     window: WebviewWindow<R>,
     message: ipc::Request<'_>,
 ) -> Result<<command::PlayRecording as TypedCommand>::Reply, String> {
-    let args = ipc_args::<command::PlayRecording>(message)?;
+    let args = ipc_args::<command::PlayRecording>(message.body())?;
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         window.state::<LibraryService>().play_recording(
@@ -299,13 +299,13 @@ pub async fn save_review<R: Runtime>(
     state: State<'_, LibraryService>,
     message: ipc::Request<'_>,
 ) -> Result<<command::SaveReview as TypedCommand>::Reply, String> {
-    let args = ipc_args::<command::SaveReview>(message)?;
+    let args = ipc_args::<command::SaveReview>(message.body())?;
     trusted(&window)?;
     state.review(&args.request, args.proof.as_deref())
 }
 
-fn ipc_args<C: TypedCommand>(message: ipc::Request<'_>) -> Result<C::Args, String> {
-    let ipc::InvokeBody::Json(body @ serde_json::Value::Object(_)) = message.body() else {
+fn ipc_args<C: TypedCommand>(body: &ipc::InvokeBody) -> Result<C::Args, String> {
+    let ipc::InvokeBody::Json(body @ serde_json::Value::Object(_)) = body else {
         return Err(format!(
             "invalid args for command `{}`: expected a JSON object",
             C::NAME
