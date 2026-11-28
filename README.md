@@ -120,6 +120,8 @@ CXXFLAGS="-isystem $(xcrun --sdk macosx --show-sdk-path)/usr/include/c++/v1" mak
 
 ### 3-3. 시험 범위
 - `make check-architecture`는 앱을 빌드하지 않고 Cargo가 읽은 직접 의존성과 검사기의 부정 사례를 확인한다. host는 core와 runtime, runtime은 core와 ASR만 참조한다. SQLite와 마이크, 디코더는 runtime, Tauri는 host, Whisper는 ASR, Leptos는 UI에서 사용한다. UI의 hound는 IPC로 받은 재생 WAV를 읽는 데 쓴다. 데스크톱과 모바일 패키지 빌드도 같은 의존성 검사를 먼저 실행한다. host의 normal 의존은 core, runtime, serde, serde_json, Tauri와 Tauri plugin으로 제한한다. runtime의 공개 선언은 `scripts/runtime_api.json`과 대조하며 목록에 더하기 전에 LibraryService의 증거 확인 경로를 거치는지 검토한다. 새 workspace crate를 추가할 때는 `scripts/check_crate_boundaries.py`에 허용 방향을 지정한다
+- 화면의 공용 호출 함수가 Tauri의 비공개 binding을 사용한다. `make check-imports`는 이 binding과 공용 호출 함수가 든 `app/ui/src/api/tauri.rs`의 해시를 대조한다. 나머지 `src/`의 Rust 이름과 문자열, Trunk 시작 HTML의 속성과 인라인 스크립트에 직접 쓰인 `__TAURI__`와 `__TAURI_INTERNALS__`를 검사한다. 브라우저 시험의 Tauri 대역은 `app/ui/tests/`에서 제공한다
+- 제품 UI의 Cargo 타깃은 `src/`에서 시작한다. 검사 범위를 건너뛰는 Rust 모듈 로딩을 막기 위해 UI의 Cargo build script, 직접 쓴 `include!`와 그 별칭, 모듈 경로 속성과 소스 symlink를 거절한다. 속성의 대괄호 안에 들어간 매크로 변수와 `$name!(...)` 형태의 호출도 검사한다
 - `make check-domain`은 운영체제 표준 라이브러리가 없는 타깃에서 도메인 crate를 단독으로 컴파일한다. CI가 `rustup target add wasm32v1-none`으로 타깃을 준비한다
 - `make lint-ios`는 macOS CI에서 host와 runtime의 iOS simulator 전용 코드를 Clippy로 컴파일한다. CI가 `aarch64-apple-ios-sim` 타깃을 준비하며 이 명령은 타깃을 설치하거나 앱을 패키징하지 않는다
 - 새 Cargo member는 workspace lint를 전부 상속해야 한다. 기존 Clippy 필수 명령은 유지하고 추가한 명령도 `-D warnings`를 쓴다

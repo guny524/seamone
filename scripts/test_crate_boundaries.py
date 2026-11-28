@@ -181,6 +181,132 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('UI media API is forbidden', result.stderr)
 
+    def test_typed_ui_bridge_is_the_only_direct_tauri_binding(self):
+        ui = self.root / 'ui-layer'
+        bridge = ui / 'src/api/tauri.rs'
+        bridge.parent.mkdir()
+        approved = (CHECK.parent.parent / 'app/ui/src/api/tauri.rs').read_text(encoding='utf-8')
+        bridge.write_text(approved, encoding='utf-8')
+        fixture = ui / 'tests/fixture.mjs'
+        fixture.parent.mkdir()
+        fixture.write_text('window.__TAURI__ = { core: { invoke() {} } };', encoding='utf-8')
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        duplicate = ui / 'src/feature/api/tauri.rs'
+        duplicate.parent.mkdir(parents=True)
+        duplicate.write_text(approved, encoding='utf-8')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('src/feature/api/tauri.rs:', result.stderr)
+        self.assertIn('direct Tauri access is forbidden', result.stderr)
+
+    def test_existing_typed_bridge_cannot_invoke_a_raw_command_name(self):
+        bridge = self.root / 'ui-layer/src/api/tauri.rs'
+        bridge.parent.mkdir()
+        approved = (CHECK.parent.parent / 'app/ui/src/api/tauri.rs').read_text(encoding='utf-8')
+        bypass = approved.replace('invoke(C::NAME, args)', 'invoke("get_library", args)')
+        self.assertNotEqual(bypass, approved)
+        bridge.write_text(bypass, encoding='utf-8')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('the private Tauri bridge changed', result.stderr)
+
+    def test_inline_tauri_access_is_rejected_in_rust_and_trunk_html(self):
+        source = self.root / 'ui-layer/src/lib.rs'
+        source.write_text(
+            '#[wasm_bindgen(inline_js = r#"export function raw() { return window.__TAURI_INTERNALS__.invoke; }"#)]',
+            encoding='utf-8',
+        )
+        page = self.root / 'ui-layer/index.html'
+        page.write_text(
+            '<script>window.__TAURI__.core.invoke("get_library", {})</script>'
+            '<button onclick="window.__TAURI_INTERNALS__.invoke()">invoke</button>',
+            encoding='utf-8',
+        )
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('src/lib.rs: 1: direct Tauri access is forbidden', result.stderr)
+        self.assertEqual(result.stderr.count('index.html: direct Tauri access is forbidden'), 2)
+
+    def test_rust_module_reuse_and_path_overrides_cannot_skip_the_scan(self):
+        source = self.root / 'ui-layer/src/lib.rs'
+        source.write_text(
+            'include!("api/tauri.rs");\n'
+            '#[path = "../outside.rs"] mod outside;\n'
+            '#[cfg_attr(target_arch = "wasm32", path = "../wasm.rs")] mod other;\n'
+            '#[r#path = "../outside.rs"] mod raw_path;\n'
+            '#[r#cfg_attr(target_arch = "wasm32", r#path = "../wasm.rs")] mod raw_cfg_attr;\n'
+            'use core::{include as read_source};\n',
+            encoding='utf-8',
+        )
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('src/lib.rs: 1: UI source cannot use include!', result.stderr)
+        self.assertIn('src/lib.rs: 2: UI source cannot override a module path', result.stderr)
+        self.assertIn('src/lib.rs: 3: UI source cannot override a module path', result.stderr)
+        self.assertIn('src/lib.rs: 4: UI source cannot override a module path', result.stderr)
+        self.assertIn('src/lib.rs: 5: UI source cannot override a module path', result.stderr)
+        self.assertIn('src/lib.rs: 6: UI source cannot use include!', result.stderr)
+
+    def test_ui_product_targets_cannot_start_outside_the_scanned_source_directory(self):
+        ui = self.root / 'ui-layer'
+        (ui / 'other.rs').write_text('fn main() {}', encoding='utf-8')
+        (ui / 'build.rs').write_text('fn main() {}', encoding='utf-8')
+        self.add('ui-layer', '\n[[bin]]\nname="other"\npath="other.rs"\n')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('other.rs: UI product Rust targets must start under src', result.stderr)
+        self.assertIn('build.rs: UI cannot generate Rust source', result.stderr)
+
+    def test_inner_attributes_and_macro_variables_cannot_load_rust_outside_the_scan(self):
+        source = self.root / 'ui-layer/src/lib.rs'
+        source.write_text(
+            'mod inline { #![path = ".."] mod outside; }\n'
+            'mod configured { #![cfg_attr(all(), path = "..")] mod other; }\n'
+            'macro_rules! call { ($m:ident) => { $m!("../outside.rs"); }; }\n'
+            'macro_rules! attribute { ($a:meta) => { #[$a] mod outside; }; }\n'
+            'macro_rules! inner { ($a:meta) => { mod inline { #![$a] mod outside; } }; }\n',
+            encoding='utf-8',
+        )
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        for line in (1, 2):
+            self.assertIn(f'src/lib.rs: {line}: UI source cannot override a module path', result.stderr)
+        for line in (3, 4, 5):
+            self.assertIn(f'src/lib.rs: {line}: UI macro variables cannot choose', result.stderr)
+        source.write_text(
+            'macro_rules! label { ($text:expr) => { $text }; }\n'
+            'macro_rules! different { ($a:expr, $b:expr) => { $a != $b }; }\n'
+            'fn different(include: u8, other: u8) -> bool { include != other }\n',
+            encoding='utf-8',
+        )
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_ui_source_module_cannot_point_to_an_unscanned_directory(self):
+        ui = self.root / 'ui-layer'
+        (ui / 'external').mkdir()
+        (ui / 'src/linked').symlink_to('../external', target_is_directory=True)
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('src/linked: UI source must be stored under src without symlinks', result.stderr)
+
+    def test_tauri_names_in_identifiers_and_escaped_strings_are_rejected(self):
+        source = self.root / 'ui-layer/src/lib.rs'
+        source.write_text(
+            '\n'.join([
+                '#[wasm_bindgen(js_namespace = __TAURI_INTERNALS__)]',
+                r'let name = "\x5f_TAURI__";',
+                'let button = r#"<button onclick="window.__TAURI__.core.invoke()">open</button>"#;',
+            ]),
+            encoding='utf-8',
+        )
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stderr.count('direct Tauri access is forbidden'), 3)
+        self.assertNotIn('UI media', result.stderr)
+
     def test_static_dom_literals_urls_and_embedded_documents_are_rejected(self):
         for source in ['document.create_element("audio")', 'document.create_element("video")',
                        'node.set_attribute("src", "data:audio/wav;base64,AAA")',
