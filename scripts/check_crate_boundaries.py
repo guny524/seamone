@@ -105,10 +105,11 @@ def ui_ipc_errors(path, source):
         if sha256(source.encode('utf-8')).hexdigest() != UI_IPC_BRIDGE_SHA256:
             yield 'the private Tauri bridge changed; preserve call_typed and review the binding with the boundary check'
         return
-    code = list(tokens(source))
+    code = list(tokens(source, normalize_raw_identifiers=True))
     for index, token in enumerate(code):
         following = code[index + 1].text if index + 1 < len(code) else None
-        if token.text == 'include' and following == '!':
+        include_alias = following == 'as' and index > 0 and code[index - 1].text in {':', '{', ','}
+        if token.text == 'include' and (following == '!' or include_alias):
             error = 'UI source cannot use include!; declare a module under src'
         elif token.text == 'path' and following == '=' and module_path_attribute(code, index):
             error = 'UI source cannot override a module path; declare a module under src'

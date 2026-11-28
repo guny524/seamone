@@ -10,7 +10,7 @@ class Token(NamedTuple):
     end: int
 
 
-def tokens(source, *, include_comments=False):
+def tokens(source, *, include_comments=False, normalize_raw_identifiers=False):
     position = 0
     while position < len(source):
         start = position
@@ -57,6 +57,12 @@ def tokens(source, *, include_comments=False):
                     break
                 else:
                     position += 1
+        elif normalize_raw_identifiers and source.startswith('r#', position) and (
+            identifier := re.match(r'r#([A-Za-z_]\w*)', source[position:])
+        ):
+            position += identifier.end()
+            yield Token(identifier[1], start, position)
+            continue
         else:
             char = re.match(r"'(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F_]+\}|.)|[^\\'\n])'", source[position:])
             word = re.match(r"[A-Za-z_]\w*|[0-9]+", source[position:])

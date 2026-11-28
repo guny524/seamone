@@ -234,7 +234,10 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         source.write_text(
             'include!("api/tauri.rs");\n'
             '#[path = "../outside.rs"] mod outside;\n'
-            '#[cfg_attr(target_arch = "wasm32", path = "../wasm.rs")] mod other;\n',
+            '#[cfg_attr(target_arch = "wasm32", path = "../wasm.rs")] mod other;\n'
+            '#[r#path = "../outside.rs"] mod raw_path;\n'
+            '#[r#cfg_attr(target_arch = "wasm32", r#path = "../wasm.rs")] mod raw_cfg_attr;\n'
+            'use core::{include as read_source};\n',
             encoding='utf-8',
         )
         result = self.check()
@@ -242,6 +245,9 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         self.assertIn('src/lib.rs: 1: UI source cannot use include!', result.stderr)
         self.assertIn('src/lib.rs: 2: UI source cannot override a module path', result.stderr)
         self.assertIn('src/lib.rs: 3: UI source cannot override a module path', result.stderr)
+        self.assertIn('src/lib.rs: 4: UI source cannot override a module path', result.stderr)
+        self.assertIn('src/lib.rs: 5: UI source cannot override a module path', result.stderr)
+        self.assertIn('src/lib.rs: 6: UI source cannot use include!', result.stderr)
 
     def test_ui_product_targets_cannot_start_outside_the_scanned_source_directory(self):
         ui = self.root / 'ui-layer'
