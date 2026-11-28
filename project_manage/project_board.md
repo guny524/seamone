@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 develop 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-27 06:20 KST
+- 마지막 갱신: 2026-11-28 15:03 KST
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -107,9 +107,9 @@
 - 다음 행동: 별도 시험 기기에서 첫 실행, 마이크 입력, 모델 선택과 첫 전사를 확인한다. 모바일에서도 파일 가져오기와 터치 검수를 실제 기기로 확인한다. 사용자 노트북 설치는 3절의 2026-11-25 지시를 따른다
 
 ### #15 LLM 실수를 lint, build, compile 에서 거르게 폴더 구조와 검사를 바꾼다 (pstack 개념 적용)
-- 폴더: [0015-2026_11_27-pstack_structure_checks](0015-2026_11_27-pstack_structure_checks/issue_board.md), 상태: 진행, 2026-11-27 04:20 첫 단계 [PR #16](https://github.com/guny524/seamone/pull/16) 을 develop 에 merge 했다(`9ed37ed`), 검사 자체 지키기와 남은 우회는 `guny524/15-guard-integrity` 에서 한다
-- 실행 정보: worker Codex `gpt-6.1-sol` high 세션 `01a21898-2b74-7c02-9206-5ad88ae3fe65`(탭 닫음, `codex resume 01a21898-2b74-7c02-9206-5ad88ae3fe65` 로 이어 연다), worktree `/Users/min-jo/orca/workspaces/seamone/15-structure-checks`(브랜치 `guny524/15-guard-integrity`, PR #18), 마지막 turn 06:18, 보고 `.tmp/conductor/15-structure/`, Pi 시험 worktree 는 지웠다
-- 다음 행동(2026-11-27 16:12): PR #23 merge(`feba022`) 뒤 develop ci 와 guard-integrity 통과, 이슈 #15 의 GitHub 체크박스를 실제 상태로 맞췄다, 남은 것은 실기기 재생 시험(사람 몫, 이슈 board 7-9)
+- [구조 검사 이슈 기록](0015-2026_11_27-pstack_structure_checks/issue_board.md). runtime 분리, CI 기준 보호, lint 예외 제거와 장치 출력 기반 재생 확인은 `develop`에 반영했다
+- 검수 저장과 재생을 포함한 앱 명령 22개를 공용 타입에 연결했다. Opus 재검토, CI와 패키지 여섯 작업을 확인하고 `develop`에 병합했다. [전체 명령 공용 IPC 타입 PR (#27)](https://github.com/guny524/seamone/pull/27)
+- 다음 점검에서는 화면의 다른 모듈에서 Tauri를 직접 연결하는 실수를 구조 검사에서 막는 방법을 검토한다. 실기기 출력 지연 시험은 별도 기기가 필요하다. [구조 검사 이슈 (#15)](https://github.com/guny524/seamone/issues/15)
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유

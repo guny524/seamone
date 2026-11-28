@@ -193,7 +193,8 @@ main의 `Makefile`, `app/src-tauri/`, `app/ui/`, `.github/workflows/{ci,build}.y
 - [x] Cargo가 해석한 직접 의존성의 방향을 검사하고 운영체제 표준 라이브러리가 없는 타깃에서 공용 도메인을 컴파일한다. IPC 명령과 처리 함수, 플랫폼별 권한, 검수 증거, 코드별 lint 예외를 함께 검사한다. [컴파일과 CI 검사 PR (#12)](https://github.com/guny524/seamone/pull/12)
 - [x] 실제 코드에 위반을 하나씩 넣어 컴파일러와 Clippy가 여섯 가지를 각각 거절하는지 확인한다. [거절 진단](https://github.com/guny524/seamone/actions/runs/45583994420)
 - [x] 검수 저장 요청과 응답을 공용 타입에 연결했다. 잘못된 요청 타입과 일반 JSON 호출 목록을 통한 검수 저장은 컴파일러가 거절한다. 기존 JSON, 재생 증거와 재전송 시험도 통과했다. [검수 저장 공용 IPC 타입 PR (#25)](https://github.com/guny524/seamone/pull/25)
-- [ ] 재생 명령 다섯 개의 요청·응답 타입을 공용 명령 목록으로 연결하고, 기존 JSON의 왕복과 잘못된 요청·응답 타입의 컴파일 실패를 확인한다. [재생 명령 공용 IPC 타입 초안 PR (#26)](https://github.com/guny524/seamone/pull/26)
+- [x] 재생 명령 다섯 개의 요청·응답 타입을 공용 명령 목록으로 연결했다. 네 명령의 잘못된 JSON 요청 거절과 기존 JSON 왕복, 틀린 인자·응답 타입의 컴파일 실패를 확인했다. [재생 명령 공용 IPC 타입 PR (#26)](https://github.com/guny524/seamone/pull/26)
+- [x] 보관함·가져오기·녹음·전사·오류 표시·내보내기를 같은 목록으로 연결해 앱 명령 22개 모두 공용 타입으로 호출한다. 기존 JSON, 창·플랫폼 권한, 미등록 명령과 잘못된 타입의 컴파일 거절을 확인하고 `2fa33f5`로 병합했다. [전체 명령 공용 IPC 타입 PR (#27)](https://github.com/guny524/seamone/pull/27)
 - [x] 기본·Whisper 포함 패키지를 각각 여섯 작업으로 빌드한다. macOS 두 CPU의 실제 DMG에서 앱 식별자, CPU와 마이크 안내를 확인하고, Whisper 패키지의 최소 macOS 11.0을 실행 파일과 Info.plist 양쪽에서 대조한다. [기본 패키지](https://github.com/guny524/seamone/actions/runs/45582899052) · [Whisper 포함 패키지](https://github.com/guny524/seamone/actions/runs/45582909048) 실제 arm64 DMG에 Intel 또는 macOS 12.0을 요구했을 때 두 번 모두 검사가 실패했다. [잘못된 배포 조건 거절 로그](https://github.com/guny524/seamone/actions/runs/45584580590/job/139102813255)
 - [ ] 위의 설치·첫 실행 항목은 별도 시험 기기에서 확인한다. 실제 마이크·모델 선택·터치 검수는 [녹음과 첫 전사 이슈 (#5)](https://github.com/guny524/seamone/issues/5)에서 이어 간다
 
