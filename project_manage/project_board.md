@@ -1,6 +1,6 @@
 # seamone 프로젝트 board
 (이 파일: 기준 브랜치 develop 의 `project_manage/project_board.md`, 같은 곳에 `project_decision.md`, `project_log.md`, 자리와 이름은 rule `project_convention.md`, 형식은 `project-issue-conductor` skill 의 `references/record-format.md`)
-- 마지막 갱신: 2026-11-28 16:01 KST
+- 마지막 갱신: 2026-11-28 23:54 KST
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 프로젝트 맥락
@@ -110,7 +110,8 @@
 - [구조 검사 이슈 기록](0015-2026_11_27-pstack_structure_checks/issue_board.md). runtime 분리, CI 기준 보호, lint 예외 제거와 장치 출력 기반 재생 확인은 `develop`에 반영했다
 - 검수 저장과 재생을 포함한 앱 명령 22개를 공용 타입에 연결했다. Opus 재검토, CI와 패키지 여섯 작업을 확인하고 `develop`에 병합했다. [전체 명령 공용 IPC 타입 PR (#27)](https://github.com/guny524/seamone/pull/27)
 - 화면의 개별 Tauri 연결을 구조 검사에서 거절한다. 실제 제품 소스에서 복제 연결과 Rust 모듈 경로·매크로를 이용한 경우의 실패를 확인했다. [화면의 Tauri 직접 연결 검사 PR (#29)](https://github.com/guny524/seamone/pull/29)
-- 다음 점검은 Trunk가 실제로 여는 HTML과 Cargo manifest가 검사와 같은지 확인한다. 새 공용 명령에 대한 잘못된 요청 시험과 실기기 출력 지연 시험도 남아 있다. [구조 검사 이슈 (#15)](https://github.com/guny524/seamone/issues/15)
+- Trunk가 여는 HTML, Cargo manifest와 Tauri가 가져가는 UI 출력을 구조 검사에 연결했다. 대체 HTML·manifest와 빌드 설정을 바꾸는 macOS overlay가 거절됐고 기존 패키지 여섯 작업은 통과했다. [Trunk 진입점 검사 PR (#31)](https://github.com/guny524/seamone/pull/31)
+- 다음 점검에서는 인자가 필요한 공용 명령 목록과 잘못된 요청을 거절하는 시험 목록을 대조한다. 실기기 출력 지연은 별도 장치 시험으로 확인한다. [구조 검사 이슈 (#15)](https://github.com/guny524/seamone/issues/15)
 
 ## 5. 순서
 ### 5-1. 지금 진행하는 이슈와 고른 이유
