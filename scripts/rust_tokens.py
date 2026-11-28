@@ -70,6 +70,31 @@ def tokens(source, *, include_comments=False, normalize_raw_identifiers=False):
         yield Token(source[start:position], start, position)
 
 
+def enclosing_attribute(code, index):
+    depth = 0
+    for cursor in range(index - 1, -1, -1):
+        text = code[cursor].text
+        if text == ']':
+            depth += 1
+        elif text == '[':
+            if depth:
+                depth -= 1
+            elif cursor > 0 and code[cursor - 1].text == '#':
+                return cursor + 1
+            elif cursor > 1 and [item.text for item in code[cursor - 2:cursor]] == ['#', '!']:
+                return cursor + 1
+            else:
+                return None
+        elif not depth and text in {';', '{', '}'}:
+            return None
+    return None
+
+
+def module_path_attribute(code, index):
+    start = enclosing_attribute(code, index)
+    return start is not None and code[start].text in {'path', 'cfg_attr'}
+
+
 def attributes(source):
     code = list(tokens(source))
     for start, token in enumerate(code):

@@ -8,8 +8,8 @@ from hashlib import sha256
 from pathlib import Path
 from html.parser import HTMLParser
 
-from rust_tokens import tokens
-from check_review_writes import module_path_attribute, string_value
+from rust_tokens import enclosing_attribute, module_path_attribute, tokens
+from check_review_writes import string_value
 
 
 WORKSPACE_IMPORTS = {
@@ -113,6 +113,11 @@ def ui_ipc_errors(path, source):
             error = 'UI source cannot use include!; declare a module under src'
         elif token.text == 'path' and following == '=' and module_path_attribute(code, index):
             error = 'UI source cannot override a module path; declare a module under src'
+        elif token.text == '$' and (
+            enclosing_attribute(code, index) is not None
+            or (index + 2 < len(code) and code[index + 2].text == '!')
+        ):
+            error = 'UI macro variables cannot choose a Rust attribute or invoke a macro; declare a module under src'
         else:
             value = string_value(token)
             if not TAURI_IPC_GLOBAL.search(token.text if value is None else value):

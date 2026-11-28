@@ -259,6 +259,26 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         self.assertIn('other.rs: UI product Rust targets must start under src', result.stderr)
         self.assertIn('build.rs: UI cannot generate Rust source', result.stderr)
 
+    def test_inner_attributes_and_macro_variables_cannot_load_rust_outside_the_scan(self):
+        source = self.root / 'ui-layer/src/lib.rs'
+        source.write_text(
+            'mod inline { #![path = ".."] mod outside; }\n'
+            'mod configured { #![cfg_attr(all(), path = "..")] mod other; }\n'
+            'macro_rules! call { ($m:ident) => { $m!("../outside.rs"); }; }\n'
+            'macro_rules! attribute { ($a:meta) => { #[$a] mod outside; }; }\n'
+            'macro_rules! inner { ($a:meta) => { mod inline { #![$a] mod outside; } }; }\n',
+            encoding='utf-8',
+        )
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        for line in (1, 2):
+            self.assertIn(f'src/lib.rs: {line}: UI source cannot override a module path', result.stderr)
+        for line in (3, 4, 5):
+            self.assertIn(f'src/lib.rs: {line}: UI macro variables cannot choose', result.stderr)
+        source.write_text('macro_rules! label { ($text:expr) => { $text }; }', encoding='utf-8')
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_ui_source_module_cannot_point_to_an_unscanned_directory(self):
         ui = self.root / 'ui-layer'
         (ui / 'external').mkdir()

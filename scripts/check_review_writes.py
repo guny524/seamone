@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from check_lint_exceptions import git
-from rust_tokens import tokens
+from rust_tokens import module_path_attribute, tokens
 from snapshot_baselines import errors as baseline_errors
 from guard_integrity import base_commit
 
@@ -301,22 +301,6 @@ def prepared_calls(code):
                 calls.add(index)
                 data.append((index + 1, closing.get(index + 1, index + 1)))
     return calls, data
-
-
-def module_path_attribute(code, index):
-    depth = 0
-    for cursor in range(index - 1, -1, -1):
-        text = code[cursor].text
-        if text == ']':
-            depth += 1
-        elif text == '[':
-            if depth:
-                depth -= 1
-            else:
-                return cursor > 0 and code[cursor - 1].text == '#' and code[cursor + 1].text in {'path', 'cfg_attr'}
-        elif not depth and text in {';', '{', '}'}:
-            return False
-    return False
 
 
 def violations(source, path, policy, db, test_only=False):
