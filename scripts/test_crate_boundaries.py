@@ -181,6 +181,53 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('UI media API is forbidden', result.stderr)
 
+    def test_typed_ui_bridge_is_the_only_direct_tauri_binding(self):
+        ui = self.root / 'ui-layer'
+        bridge = ui / 'src/api/tauri.rs'
+        bridge.parent.mkdir()
+        approved = (CHECK.parent.parent / 'app/ui/src/api/tauri.rs').read_text(encoding='utf-8')
+        bridge.write_text(approved, encoding='utf-8')
+        fixture = ui / 'tests/fixture.mjs'
+        fixture.parent.mkdir()
+        fixture.write_text('window.__TAURI__ = { core: { invoke() {} } };', encoding='utf-8')
+        self.assertEqual(self.check().returncode, 0)
+
+        duplicate = ui / 'src/feature/api/tauri.rs'
+        duplicate.parent.mkdir(parents=True)
+        duplicate.write_text(approved, encoding='utf-8')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('src/feature/api/tauri.rs:', result.stderr)
+        self.assertIn('direct Tauri access is forbidden', result.stderr)
+
+    def test_existing_typed_bridge_cannot_invoke_a_raw_command_name(self):
+        bridge = self.root / 'ui-layer/src/api/tauri.rs'
+        bridge.parent.mkdir()
+        approved = (CHECK.parent.parent / 'app/ui/src/api/tauri.rs').read_text(encoding='utf-8')
+        bypass = approved.replace('invoke(C::NAME, args)', 'invoke("get_library", args)')
+        self.assertNotEqual(bypass, approved)
+        bridge.write_text(bypass, encoding='utf-8')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('the private Tauri bridge changed', result.stderr)
+
+    def test_inline_tauri_access_is_rejected_in_rust_and_trunk_html(self):
+        source = self.root / 'ui-layer/src/lib.rs'
+        source.write_text(
+            '#[wasm_bindgen(inline_js = r#"export function raw() { return window.__TAURI_INTERNALS__.invoke; }"#)]',
+            encoding='utf-8',
+        )
+        page = self.root / 'ui-layer/index.html'
+        page.write_text(
+            '<script>window.__TAURI__.core.invoke("get_library", {})</script>'
+            '<button onclick="window.__TAURI_INTERNALS__.invoke()">invoke</button>',
+            encoding='utf-8',
+        )
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('src/lib.rs: 1: direct Tauri access is forbidden', result.stderr)
+        self.assertEqual(result.stderr.count('index.html: direct Tauri access is forbidden'), 2)
+
     def test_static_dom_literals_urls_and_embedded_documents_are_rejected(self):
         for source in ['document.create_element("audio")', 'document.create_element("video")',
                        'node.set_attribute("src", "data:audio/wav;base64,AAA")',

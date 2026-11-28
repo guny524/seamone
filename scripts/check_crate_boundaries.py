@@ -1,9 +1,10 @@
-"""Check Cargo dependency directions and keep browser output out of the UI."""
+"""Check Cargo dependencies and the UI's host and audio boundaries."""
 
 import json
 import re
 import subprocess
 import sys
+from hashlib import sha256
 from pathlib import Path
 from html.parser import HTMLParser
 
@@ -45,6 +46,10 @@ WEB_OUTPUT_FEATURES = {'HtmlAudioElement', 'HtmlMediaElement', 'HtmlVideoElement
 
 
 MEDIA_TAGS = {'audio', 'video', 'iframe', 'embed', 'object'}
+UI_IPC_BRIDGE = Path('src/api/tauri.rs')
+UI_IPC_BRIDGE_SHA256 = 'f484204e2d81966ce4401b410eff59e275b7645ecd0b883a53724d8d2e1b6744'
+TAURI_IPC_GLOBAL = re.compile(r'\b(?:__TAURI__|__TAURI_INTERNALS__)\b')
+UI_IPC_ERROR = 'direct Tauri access is forbidden; use crate::api::call_typed and seamone_core::ipc::command'
 
 
 def media_literal(value):
@@ -65,6 +70,8 @@ def ui_html_errors(source):
                 self.errors.append('UI media elements are forbidden; use runtime output')
             if any(media_literal(value) for _, value in attrs if value is not None):
                 self.errors.append('UI media URL is forbidden; use runtime output')
+            if any(TAURI_IPC_GLOBAL.search(value) for _, value in attrs if value is not None):
+                self.errors.append(UI_IPC_ERROR)
 
         def handle_endtag(self, tag):
             if tag == 'script':
@@ -73,6 +80,8 @@ def ui_html_errors(source):
         def handle_data(self, data):
             if self.script and re.search(r'\b(?:Audio|AudioContext|BaseAudioContext|AudioWorkletNode)\b|data:(?:audio|video)', data, re.I):
                 self.errors.append('UI media JavaScript is forbidden; use runtime output')
+            if self.script and TAURI_IPC_GLOBAL.search(data):
+                self.errors.append(UI_IPC_ERROR)
 
     page = Page()
     page.feed(source)
@@ -91,6 +100,17 @@ def ui_output_errors(source):
             yield 'UI media markup or JavaScript is forbidden; use runtime output'
 
 
+def ui_ipc_errors(path, source):
+    if path == UI_IPC_BRIDGE:
+        if sha256(source.encode('utf-8')).hexdigest() != UI_IPC_BRIDGE_SHA256:
+            yield 'the private Tauri bridge changed; preserve call_typed and review the binding with the boundary check'
+        return
+    for token in tokens(source):
+        value = string_value(token)
+        if TAURI_IPC_GLOBAL.search(token.text if value is None else value):
+            line = source.count('\n', 0, token.start) + 1
+            yield f'{line}: {UI_IPC_ERROR}'
+
 
 def violations(packages):
     members = {package["name"]: Path(package["manifest_path"]).parent for package in packages}
@@ -107,12 +127,16 @@ def violations(packages):
                     owner, _, forwarded = item.partition('/')
                     if owner.rstrip('?') in aliases and forwarded in WEB_OUTPUT_FEATURES:
                         yield f"{manifest}: {feature}: UI web-sys output feature {forwarded} is forbidden; use runtime output"
-            html = Path(manifest).parent / 'index.html'
+            root = Path(manifest).parent
+            html = root / 'index.html'
             if html.is_file():
                 for error in ui_html_errors(html.read_text(encoding='utf-8')):
                     yield f"{html}: {error}"
-            for path in sorted((Path(manifest).parent / 'src').rglob('*.rs')):
-                for error in ui_output_errors(path.read_text(encoding='utf-8')):
+            for path in sorted((root / 'src').rglob('*.rs')):
+                source = path.read_text(encoding='utf-8')
+                for error in ui_output_errors(source):
+                    yield f"{path}: {error}"
+                for error in ui_ipc_errors(path.relative_to(root), source):
                     yield f"{path}: {error}"
         for feature, enabled in package.get("features", {}).items():
             if any(item == "test-support" or item.endswith("/test-support") for item in enabled):
