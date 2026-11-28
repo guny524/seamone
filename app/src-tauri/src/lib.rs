@@ -202,12 +202,12 @@ mod tests {
     }
 
     fn complete_playback(window: &tauri::WebviewWindow<tauri::test::MockRuntime>, session: &str) {
-        use seamone_core::{ipc::command, playback::State};
-        let playing = typed_reply::<command::ControlPlayback>(
+        use seamone_core::ipc::command;
+        let accepted = typed_reply::<command::ControlPlayback>(
             window,
             serde_json::json!({"session":session,"action":{"kind":"play"}}),
         );
-        assert_eq!(playing.state, State::Playing);
+        assert_eq!(accepted.session.as_deref(), Some(session));
         let state = window.state::<seamone_runtime::LibraryService>();
         seamone_runtime::test_support::advance_playback(&state, 60_000).unwrap();
         let status = typed_reply::<command::GetPlaybackStatus>(window, serde_json::json!({}));
@@ -713,7 +713,7 @@ mod tests {
         });
         assert!(invoke(&other, "get_recording_playback", preview_args.clone()).is_err());
         let preview = typed_reply::<command::GetRecordingPlayback>(&window, preview_args);
-        assert!(!preview.is_empty());
+        assert!(preview.starts_with("UklGR"));
         let removed = invoke(&window, "playback_ended", json!({"token":preview})).unwrap_err();
         assert_eq!(removed.as_str(), Some("Command playback_ended not found"));
         let old = typed_reply::<command::GetPlayback>(
