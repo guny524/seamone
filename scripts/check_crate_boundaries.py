@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 
 from rust_tokens import enclosing_attribute, module_path_attribute, tokens
 from check_review_writes import string_value
+from ui_entry import UI_DIST, UI_INDEX, tauri_config_errors, trunk_config_errors, trunk_html_errors
 
 
 WORKSPACE_IMPORTS = {
@@ -137,6 +138,12 @@ def ui_ipc_errors(path, source):
 
 def ui_source_errors(root, targets):
     source_dir = root.resolve() / 'src'
+    manifest = root / 'Cargo.toml'
+    if manifest.is_symlink():
+        yield f'{manifest}: the checked UI Cargo.toml must be a regular file'
+    dist = root / UI_DIST
+    if dist.is_symlink():
+        yield f'{dist}: Trunk output must stay in the checked UI directory'
     for target in targets:
         kind = set(target['kind'])
         path = Path(target['src_path'])
@@ -144,9 +151,15 @@ def ui_source_errors(root, targets):
             yield f'{path}: UI cannot generate Rust source with a Cargo build script'
         elif not kind & {'test', 'bench', 'example'} and not path.resolve().is_relative_to(source_dir):
             yield f'{path}: UI product Rust targets must start under src'
-    html = root / 'index.html'
-    if html.is_file():
-        for error in ui_html_errors(html.read_text(encoding='utf-8')):
+    yield from trunk_config_errors(root)
+    html = root / UI_INDEX
+    if html.is_symlink() or not html.is_file():
+        yield f'{html}: the checked Trunk entry must be a regular file'
+    else:
+        source = html.read_text(encoding='utf-8')
+        for error in ui_html_errors(source):
+            yield f'{html}: {error}'
+        for error in trunk_html_errors(source):
             yield f'{html}: {error}'
     for path in sorted((root / 'src').rglob('*')):
         if path.is_symlink():
@@ -159,8 +172,12 @@ def ui_source_errors(root, targets):
                 yield f'{path}: {error}'
 
 
-def violations(packages):
+def violations(packages, workspace):
     members = {package["name"]: Path(package["manifest_path"]).parent for package in packages}
+    if 'seamone-ui' not in members or 'seamone' not in members:
+        yield f'{workspace}: Cargo must include the checked UI and Tauri host packages'
+    else:
+        yield from tauri_config_errors(workspace, members['seamone'], members['seamone-ui'])
     for package in packages:
         name = package["name"]
         manifest = package["manifest_path"]
@@ -221,7 +238,9 @@ def main():
     )
     metadata = json.loads(result.stdout)
     members = set(metadata["workspace_members"])
-    errors = list(violations([p for p in metadata["packages"] if p["id"] in members]))
+    errors = list(violations(
+        [p for p in metadata["packages"] if p["id"] in members], Path(metadata['workspace_root']),
+    ))
     for error in errors:
         print(error, file=sys.stderr)
     return int(bool(errors))
