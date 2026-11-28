@@ -1,6 +1,6 @@
 # LLM 실수를 lint, build, compile 에서 거르게 폴더 구조와 검사를 바꾼다
 (이 파일: 기준 브랜치 develop 의 이슈 board, 트래커 https://github.com/guny524/seamone/issues/15)
-- 마지막 갱신: 2026-11-28 15:03 KST
+- 마지막 갱신: 2026-11-28 16:01 KST
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 사용자 지시 원문
@@ -52,8 +52,10 @@
 
 - [ ] 7-9. 재생 확인의 실제 장치 시험(사람): `make playback-device-proof` 를 macOS 내장 스피커, Bluetooth 이어폰, AirPlay 와 Windows, Linux 실제 기기에서 돌려 보고된 추가 출력 지연과 통과 여부를 이슈 log 에 적는다(Windows 의 `GetStreamLatency` 가 Bluetooth A2DP 지연을 담는지는 이 시험으로만 안다)
 - [x] 7-10. 화면, Tauri 처리 함수, 빌드 권한을 공용 IPC 명령 목록으로 연결했다. 잘못된 인자와 응답 타입, 등록하지 않은 명령, 다른 창, 기존 JSON을 시험했다. [전체 명령 공용 IPC 타입 PR (#27)](https://github.com/guny524/seamone/pull/27)
-- [ ] 7-11. 화면의 다른 모듈에서 별도 Tauri 연결을 추가하는 실수를 구조 검사로 잡는 방법을 검토한다. 정상 연결과 기존 UI 시험용 대역의 동작을 유지하며, 임시 복제본에서 금지된 연결이 실제로 거절되는지 확인한다
+- [x] 7-11. 다른 UI Rust 파일과 Trunk 시작 HTML의 직접 Tauri 연결을 검사하고 승인된 연결 파일의 해시를 대조했다. 연결 복제와 Rust 모듈 로딩 우회는 제품 복제본에서 거절됐고 23개 화면 시나리오가 통과했다. [화면의 Tauri 직접 연결 검사 PR (#29)](https://github.com/guny524/seamone/pull/29)
+- [ ] 7-12. Trunk가 실제로 여는 HTML과 Cargo manifest가 검사 대상과 같은지 확인한다. 기존 제품 빌드는 통과하고, 제품 진입점을 다른 파일로 돌리면 검사에서 드러나야 한다
+- [ ] 7-13. 잘못된 요청을 거절하는 시험 목록을 인자가 필요한 공용 명령 목록과 대조한다. 새 명령을 등록하고 거절 사례를 빼면 시험이 실패하는지 확인한다
 
 ## 9. 지금 상태
-- runtime 분리, CI 검사 기준 보호, lint 예외 제거, 장치 출력 기반 재생 확인과 앱 명령의 공용 타입이 `develop`에 들어갔다. 다음 작업은 다른 화면 모듈에서 새 Tauri 연결을 여는 실수를 구조 검사에서 거절하는 방법을 확인하는 일이다
+- runtime 분리, CI 검사 기준 보호, lint 예외 제거, 장치 출력 기반 재생 확인, 앱 명령의 공용 타입과 화면의 직접 연결 검사가 `develop`에 들어갔다. 다음 작업은 Trunk의 실제 제품 진입점과 검사 대상을 대조하는 일이다
 - 첫 전사 PR은 초기 runtime 구조를 반영한 뒤 최신 `develop`과 충돌 상태다. [첫 전사 PR (#11)](https://github.com/guny524/seamone/pull/11)
