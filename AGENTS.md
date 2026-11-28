@@ -13,6 +13,7 @@
 - 도메인은 OS I/O에 의존하지 않는다, `make check-domain`의 no_std 컴파일과 `make check-architecture`의 Cargo 검사가 이 경계를 지킨다
 - IPC 이름은 core의 catalog에 한 번만 쓴다, 같은 catalog로 handler와 build 권한 이름을 만들고 `make test`에서 창과 플랫폼 capability를 대조한다
 - 화면은 `crate::api::call_typed`로 호스트를 부른다, `make check-imports`는 비공개 연결 파일 `app/ui/src/api/tauri.rs`의 해시를 대조하고 다른 UI Rust 파일이나 Trunk 시작 HTML에 직접 쓰인 `__TAURI__`, `__TAURI_INTERNALS__`를 거절한다, 제품 Rust 타깃은 `src/`에서 시작하며 직접 쓴 모듈 경로 속성, `include!`와 그 별칭, build script, 소스 symlink, 속성 대괄호 안의 매크로 변수와 `$name!(...)` 형태의 호출을 검사한다
+- `make check-imports`는 Tauri가 사용하는 Trunk 설정과 UI의 `index.html`, 인접한 `Cargo.toml`과 `dist/`의 연결을 대조한다, 시작 HTML의 해시는 검토한 Rust 링크와 Trunk 스타일시트 링크를 고정한다, Trunk build hook과 Tauri overlay의 프런트엔드 build 설정은 거절한다
 - host와 runtime의 녹음 지원 플랫폼은 같아야 한다, host의 const assert가 컴파일할 때 CAPTURE_SUPPORTED와 host cfg를 대조한다, Whisper feature 전달은 `make test CARGO_FEATURES=desktop-whisper`에서 host를 통해서만 켜서 확인한다
 - runtime의 `test-support`는 host의 dev 의존에서만 켠다, Cargo 경계 검사가 제품 의존이나 feature의 전달로 켜는 것을 막고 IPC 시험은 합성 녹음과 전사 fixture를 쓴다
 - lint 예외는 없다, `make lint`와 `make check-architecture`는 비어 있는 `scripts/lint_exceptions.json`과 기준 ref(`LINT_BASE_REF`, 기본 `origin/develop`)를 대조해 Rust allow/expect와 Python noqa/type ignore, Cargo/Ruff 억제 추가를 거절한다, 공개 함수의 오류와 panic은 문서로 밝히고 값의 범위와 플랫폼별 책임은 타입과 함수로 나타낸다, lint 설정은 문서와 이름 lint를 켜거나 Ruff ignore를 줄이는 변경만 허용하고 나머지 표와 clippy 필수 명령은 유지한다, Ruff의 lint 밖 표 전체와 Ruff 필수 명령도 기준과 대조하며 Ruff extend는 거절한다, 기준 ref나 JSON을 읽지 못하면 실패한다

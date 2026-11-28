@@ -5,6 +5,8 @@
 TAURI_CLI_VERSION ?= 2.12.6
 TRUNK_VERSION ?= 0.22.2
 export TAURI_CLI_VERSION TRUNK_VERSION
+override TAURI_APP_PATH := $(CURDIR)/app/src-tauri
+export TAURI_APP_PATH
 
 # `make build TAURI_BUILD_ARGS="--bundles dmg"` 처럼 cargo tauri build 에 인자를 더한다.
 CARGO_FEATURES ?=
@@ -130,7 +132,7 @@ check-macos-dmg:
 build: check-imports
 	cargo tauri build $(CARGO_FEATURE_ARGS) $(TAURI_BUILD_ARGS)
 
-dev:
+dev: check-imports
 	cargo tauri dev $(CARGO_FEATURE_ARGS)
 
 clean:

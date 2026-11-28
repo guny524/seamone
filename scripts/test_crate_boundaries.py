@@ -9,6 +9,7 @@ from pathlib import Path
 from check_crate_boundaries import ui_output_errors, ui_html_errors
 
 CHECK = Path(__file__).with_name("check_crate_boundaries.py").resolve()
+HOST = "app/src-tauri"
 
 
 class DependencyBoundaries(unittest.TestCase):
@@ -18,11 +19,28 @@ class DependencyBoundaries(unittest.TestCase):
         temp = tempfile.TemporaryDirectory(dir=scratch)
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
-        (self.root / "Cargo.toml").write_text('[workspace]\nmembers = ["*layer"]\nresolver = "3"\n')
+        (self.root / "Cargo.toml").write_text('[workspace]\nmembers = ["*layer", "app/src-tauri"]\nresolver = "3"\n')
         for layer in ("core", "asr", "ui", "runtime"):
             self.crate(f"{layer}-layer", f"seamone-{layer}")
-        self.crate("host-layer", "seamone")
+        self.crate(HOST, "seamone")
         self.add("runtime-layer", '[features]\ntest-support = []\n')
+        self.ui = self.root / 'ui-layer'
+        self.trunk = self.ui / 'Trunk.toml'
+        self.trunk.write_text(
+            '[build]\ntarget = "index.html"\ndist = "dist"\n[serve]\nport = 1420\nopen = false\n',
+            encoding='utf-8',
+        )
+        self.page = self.ui / 'index.html'
+        self.approved_page = (CHECK.parent.parent / 'app/ui/index.html').read_text(encoding='utf-8')
+        self.page.write_text(self.approved_page, encoding='utf-8')
+        self.tauri = self.root / HOST / 'tauri.conf.json'
+        self.tauri.write_text(
+            '{"build":{"beforeDevCommand":{"script":"trunk serve","cwd":"../../ui-layer"},'
+            '"devUrl":"http://localhost:1420",'
+            '"beforeBuildCommand":{"script":"trunk build --release","cwd":"../../ui-layer"},'
+            '"frontendDist":"../../ui-layer/dist"}}',
+            encoding='utf-8',
+        )
 
     def crate(self, folder, name):
         path = self.root / folder
@@ -77,7 +95,7 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         self.assertIn("classify workspace crate bridge", result.stderr)
 
     def test_host_uses_runtime_instead_of_engine(self):
-        self.add("host-layer", '[dependencies]\nengine = {package="seamone-asr", path="../asr-layer"}\n')
+        self.add(HOST, '[dependencies]\nengine = {package="seamone-asr", path="../../asr-layer"}\n')
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("seamone_runtime::LibraryService", result.stderr)
@@ -85,10 +103,10 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
     def test_host_cannot_own_sqlite_or_wav_io(self):
         for dependency in ("rusqlite", "hound"):
             with self.subTest(dependency=dependency):
-                manifest = self.root / "host-layer/Cargo.toml"
+                manifest = self.root / HOST / "Cargo.toml"
                 original = manifest.read_text()
                 try:
-                    self.add("host-layer", f'[dependencies]\n{dependency} = "*"\n')
+                    self.add(HOST, f'[dependencies]\n{dependency} = "*"\n')
                     result = self.check()
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("seamone-runtime", result.stderr)
@@ -103,7 +121,7 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         self.assertIn("import tauri in seamone", result.stderr)
 
     def test_host_can_use_runtime_and_runtime_can_use_engine(self):
-        self.add("host-layer", '[dependencies]\nservice = {package="seamone-runtime", path="../runtime-layer"}\n')
+        self.add(HOST, '[dependencies]\nservice = {package="seamone-runtime", path="../../runtime-layer"}\n')
         self.add("runtime-layer", '[dependencies]\nengine = {package="seamone-asr", path="../asr-layer"}\n')
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -114,7 +132,7 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_host_cannot_use_an_unlisted_native_dependency(self):
-        self.add("host-layer", '[dependencies]\nsqlite = {package="libsqlite3-sys", version="*"}\n')
+        self.add(HOST, '[dependencies]\nsqlite = {package="libsqlite3-sys", version="*"}\n')
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("put native work in seamone-runtime", result.stderr)
@@ -122,17 +140,17 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
     def test_support_is_only_allowed_on_the_host_dev_edge(self):
         for kind in ("dependencies", "build-dependencies", "dev-dependencies"):
             with self.subTest(kind=kind):
-                path = self.root / "host-layer/Cargo.toml"
+                path = self.root / HOST / "Cargo.toml"
                 original = path.read_text()
                 try:
-                    self.add("host-layer", f'[{kind}]\nservice = {{package="seamone-runtime", path="../runtime-layer", features=["test-support"]}}\n')
+                    self.add(HOST, f'[{kind}]\nservice = {{package="seamone-runtime", path="../../runtime-layer", features=["test-support"]}}\n')
                     result = self.check()
                     self.assertEqual(result.returncode == 0, kind == "dev-dependencies", result.stderr)
                 finally:
                     path.write_text(original)
 
     def test_support_cannot_be_forwarded_by_a_product_feature(self):
-        self.add("host-layer", '[dependencies]\nservice = {package="seamone-runtime", path="../runtime-layer"}\n[features]\ndefault=["service/test-support"]\n')
+        self.add(HOST, '[dependencies]\nservice = {package="seamone-runtime", path="../../runtime-layer"}\n[features]\ndefault=["service/test-support"]\n')
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("test-support belongs only", result.stderr)
@@ -328,8 +346,88 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
                 result = self.check()
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('index.html: UI media', result.stderr)
-        page.write_text('<!doctype html><html><head><title>seamone</title></head><body><p>audio recording</p></body></html>')
+        page.write_text(self.approved_page, encoding='utf-8')
         self.assertEqual(self.check().returncode, 0)
+
+    def test_trunk_config_cannot_change_the_entry_output_or_add_hooks(self):
+        approved = self.trunk.read_text(encoding='utf-8')
+        (self.ui / 'alternate.html').write_text('<link data-trunk rel="rust">', encoding='utf-8')
+        variants = [
+            approved.replace('index.html', 'alternate.html'),
+            approved.replace('dist = "dist"', 'dist = "alternate"'),
+            'dist = "alternate"\n' + approved,
+            approved + '\n[[hooks]]\nstage = "pre_build"\ncommand = "replace-entry"\n',
+        ]
+        for config in variants:
+            with self.subTest(config=config):
+                self.trunk.write_text(config, encoding='utf-8')
+                result = self.check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('Trunk.toml: use the approved Trunk configuration', result.stderr)
+        self.trunk.unlink()
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Trunk.toml: cannot read the approved Trunk configuration', result.stderr)
+
+    def test_trunk_rust_link_must_use_its_checked_manifest_and_the_default_target(self):
+        for markup in [
+            self.approved_page.replace('rel="rust"', 'rel="rust" href="../asr-layer/Cargo.toml"'),
+            self.approved_page.replace('rel="rust"', 'rel="rust" data-bin="other"'),
+            self.approved_page.replace('<link data-trunk rel="rust" />', ''),
+            self.approved_page + '<link data-trunk rel="rust">',
+            '<!--> <link data-trunk rel="rust" href="../other/Cargo.toml"> --><!-- -- >'
+            '<link data-trunk rel="rust"> -->',
+        ]:
+            with self.subTest(markup=markup):
+                self.page.write_text(markup, encoding='utf-8')
+                result = self.check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('the checked Trunk entry changed', result.stderr)
+
+    def test_trunk_product_html_can_load_css_but_cannot_add_a_script_pipeline(self):
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.page.write_text(
+            self.approved_page + '<link data-trunk rel="copy-file" href="other.js"><script src="other.js"></script>',
+            encoding='utf-8',
+        )
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('the checked Trunk entry changed', result.stderr)
+
+    def test_tauri_build_directory_and_overlay_must_use_the_checked_trunk_project(self):
+        overlay = self.tauri.with_name('tauri.whisper-macos.conf.json')
+        overlay.write_text('{"bundle":{"macOS":{"minimumSystemVersion":"11.0"}}}', encoding='utf-8')
+        approved = self.tauri.read_text(encoding='utf-8')
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for config in [
+            approved.replace('trunk build --release', 'trunk build alternate.html'),
+            approved.replace('../ui-layer', '../asr-layer'),
+            approved.replace('../ui-layer/dist', '../asr-layer/dist'),
+        ]:
+            with self.subTest(config=config):
+                self.tauri.write_text(config, encoding='utf-8')
+                result = self.check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('Tauri build and dev must use Trunk and the checked UI directory', result.stderr)
+        self.tauri.write_text(approved, encoding='utf-8')
+        overlay.write_text('{"build":{"frontendDist":"../other/dist"}}', encoding='utf-8')
+        self.tauri.with_name('Tauri.macos.conf.json').write_text('{"build":{"frontendDist":"../other/dist"}}')
+        self.tauri.with_name('tauri.windows.toml').write_text('[build]\nfrontendDist = "elsewhere"')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Tauri overlays cannot change the checked frontend build configuration', result.stderr)
+        self.assertIn('Tauri.macos.conf.json: Tauri overlays cannot change', result.stderr)
+        self.assertIn('tauri.windows.toml: use the approved JSON Tauri configuration format', result.stderr)
+
+    def test_checked_host_must_be_the_project_used_by_the_release_commands(self):
+        workspace = self.root / 'Cargo.toml'
+        workspace.write_text(workspace.read_text().replace('app/src-tauri', 'another/host'))
+        self.crate('another/host', 'seamone')
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('the checked Tauri host must be app/src-tauri', result.stderr)
 
 
 if __name__ == "__main__":
