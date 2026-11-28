@@ -421,3 +421,8 @@
 ## 2026-11-28 15:03 앱 명령 22개의 공용 타입 병합
 - Opus 5.5 xhigh 검토가 빠진 잘못된 요청 사례 아홉 개를 찾았다. `dd14dda`부터 인자를 받는 명령 14개가 모두 잘못된 JSON을 거절하는지 확인하며, 다른 창 시험은 공용 명령 목록 22개와 사례 이름을 대조한다. 재검토 세션 `59deca49-bbae-4881-a128-b2683d4faa9a`에서 차단 결함은 없었다
 - `dd14dda`의 CI에서 기존 JSON, 창·플랫폼 권한, 미등록 명령과 잘못된 타입의 컴파일 거절, Chrome 23건이 통과했다. 필수 패키지 여섯 작업을 확인한 뒤 `2fa33f5`로 병합했다. [전체 명령 공용 IPC 타입 PR (#27)](https://github.com/guny524/seamone/pull/27) · [CI](https://github.com/guny524/seamone/actions/runs/46114213476) · [패키지 빌드](https://github.com/guny524/seamone/actions/runs/46114213428)
+
+## 2026-11-28 16:01 화면의 Tauri 직접 연결 검사 병합
+- 제품 화면에서 같은 Tauri binding을 한 번 더 선언해도 기존 검사가 통과했다. 비공개 연결과 공용 호출 함수를 한 파일에 모으고 `check-imports`가 파일 해시와 다른 Rust 소스·Trunk 시작 HTML의 직접 Tauri 전역 이름을 대조하도록 했다
+- Opus 5.5 xhigh가 찾은 `include!`, 외부 모듈 경로, 내부 속성과 매크로 변수를 재현해 검사에 반영했다. Rust 도메인 컴파일에서 허용되는 구문임을 확인했고, 최종 제품 복제본에서는 직접 연결·경로·매크로 위반이 각각 거절됐으며 일반 비교 매크로가 통과했다. 최종 재검토 세션 `70e5eca7-2e0b-45f5-b812-30da363d8a94`
+- `e1433b1`의 원격 CI에서 구조 경계 시험 29건과 Chrome 23건, 패키지 빌드 여섯 작업을 확인했다. 보호 파일 변경을 확인하는 관문만 남아 기존 위임 절차에 따라 검토와 시험을 대조한 뒤 관리자 권한으로 이 PR을 `495dc6b`에 병합했다. [화면의 Tauri 직접 연결 검사 PR (#29)](https://github.com/guny524/seamone/pull/29) · [원격 CI](https://github.com/guny524/seamone/actions/runs/46118868204) · [패키지 빌드](https://github.com/guny524/seamone/actions/runs/46118868208)
