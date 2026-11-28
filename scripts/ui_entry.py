@@ -13,7 +13,7 @@ TRUNK_CONFIG = {
     'build': {'target': UI_INDEX, 'dist': UI_DIST},
     'serve': {'port': 1420, 'open': False},
 }
-TAURI_CONFIG_NAMES = ('tauri.conf.json', 'tauri.conf.json5', 'Tauri.toml')
+TAURI_HOST = Path('app/src-tauri')
 
 
 def read_config(path, parse):
@@ -66,7 +66,10 @@ def trunk_html_errors(source):
 
 
 def tauri_config_errors(workspace, host, ui):
-    path = host / TAURI_CONFIG_NAMES[0]
+    if host != workspace / TAURI_HOST or host.resolve() != workspace.resolve() / TAURI_HOST:
+        yield f'{host}: the checked Tauri host must be app/src-tauri'
+        return
+    path = host / 'tauri.conf.json'
     expected_dir = Path(os.path.relpath(ui, host)).as_posix()
     expected_build = {
         'beforeDevCommand': {'script': 'trunk serve', 'cwd': expected_dir},
@@ -82,12 +85,6 @@ def tauri_config_errors(workspace, host, ui):
         if actual.get('build') != expected_build:
             yield f'{path}: Tauri build and dev must use Trunk and the checked UI directory'
 
-    for directory in (workspace, workspace / 'src-tauri'):
-        if directory != host:
-            for name in TAURI_CONFIG_NAMES:
-                candidate = directory / name
-                if candidate.exists() or candidate.is_symlink():
-                    yield f'{candidate}: use the Tauri configuration next to the checked host Cargo.toml'
     for pattern in ('tauri*.conf.json5', 'Tauri*.toml'):
         for alternate in sorted(host.glob(pattern)):
             yield f'{alternate}: use the approved JSON Tauri configuration format'
