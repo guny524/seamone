@@ -1,9 +1,6 @@
 use seamone_core::{
-    AppInfo,
-    capture::Status,
-    error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage},
     ipc::{TypedCommand, command},
-    review::{LibraryPage, RecordingInfo, Segment},
+    review::RecordingInfo,
 };
 use seamone_runtime::LibraryService;
 use serde::Deserialize;
@@ -27,7 +24,9 @@ fn trusted<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn get_app_info<R: Runtime>(window: WebviewWindow<R>) -> Result<AppInfo, String> {
+pub async fn get_app_info<R: Runtime>(
+    window: WebviewWindow<R>,
+) -> Result<<command::GetAppInfo as TypedCommand>::Reply, String> {
     trusted(&window)?;
     Ok(seamone_core::app_info())
 }
@@ -36,7 +35,7 @@ pub async fn get_app_info<R: Runtime>(window: WebviewWindow<R>) -> Result<AppInf
 pub async fn get_library<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-) -> Result<LibraryPage, String> {
+) -> Result<<command::GetLibrary as TypedCommand>::Reply, String> {
     trusted(&window)?;
     state.library()
 }
@@ -45,18 +44,18 @@ pub async fn get_library<R: Runtime>(
 pub async fn get_segments<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-    recording_id: String,
-    offset: u32,
-) -> Result<seamone_core::review::SegmentPage, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::GetSegments as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::GetSegments>(message.body())?;
     trusted(&window)?;
-    state.segments(&recording_id, offset)
+    state.segments(&args.recording_id, args.offset)
 }
 
 #[tauri::command]
 pub async fn import_audio<R: Runtime>(
     app: AppHandle<R>,
     window: WebviewWindow<R>,
-) -> Result<Option<RecordingInfo>, String> {
+) -> Result<<command::ImportAudio as TypedCommand>::Reply, String> {
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         let Some(path) = pick_audio(&window) else {
@@ -134,14 +133,18 @@ fn import_selected<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn get_capture_status<R: Runtime>(window: WebviewWindow<R>) -> Result<Status, String> {
+pub async fn get_capture_status<R: Runtime>(
+    window: WebviewWindow<R>,
+) -> Result<<command::GetCaptureStatus as TypedCommand>::Reply, String> {
     trusted(&window)?;
     Ok(window.state::<LibraryService>().capture_status())
 }
 
 #[cfg(native_capture)]
 #[tauri::command]
-pub async fn start_recording<R: Runtime>(window: WebviewWindow<R>) -> Result<Status, String> {
+pub async fn start_recording<R: Runtime>(
+    window: WebviewWindow<R>,
+) -> Result<<command::StartRecording as TypedCommand>::Reply, String> {
     trusted(&window)?;
     window.state::<LibraryService>().start_recording()
 }
@@ -150,14 +153,14 @@ pub async fn start_recording<R: Runtime>(window: WebviewWindow<R>) -> Result<Sta
 #[tauri::command]
 pub async fn finish_recording<R: Runtime>(
     window: WebviewWindow<R>,
-    session_id: String,
-    save: bool,
-) -> Result<Option<RecordingInfo>, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::FinishRecording as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::FinishRecording>(message.body())?;
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         window
             .state::<LibraryService>()
-            .finish_recording(&session_id, save)
+            .finish_recording(&args.session_id, args.save)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -167,11 +170,12 @@ pub async fn finish_recording<R: Runtime>(
 pub async fn transcribe_recording<R: Runtime>(
     app: AppHandle<R>,
     window: WebviewWindow<R>,
-    recording_id: String,
-) -> Result<Vec<Segment>, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::TranscribeRecording as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::TranscribeRecording>(message.body())?;
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<LibraryService>().transcribe(&recording_id)
+        app.state::<LibraryService>().transcribe(&args.recording_id)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -181,7 +185,7 @@ pub async fn transcribe_recording<R: Runtime>(
 pub async fn select_model<R: Runtime>(
     app: AppHandle<R>,
     window: WebviewWindow<R>,
-) -> Result<bool, String> {
+) -> Result<<command::SelectModel as TypedCommand>::Reply, String> {
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         if !LibraryService::inference_available() { return Err("이 설치본에는 Whisper 엔진이 없습니다. desktop-whisper feature로 만든 데스크톱 설치본을 사용하세요.".into()); }
@@ -222,31 +226,33 @@ pub async fn get_recording_playback<R: Runtime>(
 pub async fn get_error_marks<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-    recording_id: String,
-    offset: u32,
-) -> Result<ErrorMarkPage, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::GetErrorMarks as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::GetErrorMarks>(message.body())?;
     trusted(&window)?;
-    state.error_marks(&recording_id, offset)
+    state.error_marks(&args.recording_id, args.offset)
 }
 
 #[tauri::command]
 pub async fn save_error_mark<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-    mark: ErrorMark,
-) -> Result<(), String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::SaveErrorMark as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::SaveErrorMark>(message.body())?;
     trusted(&window)?;
-    state.save_error_mark(&mark)
+    state.save_error_mark(&args.mark)
 }
 
 #[tauri::command]
 pub async fn save_error_marks<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-    batch: ErrorMarkBatch,
-) -> Result<(), String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::SaveErrorMarks as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::SaveErrorMarks>(message.body())?;
     trusted(&window)?;
-    state.save_error_marks(&batch)
+    state.save_error_marks(&args.batch)
 }
 
 #[tauri::command]
@@ -319,7 +325,7 @@ fn ipc_args<C: TypedCommand>(body: &ipc::InvokeBody) -> Result<C::Args, String> 
 pub async fn dismiss_info<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-) -> Result<(), String> {
+) -> Result<<command::DismissInfo as TypedCommand>::Reply, String> {
     trusted(&window)?;
     state.dismiss_info()
 }
@@ -328,20 +334,24 @@ pub async fn dismiss_info<R: Runtime>(
 pub async fn export_text<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-    recording_id: String,
-) -> Result<String, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::ExportText as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::ExportText>(message.body())?;
     trusted(&window)?;
-    state.export_text(&recording_id)
+    state.export_text(&args.recording_id)
 }
 
 #[tauri::command]
 pub async fn save_text_file<R: Runtime>(
     app: AppHandle<R>,
     window: WebviewWindow<R>,
-    recording_id: String,
-) -> Result<bool, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::SaveTextFile as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::SaveTextFile>(message.body())?;
     trusted(&window)?;
-    let text = app.state::<LibraryService>().export_text(&recording_id)?;
+    let text = app
+        .state::<LibraryService>()
+        .export_text(&args.recording_id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let Some(path) = app
             .dialog()
@@ -383,10 +393,13 @@ pub async fn save_text_file<R: Runtime>(
 pub async fn copy_saved_text<R: Runtime>(
     app: AppHandle<R>,
     window: WebviewWindow<R>,
-    recording_id: String,
-) -> Result<(), String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::CopySavedText as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::CopySavedText>(message.body())?;
     trusted(&window)?;
-    let text = app.state::<LibraryService>().export_text(&recording_id)?;
+    let text = app
+        .state::<LibraryService>()
+        .export_text(&args.recording_id)?;
     app.clipboard()
         .write_text(text)
         .map_err(|e| format!("복사하지 못했습니다: {e}. 텍스트 파일 저장을 사용할 수 있습니다."))

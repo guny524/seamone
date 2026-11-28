@@ -8,12 +8,10 @@ const _: () = assert!(seamone_runtime::CAPTURE_SUPPORTED == cfg!(native_capture)
 /// 앱 껍데기가 화면에 내주는 command 를 등록한다, 실제 앱과 시험이 같은 등록을 쓴다.
 fn register_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     macro_rules! handlers {
-        (shared { $($_variant:ident => $handler:ident,)* }
-         typed { $($_typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
-         desktop_capture { $($_capture_variant:ident => $capture_handler:ident,)* }) => {
+        (shared { $($_variant:ident => $handler:ident: $args:ty, $reply:ty;)* }
+         desktop_capture { $($_capture_variant:ident => $capture_handler:ident: $capture_args:ty, $capture_reply:ty;)* }) => {
             tauri::generate_handler![
                 $(commands::$handler,)*
-                $(commands::$typed_handler,)*
                 $(#[cfg(native_capture)] commands::$capture_handler,)*
             ]
         };
@@ -116,10 +114,9 @@ mod tests {
         }
 
         macro_rules! check_grants {
-            (shared { $($_variant:ident => $shared:ident,)* }
-             typed { $($_typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
-             desktop_capture { $($_capture_variant:ident => $capture:ident,)* }) => {{
-                check(include_str!("../capabilities/default.json"), "default", &[$(stringify!($shared),)* $(stringify!($typed_handler),)*], None);
+            (shared { $($_variant:ident => $shared:ident: $args:ty, $reply:ty;)* }
+             desktop_capture { $($_capture_variant:ident => $capture:ident: $capture_args:ty, $capture_reply:ty;)* }) => {{
+                check(include_str!("../capabilities/default.json"), "default", &[$(stringify!($shared),)*], None);
                 check(
                     include_str!("../capabilities/capture.json"),
                     "capture",
@@ -245,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn registered_playback_commands_reject_malformed_arguments() {
+    fn registered_commands_reject_malformed_arguments() {
         use seamone_core::{
             ipc::{TypedCommand, command},
             playback::State,
@@ -273,13 +270,42 @@ mod tests {
                 command::ControlPlayback::NAME,
                 json!({"session":"session","action":"play"}),
             ),
+            (
+                command::GetSegments::NAME,
+                json!({"recording_id":"recording","offset":0}),
+            ),
+            (command::TranscribeRecording::NAME, json!({"recordingId":1})),
+            (
+                command::GetErrorMarks::NAME,
+                json!({"recordingId":"recording","offset":"0"}),
+            ),
+            (
+                command::SaveErrorMark::NAME,
+                json!({"mark":{"id":"mark","recording_id":"recording","recording_revision":1}}),
+            ),
+            (
+                command::SaveErrorMarks::NAME,
+                json!({"batch":{"id":"batch","recording_id":"recording","recording_revision":1,"ranges":{}}}),
+            ),
+            (
+                command::ExportText::NAME,
+                json!({"recording_id":"recording"}),
+            ),
+            (command::CopySavedText::NAME, json!(["recording"])),
+            (command::SaveTextFile::NAME, json!({"recordingId":1})),
+            #[cfg(native_capture)]
+            (
+                command::FinishRecording::NAME,
+                json!({"sessionId":"session","save":"true"}),
+            ),
         ] {
             let error = invoke(&window, name, malformed).unwrap_err();
             let prefix = format!("invalid args for command `{name}`:");
             assert!(
                 error
                     .as_str()
-                    .is_some_and(|message| message.starts_with(&prefix))
+                    .is_some_and(|message| message.starts_with(&prefix)),
+                "{name}: {error}"
             );
         }
         for ignored in [json!({}), json!({"extra":1}), json!([])] {
@@ -385,24 +411,23 @@ mod tests {
             ("export_text", json!({"recordingId":"missing"})),
             ("copy_saved_text", json!({"recordingId":"missing"})),
             ("save_text_file", json!({"recordingId":"missing"})),
-        ];
-        for (command, args) in cases {
-            let error = invoke(&other, command, args).unwrap_err();
-            assert!(
-                error
-                    .as_str()
-                    .is_some_and(|message| message.contains("이 창")),
-                "{command}: {error}"
-            );
-        }
-        #[cfg(native_capture)]
-        for (command, args) in [
+            #[cfg(native_capture)]
             ("start_recording", json!({})),
+            #[cfg(native_capture)]
             (
                 "finish_recording",
                 json!({"sessionId":"missing","save":true}),
             ),
-        ] {
+        ];
+        #[cfg(native_capture)]
+        {
+            let mut tested = cases.each_ref().map(|(name, _)| *name);
+            tested.sort_unstable();
+            let mut registered = seamone_core::ipc::COMMAND_NAMES.to_vec();
+            registered.sort_unstable();
+            assert_eq!(tested.as_slice(), registered.as_slice());
+        }
+        for (command, args) in cases {
             let error = invoke(&other, command, args).unwrap_err();
             assert!(
                 error

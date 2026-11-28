@@ -32,7 +32,7 @@ pub fn sample_count_as_f64(samples: u64) -> f64 {
 pub const APP_NAME: &str = "seamone";
 
 /// 화면이 앱 껍데기에 앱 이름과 판 번호를 물을 때 부르는 Tauri command 의 이름, 껍데기의 함수 이름과 같다.
-pub const COMMAND_GET_APP_INFO: &str = ipc::Command::GetAppInfo.name();
+pub const COMMAND_GET_APP_INFO: &str = <ipc::command::GetAppInfo as ipc::TypedCommand>::NAME;
 
 /// 앱 이름과 판 번호, 앱 껍데기가 Tauri command 로 돌려주고 화면이 그대로 받는다.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

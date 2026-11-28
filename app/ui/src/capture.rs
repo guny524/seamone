@@ -2,10 +2,9 @@ use crate::api;
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     capture::{MAX_RECORDING_SECONDS, Status},
-    ipc::Command,
+    ipc::{EmptyArgs, FinishRecordingArgs, command},
     review::RecordingInfo,
 };
-use serde_json::json;
 use std::time::Duration;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -74,7 +73,7 @@ impl Microphone {
         self.polling.set(true);
         let version = self.version.get_untracked();
         spawn_local(async move {
-            let result = api::call::<Status>(Command::GetCaptureStatus, json!({})).await;
+            let result = api::call_typed::<command::GetCaptureStatus>(EmptyArgs {}).await;
             self.polling.set(false);
             if version != self.version.get_untracked() {
                 return;
@@ -104,7 +103,7 @@ impl Microphone {
         }
         self.begin(Action::Start);
         spawn_local(async move {
-            match api::call::<Status>(Command::StartRecording, json!({})).await {
+            match api::call_typed::<command::StartRecording>(EmptyArgs {}).await {
                 Ok(status) => self.status.set(status),
                 Err(error) => self.error.set(error),
             }
@@ -126,10 +125,10 @@ impl Microphone {
         };
         self.begin(if save { Action::Save } else { Action::Cancel });
         spawn_local(async move {
-            match api::call::<Option<RecordingInfo>>(
-                Command::FinishRecording,
-                json!({"sessionId": id, "save": save}),
-            )
+            match api::call_typed::<command::FinishRecording>(FinishRecordingArgs {
+                session_id: id,
+                save,
+            })
             .await
             {
                 Ok(Some(info)) => {
