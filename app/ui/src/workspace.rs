@@ -2,8 +2,9 @@ use crate::{api, quick_review::QuickReview};
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkPage},
-    ipc::{Command, SaveReview},
-    review::{Action, LibraryPage, PlaybackReply, RecordingInfo, Request, Segment},
+    ipc::{Command, ControlPlaybackArgs, SaveReview, SegmentPlaybackArgs, command},
+    playback::Action as PlaybackAction,
+    review::{Action, LibraryPage, RecordingInfo, Request, Segment},
     review_flow::{ReviewFlow, ReviewMode, Ticket},
 };
 use serde_json::json;
@@ -329,10 +330,10 @@ impl Workspace {
         self.playback.set(None);
         self.error.set(String::new());
         spawn_local(async move {
-            let result = api::call::<PlaybackReply>(
-                Command::GetPlayback,
-                json!({"segmentId":ticket.frame.id,"revision":ticket.frame.revision}),
-            )
+            let result = api::call_typed::<command::GetPlayback>(SegmentPlaybackArgs {
+                segment_id: ticket.frame.id.clone(),
+                revision: ticket.frame.revision,
+            })
             .await;
             match result {
                 Ok(reply) => {
@@ -343,10 +344,10 @@ impl Workspace {
                         Self::stop_session(reply.session);
                         return;
                     }
-                    let played = api::call::<seamone_core::playback::Status>(
-                        Command::ControlPlayback,
-                        json!({"session":reply.session,"action":{"kind":"play"}}),
-                    )
+                    let played = api::call_typed::<command::ControlPlayback>(ControlPlaybackArgs {
+                        session: reply.session.clone(),
+                        action: PlaybackAction::Play,
+                    })
                     .await;
                     let mut active = false;
                     if played.is_ok() {
@@ -374,10 +375,10 @@ impl Workspace {
         playback: &Playback,
         action: seamone_core::playback::Action,
     ) -> Result<seamone_core::playback::Status, String> {
-        api::call::<seamone_core::playback::Status>(
-            Command::ControlPlayback,
-            json!({"session":playback.session,"action":action}),
-        )
+        api::call_typed::<command::ControlPlayback>(ControlPlaybackArgs {
+            session: playback.session.clone(),
+            action,
+        })
         .await
     }
 
@@ -471,7 +472,8 @@ impl Workspace {
         };
         let proof = self.proof.get_untracked();
         spawn_local(async move {
-            let result = api::save_review(SaveReview { request, proof }).await;
+            let result =
+                api::call_typed::<command::SaveReview>(SaveReview { request, proof }).await;
             match result {
                 Ok(saved) => {
                     let mut active = false;

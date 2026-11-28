@@ -2,8 +2,8 @@ use seamone_core::{
     AppInfo,
     capture::Status,
     error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage},
-    ipc::{SaveReview, SaveReviewReply},
-    review::{LibraryPage, PlaybackReply, RecordingInfo, SampleRange, Segment},
+    ipc::{TypedCommand, command},
+    review::{LibraryPage, RecordingInfo, Segment},
 };
 use seamone_runtime::LibraryService;
 use serde::Deserialize;
@@ -194,14 +194,14 @@ pub async fn select_model<R: Runtime>(
 #[tauri::command]
 pub async fn get_playback<R: Runtime>(
     window: WebviewWindow<R>,
-    segment_id: String,
-    revision: u64,
-) -> Result<PlaybackReply, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::GetPlayback as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::GetPlayback>(message)?;
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         window
             .state::<LibraryService>()
-            .playback(&segment_id, revision)
+            .playback(&args.segment_id, args.revision)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -211,12 +211,11 @@ pub async fn get_playback<R: Runtime>(
 pub async fn get_recording_playback<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-    recording_id: String,
-    revision: u64,
-    range: SampleRange,
-) -> Result<String, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::GetRecordingPlayback as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::GetRecordingPlayback>(message)?;
     trusted(&window)?;
-    state.recording_playback(&recording_id, revision, range)
+    state.recording_playback(&args.recording_id, args.revision, args.range)
 }
 
 #[tauri::command]
@@ -253,14 +252,14 @@ pub async fn save_error_marks<R: Runtime>(
 #[tauri::command]
 pub async fn control_playback<R: Runtime>(
     window: WebviewWindow<R>,
-    session: String,
-    action: seamone_core::playback::Action,
-) -> Result<seamone_core::playback::Status, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::ControlPlayback as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::ControlPlayback>(message)?;
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         window
             .state::<LibraryService>()
-            .control_playback(&session, action)
+            .control_playback(&args.session, args.action)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -269,7 +268,7 @@ pub async fn control_playback<R: Runtime>(
 #[tauri::command]
 pub async fn get_playback_status<R: Runtime>(
     window: WebviewWindow<R>,
-) -> Result<seamone_core::playback::Status, String> {
+) -> Result<<command::GetPlaybackStatus as TypedCommand>::Reply, String> {
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || window.state::<LibraryService>().playback_status())
         .await
@@ -279,15 +278,16 @@ pub async fn get_playback_status<R: Runtime>(
 #[tauri::command]
 pub async fn play_recording<R: Runtime>(
     window: WebviewWindow<R>,
-    recording_id: String,
-    revision: u64,
-    range: SampleRange,
-) -> Result<seamone_core::playback::Status, String> {
+    message: ipc::Request<'_>,
+) -> Result<<command::PlayRecording as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::PlayRecording>(message)?;
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
-        window
-            .state::<LibraryService>()
-            .play_recording(&recording_id, revision, range)
+        window.state::<LibraryService>().play_recording(
+            &args.recording_id,
+            args.revision,
+            args.range,
+        )
     })
     .await
     .map_err(|e| e.to_string())?
@@ -298,17 +298,21 @@ pub async fn save_review<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
     message: ipc::Request<'_>,
-) -> Result<SaveReviewReply, String> {
+) -> Result<<command::SaveReview as TypedCommand>::Reply, String> {
+    let args = ipc_args::<command::SaveReview>(message)?;
+    trusted(&window)?;
+    state.review(&args.request, args.proof.as_deref())
+}
+
+fn ipc_args<C: TypedCommand>(message: ipc::Request<'_>) -> Result<C::Args, String> {
     let ipc::InvokeBody::Json(body @ serde_json::Value::Object(_)) = message.body() else {
         return Err(format!(
             "invalid args for command `{}`: expected a JSON object",
-            SaveReview::NAME
+            C::NAME
         ));
     };
-    let args = SaveReview::deserialize(body)
-        .map_err(|error| format!("invalid args for command `{}`: {error}", SaveReview::NAME))?;
-    trusted(&window)?;
-    state.review(&args.request, args.proof.as_deref())
+    C::Args::deserialize(body)
+        .map_err(|error| format!("invalid args for command `{}`: {error}", C::NAME))
 }
 
 #[tauri::command]

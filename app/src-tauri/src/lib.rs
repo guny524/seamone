@@ -9,7 +9,7 @@ const _: () = assert!(seamone_runtime::CAPTURE_SUPPORTED == cfg!(native_capture)
 fn register_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     macro_rules! handlers {
         (shared { $($_variant:ident => $handler:ident,)* }
-         typed { $($_typed:ident => $typed_handler:ident,)* }
+         typed { $($_typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
          desktop_capture { $($_capture_variant:ident => $capture_handler:ident,)* }) => {
             tauri::generate_handler![
                 $(commands::$handler,)*
@@ -117,7 +117,7 @@ mod tests {
 
         macro_rules! check_grants {
             (shared { $($_variant:ident => $shared:ident,)* }
-             typed { $($_typed:ident => $typed_handler:ident,)* }
+             typed { $($_typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
              desktop_capture { $($_capture_variant:ident => $capture:ident,)* }) => {{
                 check(include_str!("../capabilities/default.json"), "default", &[$(stringify!($shared),)* $(stringify!($typed_handler),)*], None);
                 check(

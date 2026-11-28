@@ -1,4 +1,7 @@
-use seamone_core::ipc::{Command, SaveReview, SaveReviewReply};
+use seamone_core::{
+    ipc::{Command, ControlPlaybackArgs, TypedCommand, command},
+    playback::Action,
+};
 use serde::{Serialize, de::DeserializeOwned};
 use wasm_bindgen::prelude::*;
 
@@ -21,8 +24,8 @@ pub async fn call<T: DeserializeOwned>(
     invoke_json(command.name(), args).await
 }
 
-pub async fn save_review(args: SaveReview) -> Result<SaveReviewReply, String> {
-    invoke_json(SaveReview::NAME, args).await
+pub async fn call_typed<C: TypedCommand>(args: C::Args) -> Result<C::Reply, String> {
+    invoke_json(C::NAME, args).await
 }
 
 async fn invoke_json<T: DeserializeOwned>(name: &str, args: impl Serialize) -> Result<T, String> {
@@ -37,10 +40,10 @@ async fn invoke_json<T: DeserializeOwned>(name: &str, args: impl Serialize) -> R
 
 pub fn stop_playback(session: String) {
     leptos::task::spawn_local(async move {
-        let _ = call::<seamone_core::playback::Status>(
-            Command::ControlPlayback,
-            serde_json::json!({"session":session,"action":{"kind":"stop"}}),
-        )
+        let _ = call_typed::<command::ControlPlayback>(ControlPlaybackArgs {
+            session,
+            action: Action::Stop,
+        })
         .await;
     });
 }
