@@ -265,19 +265,21 @@ mod tests {
             },
             json!({"sessionId":"session","save":true}),
         );
-        assert_arguments::<command::GetSegments>(
-            RecordingPageArgs {
-                recording_id: "recording".into(),
-                offset: 32,
-            },
-            json!({"recordingId":"recording","offset":32}),
-        );
-        assert_arguments::<command::SaveTextFile>(
-            RecordingArgs {
-                recording_id: "recording".into(),
-            },
-            json!({"recordingId":"recording"}),
-        );
+        let page = RecordingPageArgs {
+            recording_id: "recording".into(),
+            offset: 32,
+        };
+        let page_json = json!({"recordingId":"recording","offset":32});
+        assert_arguments::<command::GetSegments>(page.clone(), page_json.clone());
+        assert_arguments::<command::GetErrorMarks>(page, page_json);
+        let recording = RecordingArgs {
+            recording_id: "recording".into(),
+        };
+        let recording_json = json!({"recordingId":"recording"});
+        assert_arguments::<command::TranscribeRecording>(recording.clone(), recording_json.clone());
+        assert_arguments::<command::ExportText>(recording.clone(), recording_json.clone());
+        assert_arguments::<command::CopySavedText>(recording.clone(), recording_json.clone());
+        assert_arguments::<command::SaveTextFile>(recording, recording_json);
     }
 
     #[test]

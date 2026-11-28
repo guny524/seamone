@@ -242,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn registered_playback_commands_reject_malformed_arguments() {
+    fn registered_commands_reject_malformed_arguments() {
         use seamone_core::{
             ipc::{TypedCommand, command},
             playback::State,
@@ -270,13 +270,42 @@ mod tests {
                 command::ControlPlayback::NAME,
                 json!({"session":"session","action":"play"}),
             ),
+            (
+                command::GetSegments::NAME,
+                json!({"recording_id":"recording","offset":0}),
+            ),
+            (command::TranscribeRecording::NAME, json!({"recordingId":1})),
+            (
+                command::GetErrorMarks::NAME,
+                json!({"recordingId":"recording","offset":"0"}),
+            ),
+            (
+                command::SaveErrorMark::NAME,
+                json!({"mark":{"id":"mark","recording_id":"recording","recording_revision":1}}),
+            ),
+            (
+                command::SaveErrorMarks::NAME,
+                json!({"batch":{"id":"batch","recording_id":"recording","recording_revision":1,"ranges":{}}}),
+            ),
+            (
+                command::ExportText::NAME,
+                json!({"recording_id":"recording"}),
+            ),
+            (command::CopySavedText::NAME, json!(["recording"])),
+            (command::SaveTextFile::NAME, json!({"recordingId":1})),
+            #[cfg(native_capture)]
+            (
+                command::FinishRecording::NAME,
+                json!({"sessionId":"session","save":"true"}),
+            ),
         ] {
             let error = invoke(&window, name, malformed).unwrap_err();
             let prefix = format!("invalid args for command `{name}`:");
             assert!(
                 error
                     .as_str()
-                    .is_some_and(|message| message.starts_with(&prefix))
+                    .is_some_and(|message| message.starts_with(&prefix)),
+                "{name}: {error}"
             );
         }
         for ignored in [json!({}), json!({"extra":1}), json!([])] {
@@ -382,24 +411,23 @@ mod tests {
             ("export_text", json!({"recordingId":"missing"})),
             ("copy_saved_text", json!({"recordingId":"missing"})),
             ("save_text_file", json!({"recordingId":"missing"})),
-        ];
-        for (command, args) in cases {
-            let error = invoke(&other, command, args).unwrap_err();
-            assert!(
-                error
-                    .as_str()
-                    .is_some_and(|message| message.contains("이 창")),
-                "{command}: {error}"
-            );
-        }
-        #[cfg(native_capture)]
-        for (command, args) in [
+            #[cfg(native_capture)]
             ("start_recording", json!({})),
+            #[cfg(native_capture)]
             (
                 "finish_recording",
                 json!({"sessionId":"missing","save":true}),
             ),
-        ] {
+        ];
+        #[cfg(native_capture)]
+        {
+            let mut tested = cases.each_ref().map(|(name, _)| *name);
+            tested.sort_unstable();
+            let mut registered = seamone_core::ipc::COMMAND_NAMES.to_vec();
+            registered.sort_unstable();
+            assert_eq!(tested.as_slice(), registered.as_slice());
+        }
+        for (command, args) in cases {
             let error = invoke(&other, command, args).unwrap_err();
             assert!(
                 error
