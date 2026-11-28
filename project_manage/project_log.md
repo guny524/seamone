@@ -426,3 +426,8 @@
 - 제품 화면에서 같은 Tauri binding을 한 번 더 선언해도 기존 검사가 통과했다. 비공개 연결과 공용 호출 함수를 한 파일에 모으고 `check-imports`가 파일 해시와 다른 Rust 소스·Trunk 시작 HTML의 직접 Tauri 전역 이름을 대조하도록 했다
 - Opus 5.5 xhigh가 찾은 `include!`, 외부 모듈 경로, 내부 속성과 매크로 변수를 재현해 검사에 반영했다. Rust 도메인 컴파일에서 허용되는 구문임을 확인했고, 최종 제품 복제본에서는 직접 연결·경로·매크로 위반이 각각 거절됐으며 일반 비교 매크로가 통과했다. 최종 재검토 세션 `70e5eca7-2e0b-45f5-b812-30da363d8a94`
 - `e1433b1`의 원격 CI에서 구조 경계 시험 29건과 Chrome 23건, 패키지 빌드 여섯 작업을 확인했다. 보호 파일 변경을 확인하는 관문만 남아 기존 위임 절차에 따라 검토와 시험을 대조한 뒤 관리자 권한으로 이 PR을 `495dc6b`에 병합했다. [화면의 Tauri 직접 연결 검사 PR (#29)](https://github.com/guny524/seamone/pull/29) · [원격 CI](https://github.com/guny524/seamone/actions/runs/46118868204) · [패키지 빌드](https://github.com/guny524/seamone/actions/runs/46118868208)
+
+## 2026-11-28 23:54 Trunk 제품 진입점 검사 병합
+- 기존 검사를 통과하는 대체 HTML과 Cargo manifest를 제품 복제본에서 각각 확인했다. Trunk 설정 조회로 대체 HTML 선택을, Tauri 설정 조회로 다른 프로젝트 선택을 재현했다. 제품 빌드와 개발 Make 진입점, 모바일 CI가 검사한 Tauri 폴더를 쓰도록 연결했다
+- Claude Opus 5.5 xhigh가 이름의 대소문자가 다른 macOS 설정 파일과 HTML 파서 차이를 찾았다. macOS Tauri가 실제로 바꾼 UI 출력 경로를 읽었고, 새 검사는 해당 파일을 거절했다. 시작 HTML은 승인된 파일의 해시를 확인한다. 기존 Trunk 설정과 제품 JSON은 그대로다. 최종 재검토 세션 `5a5d9b7f-e567-43c8-b312-7a2677ab5f31`의 판정에는 차단 결함이 없었다
+- `71a6fff`의 GitHub 회귀 CI에서 구조 경계 사례 34건과 Chrome 시나리오 23건이 통과했고 패키지 6개를 빌드했다. 보호 파일 관문이 승인을 요구해 기존 위임에 따라 독립 검토와 재현 결과를 대조한 뒤 관리자 권한으로 `6ca4823`에 병합했다. GitHub 이슈의 체크박스와 게시한 본문을 대조했다. [Trunk 진입점 검사 PR (#31)](https://github.com/guny524/seamone/pull/31) · [구조 검사 이슈 (#15)](https://github.com/guny524/seamone/issues/15) · [회귀 CI](https://github.com/guny524/seamone/actions/runs/46156479243) · [패키지 빌드](https://github.com/guny524/seamone/actions/runs/46156479222)
