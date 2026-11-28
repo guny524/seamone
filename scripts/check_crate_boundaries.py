@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 
 from rust_tokens import enclosing_attribute, module_path_attribute, tokens
 from check_review_writes import string_value
-from ui_entry import UI_DIST, UI_INDEX, tauri_config_errors, trunk_config_errors, trunk_html_errors
+from ui_entry import UI_DIST, UI_INDEX, tauri_config_errors, trunk_config_errors
 
 
 WORKSPACE_IMPORTS = {
@@ -49,6 +49,7 @@ WEB_OUTPUT_FEATURES = {'HtmlAudioElement', 'HtmlMediaElement', 'HtmlVideoElement
 MEDIA_TAGS = {'audio', 'video', 'iframe', 'embed', 'object'}
 UI_IPC_BRIDGE = Path('src/api/tauri.rs')
 UI_IPC_BRIDGE_SHA256 = 'f484204e2d81966ce4401b410eff59e275b7645ecd0b883a53724d8d2e1b6744'
+UI_INDEX_SHA256 = 'cb87df0a7f29b8076b44d0fe6401f89c36b56781847eaa2777928c7f16753e12'
 TAURI_IPC_GLOBAL = re.compile(r'\b(?:__TAURI__|__TAURI_INTERNALS__)\b')
 UI_IPC_ERROR = 'direct Tauri access is forbidden; use crate::api::call_typed and seamone_core::ipc::command'
 
@@ -157,9 +158,9 @@ def ui_source_errors(root, targets):
         yield f'{html}: the checked Trunk entry must be a regular file'
     else:
         source = html.read_text(encoding='utf-8')
+        if sha256(source.encode('utf-8')).hexdigest() != UI_INDEX_SHA256:
+            yield f'{html}: the checked Trunk entry changed; review its Rust link to the adjacent Cargo.toml'
         for error in ui_html_errors(source):
-            yield f'{html}: {error}'
-        for error in trunk_html_errors(source):
             yield f'{html}: {error}'
     for path in sorted((root / 'src').rglob('*')):
         if path.is_symlink():

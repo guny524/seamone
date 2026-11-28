@@ -132,7 +132,7 @@ check-macos-dmg:
 build: check-imports
 	cargo tauri build $(CARGO_FEATURE_ARGS) $(TAURI_BUILD_ARGS)
 
-dev:
+dev: check-imports
 	cargo tauri dev $(CARGO_FEATURE_ARGS)
 
 clean:

@@ -3,7 +3,6 @@
 import json
 import os
 import tomllib
-from html.parser import HTMLParser
 from pathlib import Path
 
 
@@ -36,35 +35,6 @@ def trunk_config_errors(root):
         yield f'{path}: use the approved Trunk configuration with index.html, dist, and no extra build inputs'
 
 
-def trunk_html_errors(source):
-    class ProductPage(HTMLParser):
-        def __init__(self):
-            super().__init__()
-            self.errors = []
-            self.rust_links = 0
-
-        def handle_starttag(self, tag, attrs):
-            if tag == 'script':
-                self.errors.append('product HTML must use the Trunk-generated Rust script')
-            attributes = dict(attrs)
-            if 'data-trunk' not in attributes:
-                return
-            rel = attributes.get('rel')
-            names = set(attributes)
-            if tag == 'link' and rel == 'rust':
-                self.rust_links += 1
-                if len(attrs) != 2 or names != {'rel', 'data-trunk'}:
-                    self.errors.append('the Trunk Rust link must use the adjacent Cargo.toml without overrides')
-            elif tag != 'link' or rel != 'css' or len(attrs) != 3 or names != {'rel', 'data-trunk', 'href'}:
-                self.errors.append('product HTML permits only the Trunk Rust link and stylesheet links')
-
-    page = ProductPage()
-    page.feed(source)
-    yield from page.errors
-    if page.rust_links != 1:
-        yield 'product HTML must contain one Trunk Rust link to the adjacent Cargo.toml'
-
-
 def tauri_config_errors(workspace, host, ui):
     if host != workspace / TAURI_HOST or host.resolve() != workspace.resolve() / TAURI_HOST:
         yield f'{host}: the checked Tauri host must be app/src-tauri'
@@ -85,10 +55,19 @@ def tauri_config_errors(workspace, host, ui):
         if actual.get('build') != expected_build:
             yield f'{path}: Tauri build and dev must use Trunk and the checked UI directory'
 
-    for pattern in ('tauri*.conf.json5', 'Tauri*.toml'):
-        for alternate in sorted(host.glob(pattern)):
-            yield f'{alternate}: use the approved JSON Tauri configuration format'
-    for overlay in sorted(host.glob('tauri.*.conf.json')):
+    for overlay in sorted(host.iterdir()):
+        name = overlay.name.casefold()
+        if not name.startswith('tauri.'):
+            continue
+        if name == 'tauri.conf.json':
+            if overlay.name != name:
+                yield f'{overlay}: use the exact spelling tauri.conf.json'
+            continue
+        if name.endswith(('.conf.json5', '.toml')):
+            yield f'{overlay}: use the approved JSON Tauri configuration format'
+            continue
+        if not name.endswith('.conf.json'):
+            continue
         try:
             config = read_config(overlay, json.loads)
         except (OSError, ValueError) as error:

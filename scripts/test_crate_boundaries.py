@@ -31,7 +31,8 @@ class DependencyBoundaries(unittest.TestCase):
             encoding='utf-8',
         )
         self.page = self.ui / 'index.html'
-        self.page.write_text('<link data-trunk rel="rust">', encoding='utf-8')
+        self.approved_page = (CHECK.parent.parent / 'app/ui/index.html').read_text(encoding='utf-8')
+        self.page.write_text(self.approved_page, encoding='utf-8')
         self.tauri = self.root / HOST / 'tauri.conf.json'
         self.tauri.write_text(
             '{"build":{"beforeDevCommand":{"script":"trunk serve","cwd":"../../ui-layer"},'
@@ -345,7 +346,7 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
                 result = self.check()
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('index.html: UI media', result.stderr)
-        page.write_text('<!doctype html><html><head><title>seamone</title><link data-trunk rel="rust"></head><body><p>audio recording</p></body></html>')
+        page.write_text(self.approved_page, encoding='utf-8')
         self.assertEqual(self.check().returncode, 0)
 
     def test_trunk_config_cannot_change_the_entry_output_or_add_hooks(self):
@@ -369,32 +370,30 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
         self.assertIn('Trunk.toml: cannot read the approved Trunk configuration', result.stderr)
 
     def test_trunk_rust_link_must_use_its_checked_manifest_and_the_default_target(self):
-        for attrs in ['href="../asr-layer/Cargo.toml"', 'data-bin="other"', 'href=""', 'rel="rust"']:
-            with self.subTest(attrs=attrs):
-                self.page.write_text(f'<link data-trunk rel="rust" {attrs}>', encoding='utf-8')
-                result = self.check()
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn('the Trunk Rust link must use the adjacent Cargo.toml', result.stderr)
-        for markup in ['', '<link data-trunk rel="rust"><link data-trunk rel="rust">']:
+        for markup in [
+            self.approved_page.replace('rel="rust"', 'rel="rust" href="../asr-layer/Cargo.toml"'),
+            self.approved_page.replace('rel="rust"', 'rel="rust" data-bin="other"'),
+            self.approved_page.replace('<link data-trunk rel="rust" />', ''),
+            self.approved_page + '<link data-trunk rel="rust">',
+            '<!--> <link data-trunk rel="rust" href="../other/Cargo.toml"> --><!-- -- >'
+            '<link data-trunk rel="rust"> -->',
+        ]:
             with self.subTest(markup=markup):
                 self.page.write_text(markup, encoding='utf-8')
                 result = self.check()
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn('product HTML must contain one Trunk Rust link', result.stderr)
+                self.assertIn('the checked Trunk entry changed', result.stderr)
 
     def test_trunk_product_html_can_load_css_but_cannot_add_a_script_pipeline(self):
-        approved = '<link data-trunk rel="rust"><link data-trunk rel="css" href="styles.css">'
-        self.page.write_text(approved, encoding='utf-8')
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.page.write_text(
-            approved + '<link data-trunk rel="copy-file" href="other.js"><script src="other.js"></script>',
+            self.approved_page + '<link data-trunk rel="copy-file" href="other.js"><script src="other.js"></script>',
             encoding='utf-8',
         )
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('product HTML permits only the Trunk Rust link and stylesheet links', result.stderr)
-        self.assertIn('product HTML must use the Trunk-generated Rust script', result.stderr)
+        self.assertIn('the checked Trunk entry changed', result.stderr)
 
     def test_tauri_build_directory_and_overlay_must_use_the_checked_trunk_project(self):
         overlay = self.tauri.with_name('tauri.whisper-macos.conf.json')
@@ -414,11 +413,13 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
                 self.assertIn('Tauri build and dev must use Trunk and the checked UI directory', result.stderr)
         self.tauri.write_text(approved, encoding='utf-8')
         overlay.write_text('{"build":{"frontendDist":"../other/dist"}}', encoding='utf-8')
-        self.tauri.with_name('Tauri.windows.toml').write_text('[build]\nfrontendDist = "elsewhere"')
+        self.tauri.with_name('Tauri.macos.conf.json').write_text('{"build":{"frontendDist":"../other/dist"}}')
+        self.tauri.with_name('tauri.windows.toml').write_text('[build]\nfrontendDist = "elsewhere"')
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Tauri overlays cannot change the checked frontend build configuration', result.stderr)
-        self.assertIn('Tauri.windows.toml: use the approved JSON Tauri configuration format', result.stderr)
+        self.assertIn('Tauri.macos.conf.json: Tauri overlays cannot change', result.stderr)
+        self.assertIn('tauri.windows.toml: use the approved JSON Tauri configuration format', result.stderr)
 
     def test_checked_host_must_be_the_project_used_by_the_release_commands(self):
         workspace = self.root / 'Cargo.toml'
