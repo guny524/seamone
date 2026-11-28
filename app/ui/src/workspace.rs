@@ -1,13 +1,15 @@
 use crate::{api, quick_review::QuickReview};
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
-    error_marks::{ErrorMark, ErrorMarkPage},
-    ipc::{Command, ControlPlaybackArgs, SaveReview, SegmentPlaybackArgs, command},
+    error_marks::ErrorMark,
+    ipc::{
+        ControlPlaybackArgs, EmptyArgs, RecordingArgs, RecordingPageArgs, SaveReview,
+        SegmentPlaybackArgs, command,
+    },
     playback::Action as PlaybackAction,
     review::{Action, LibraryPage, RecordingInfo, Request, Segment},
     review_flow::{ReviewFlow, ReviewMode, Ticket},
 };
-use serde_json::json;
 
 #[derive(Clone, Debug)]
 pub struct Playback {
@@ -39,10 +41,10 @@ async fn load_segments(recording: &str) -> Result<Vec<Segment>, String> {
     let mut offset = 0;
     let mut segments = Vec::new();
     loop {
-        let page = api::call::<seamone_core::review::SegmentPage>(
-            Command::GetSegments,
-            json!({"recordingId":recording,"offset":offset}),
-        )
+        let page = api::call_typed::<command::GetSegments>(RecordingPageArgs {
+            recording_id: recording.to_owned(),
+            offset,
+        })
         .await?;
         segments.extend(page.segments);
         let Some(next) = page.next_offset else {
@@ -80,7 +82,7 @@ impl Workspace {
 
     pub fn refresh(self) {
         spawn_local(async move {
-            match api::call::<LibraryPage>(Command::GetLibrary, json!({})).await {
+            match api::call_typed::<command::GetLibrary>(EmptyArgs {}).await {
                 Ok(page) => {
                     if !page.info_seen && !self.info_dismissed.get_untracked() {
                         self.show_info.set(true);
@@ -96,7 +98,7 @@ impl Workspace {
         self.info_dismissed.set(true);
         self.show_info.set(false);
         spawn_local(async move {
-            if let Err(error) = api::call::<()>(Command::DismissInfo, json!({})).await {
+            if let Err(error) = api::call_typed::<command::DismissInfo>(EmptyArgs {}).await {
                 self.error.set(error);
             }
         });
@@ -169,7 +171,7 @@ impl Workspace {
         self.error.set(String::new());
         self.status.set(String::new());
         spawn_local(async move {
-            let result = api::call::<Option<RecordingInfo>>(Command::ImportAudio, json!({})).await;
+            let result = api::call_typed::<command::ImportAudio>(EmptyArgs {}).await;
             self.busy.set(false);
             match result {
                 Ok(Some(info)) => {
@@ -205,7 +207,7 @@ impl Workspace {
         self.status.set("기기 안에서 받아쓰는 중입니다.".into());
         spawn_local(async move {
             let result =
-                api::call::<Vec<Segment>>(Command::TranscribeRecording, json!({"recordingId":id}))
+                api::call_typed::<command::TranscribeRecording>(RecordingArgs { recording_id: id })
                     .await;
             self.busy.set(false);
             self.status.set(String::new());
@@ -228,7 +230,7 @@ impl Workspace {
         }
         self.busy.set(true);
         spawn_local(async move {
-            let result = api::call::<bool>(Command::SelectModel, json!({})).await;
+            let result = api::call_typed::<command::SelectModel>(EmptyArgs {}).await;
             self.busy.set(false);
             match result {
                 Ok(true) => self
@@ -528,10 +530,11 @@ impl Workspace {
             return;
         };
         spawn_local(async move {
+            let args = RecordingArgs { recording_id: id };
             let result: Result<(), String> = if copy {
-                api::call::<()>(Command::CopySavedText, json!({"recordingId":id})).await
+                api::call_typed::<command::CopySavedText>(args).await
             } else {
-                api::call::<bool>(Command::SaveTextFile, json!({"recordingId":id}))
+                api::call_typed::<command::SaveTextFile>(args)
                     .await
                     .map(|_| ())
             };
@@ -554,10 +557,10 @@ async fn load_marks(recording: &str) -> Result<Vec<ErrorMark>, String> {
     let mut offset = 0;
     let mut marks = Vec::new();
     loop {
-        let page = api::call::<ErrorMarkPage>(
-            Command::GetErrorMarks,
-            json!({"recordingId":recording,"offset":offset}),
-        )
+        let page = api::call_typed::<command::GetErrorMarks>(RecordingPageArgs {
+            recording_id: recording.to_owned(),
+            offset,
+        })
         .await?;
         marks.extend(page.marks);
         let Some(next) = page.next_offset else {

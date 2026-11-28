@@ -8,12 +8,10 @@ const _: () = assert!(seamone_runtime::CAPTURE_SUPPORTED == cfg!(native_capture)
 /// 앱 껍데기가 화면에 내주는 command 를 등록한다, 실제 앱과 시험이 같은 등록을 쓴다.
 fn register_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     macro_rules! handlers {
-        (shared { $($_variant:ident => $handler:ident,)* }
-         typed { $($_typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
-         desktop_capture { $($_capture_variant:ident => $capture_handler:ident,)* }) => {
+        (shared { $($_variant:ident => $handler:ident: $args:ty, $reply:ty;)* }
+         desktop_capture { $($_capture_variant:ident => $capture_handler:ident: $capture_args:ty, $capture_reply:ty;)* }) => {
             tauri::generate_handler![
                 $(commands::$handler,)*
-                $(commands::$typed_handler,)*
                 $(#[cfg(native_capture)] commands::$capture_handler,)*
             ]
         };
@@ -116,10 +114,9 @@ mod tests {
         }
 
         macro_rules! check_grants {
-            (shared { $($_variant:ident => $shared:ident,)* }
-             typed { $($_typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
-             desktop_capture { $($_capture_variant:ident => $capture:ident,)* }) => {{
-                check(include_str!("../capabilities/default.json"), "default", &[$(stringify!($shared),)* $(stringify!($typed_handler),)*], None);
+            (shared { $($_variant:ident => $shared:ident: $args:ty, $reply:ty;)* }
+             desktop_capture { $($_capture_variant:ident => $capture:ident: $capture_args:ty, $capture_reply:ty;)* }) => {{
+                check(include_str!("../capabilities/default.json"), "default", &[$(stringify!($shared),)*], None);
                 check(
                     include_str!("../capabilities/capture.json"),
                     "capture",

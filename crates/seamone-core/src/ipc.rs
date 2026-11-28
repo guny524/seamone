@@ -1,10 +1,14 @@
 //! Command names shared by the UI, native handler and Tauri permission generator.
 
 use crate::{
+    AppInfo,
+    error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage},
     playback::{Action, Status},
-    review::{PlaybackReply, Request, SampleRange, Segment},
+    review::{
+        LibraryPage, PlaybackReply, RecordingInfo, Request, SampleRange, Segment, SegmentPage,
+    },
 };
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// The existing top-level argument object for saving a review.
@@ -14,11 +18,6 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 /// fn wrong_request() -> SaveReview {
 ///     SaveReview { request: "a segment ID", proof: None }
 /// }
-/// ```
-///
-/// ```compile_fail,E0599
-/// use seamone_core::ipc::Command;
-/// let command = Command::SaveReview;
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SaveReview {
@@ -49,6 +48,36 @@ pub struct ControlPlaybackArgs {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct EmptyArgs {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingArgs {
+    pub recording_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingPageArgs {
+    pub recording_id: String,
+    pub offset: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinishRecordingArgs {
+    pub session_id: String,
+    pub save: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaveErrorMarkArgs {
+    pub mark: ErrorMark,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaveErrorMarksArgs {
+    pub batch: ErrorMarkBatch,
+}
 
 mod private {
     pub trait Sealed {}
@@ -81,9 +110,10 @@ mod private {
 /// }
 /// ```
 ///
-/// ```compile_fail,E0599
-/// use seamone_core::ipc::Command;
-/// let command = Command::PlayRecording;
+/// ```compile_fail,E0308
+/// use seamone_core::ipc::{TypedCommand, command::FinishRecording};
+/// fn call<C: TypedCommand>(_: C::Args) {}
+/// call::<FinishRecording>(serde_json::json!({"sessionId":"recording","save":true}));
 /// ```
 pub trait TypedCommand: private::Sealed {
     const NAME: &'static str;
@@ -97,22 +127,20 @@ macro_rules! with_ipc_commands {
     ($consumer:ident) => {
         $consumer! {
             shared {
-                GetAppInfo => get_app_info,
-                GetLibrary => get_library,
-                GetSegments => get_segments,
-                ImportAudio => import_audio,
-                GetCaptureStatus => get_capture_status,
-                TranscribeRecording => transcribe_recording,
-                SelectModel => select_model,
-                GetErrorMarks => get_error_marks,
-                SaveErrorMark => save_error_mark,
-                SaveErrorMarks => save_error_marks,
-                DismissInfo => dismiss_info,
-                ExportText => export_text,
-                CopySavedText => copy_saved_text,
-                SaveTextFile => save_text_file,
-            }
-            typed {
+                GetAppInfo => get_app_info: EmptyArgs, AppInfo;
+                GetLibrary => get_library: EmptyArgs, LibraryPage;
+                GetSegments => get_segments: RecordingPageArgs, SegmentPage;
+                ImportAudio => import_audio: EmptyArgs, Option<RecordingInfo>;
+                GetCaptureStatus => get_capture_status: EmptyArgs, $crate::capture::Status;
+                TranscribeRecording => transcribe_recording: RecordingArgs, Vec<Segment>;
+                SelectModel => select_model: EmptyArgs, bool;
+                GetErrorMarks => get_error_marks: RecordingPageArgs, ErrorMarkPage;
+                SaveErrorMark => save_error_mark: SaveErrorMarkArgs, ();
+                SaveErrorMarks => save_error_marks: SaveErrorMarksArgs, ();
+                DismissInfo => dismiss_info: EmptyArgs, ();
+                ExportText => export_text: RecordingArgs, String;
+                CopySavedText => copy_saved_text: RecordingArgs, ();
+                SaveTextFile => save_text_file: RecordingArgs, bool;
                 SaveReview => save_review: SaveReview, Segment;
                 GetPlayback => get_playback: SegmentPlaybackArgs, PlaybackReply;
                 GetRecordingPlayback => get_recording_playback: RecordingPlaybackArgs, String;
@@ -121,48 +149,38 @@ macro_rules! with_ipc_commands {
                 PlayRecording => play_recording: RecordingPlaybackArgs, Status;
             }
             desktop_capture {
-                StartRecording => start_recording,
-                FinishRecording => finish_recording,
+                StartRecording => start_recording: EmptyArgs, $crate::capture::Status;
+                FinishRecording => finish_recording: FinishRecordingArgs, Option<RecordingInfo>;
             }
         }
     };
 }
 
 macro_rules! define_commands {
-    (shared { $($shared:ident => $handler:ident,)* }
-     typed { $($typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
-     desktop_capture { $($capture:ident => $capture_handler:ident,)* }) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        pub enum Command {
-            $($shared,)*
-            $($capture,)*
-        }
-
-        impl Command {
-            pub const NAMES: &[&str] = &[
-                $(Self::$shared.name(),)*
-                $(<command::$typed as TypedCommand>::NAME,)*
-                $(Self::$capture.name(),)*
-            ];
-
-            #[must_use]
-            pub const fn name(self) -> &'static str {
-                match self {
-                    $(Self::$shared => stringify!($handler),)*
-                    $(Self::$capture => stringify!($capture_handler),)*
-                }
-            }
-        }
+    (shared { $($shared:ident => $handler:ident: $args:ty, $reply:ty;)* }
+     desktop_capture { $($capture:ident => $capture_handler:ident: $capture_args:ty, $capture_reply:ty;)* }) => {
+        pub const COMMAND_NAMES: &[&str] = &[
+            $(<command::$shared as TypedCommand>::NAME,)*
+            $(<command::$capture as TypedCommand>::NAME,)*
+        ];
 
         pub mod command {
-            $(pub enum $typed {})*
+            $(pub enum $shared {})*
+            $(pub enum $capture {})*
         }
 
-        $(impl private::Sealed for command::$typed {}
-        impl TypedCommand for command::$typed {
-            const NAME: &'static str = stringify!($typed_handler);
+        $(impl private::Sealed for command::$shared {}
+        impl TypedCommand for command::$shared {
+            const NAME: &'static str = stringify!($handler);
             type Args = $args;
             type Reply = $reply;
+        })*
+
+        $(impl private::Sealed for command::$capture {}
+        impl TypedCommand for command::$capture {
+            const NAME: &'static str = stringify!($capture_handler);
+            type Args = $capture_args;
+            type Reply = $capture_reply;
         })*
     };
 }
@@ -172,10 +190,15 @@ with_ipc_commands!(define_commands);
 #[cfg(test)]
 mod tests {
     use super::{
-        ControlPlaybackArgs, EmptyArgs, RecordingPlaybackArgs, SaveReview, SegmentPlaybackArgs,
-        TypedCommand, command,
+        ControlPlaybackArgs, EmptyArgs, FinishRecordingArgs, RecordingArgs, RecordingPageArgs,
+        RecordingPlaybackArgs, SaveErrorMarkArgs, SaveErrorMarksArgs, SaveReview,
+        SegmentPlaybackArgs, TypedCommand, command,
     };
-    use crate::{playback::Action, review::SampleRange};
+    use crate::{
+        error_marks::{ErrorMark, ErrorMarkBatch},
+        playback::Action,
+        review::SampleRange,
+    };
     use serde_json::{from_value, json, to_value};
 
     #[test]
@@ -230,5 +253,57 @@ mod tests {
             json!({"session":"playback","action":{"kind":"seek","at":10}}),
         );
         assert_arguments::<command::GetPlaybackStatus>(EmptyArgs {}, json!({}));
+    }
+
+    #[test]
+    fn library_and_capture_contracts_preserve_the_existing_json() {
+        assert_arguments::<command::GetLibrary>(EmptyArgs {}, json!({}));
+        assert_arguments::<command::FinishRecording>(
+            FinishRecordingArgs {
+                session_id: "session".into(),
+                save: true,
+            },
+            json!({"sessionId":"session","save":true}),
+        );
+        assert_arguments::<command::GetSegments>(
+            RecordingPageArgs {
+                recording_id: "recording".into(),
+                offset: 32,
+            },
+            json!({"recordingId":"recording","offset":32}),
+        );
+        assert_arguments::<command::SaveTextFile>(
+            RecordingArgs {
+                recording_id: "recording".into(),
+            },
+            json!({"recordingId":"recording"}),
+        );
+    }
+
+    #[test]
+    fn error_mark_arguments_preserve_the_existing_nested_json() {
+        let range = SampleRange { start: 8, end: 16 };
+        assert_arguments::<command::SaveErrorMark>(
+            SaveErrorMarkArgs {
+                mark: ErrorMark {
+                    id: "event".into(),
+                    recording_id: "recording".into(),
+                    recording_revision: 3,
+                    range,
+                },
+            },
+            json!({"mark":{"id":"event","recording_id":"recording","recording_revision":3,"range":{"start":8,"end":16}}}),
+        );
+        assert_arguments::<command::SaveErrorMarks>(
+            SaveErrorMarksArgs {
+                batch: ErrorMarkBatch {
+                    id: "event".into(),
+                    recording_id: "recording".into(),
+                    recording_revision: 3,
+                    ranges: vec![range],
+                },
+            },
+            json!({"batch":{"id":"event","recording_id":"recording","recording_revision":3,"ranges":[{"start":8,"end":16}]}}),
+        );
     }
 }

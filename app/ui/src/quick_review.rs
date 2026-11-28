@@ -2,11 +2,10 @@ use crate::{api, timeline::ReviewTimeline};
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkBatch, Half, MIN_PREVIEW_SAMPLES, Narrowing, candidate},
-    ipc::{Command, ControlPlaybackArgs, EmptyArgs, RecordingPlaybackArgs, command},
+    ipc::{ControlPlaybackArgs, EmptyArgs, RecordingPlaybackArgs, SaveErrorMarksArgs, command},
     playback::{Action as PlaybackAction, State as PlaybackState, Status as PlaybackStatus},
     review::{RecordingInfo, SAMPLE_RATE, SampleRange, Segment},
 };
-use serde_json::json;
 use std::time::Duration;
 
 const SCAN_CHUNK: u64 = 30 * SAMPLE_RATE;
@@ -468,7 +467,8 @@ impl QuickReview {
         self.stop_audio();
         self.error.set(String::new());
         spawn_local(async move {
-            let result = api::call::<()>(Command::SaveErrorMarks, json!({"batch":batch})).await;
+            let result =
+                api::call_typed::<command::SaveErrorMarks>(SaveErrorMarksArgs { batch }).await;
             self.saving.set(false);
             match result {
                 Ok(()) => {
@@ -833,6 +833,7 @@ fn QuickOutput(quick: QuickReview) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     struct DeferredIo;
 

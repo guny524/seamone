@@ -9,7 +9,7 @@ fn main() {
     }
     tauri_build::try_build(
         tauri_build::Attributes::new().app_manifest(
-            tauri_build::AppManifest::new().commands(seamone_core::ipc::Command::NAMES),
+            tauri_build::AppManifest::new().commands(seamone_core::ipc::COMMAND_NAMES),
         ),
     )
     .expect("Tauri command 권한을 만들지 못했습니다");
