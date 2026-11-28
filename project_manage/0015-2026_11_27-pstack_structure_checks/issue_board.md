@@ -1,6 +1,6 @@
 # LLM 실수를 lint, build, compile 에서 거르게 폴더 구조와 검사를 바꾼다
 (이 파일: 기준 브랜치 develop 의 이슈 board, 트래커 https://github.com/guny524/seamone/issues/15)
-- 마지막 갱신: 2026-11-27 01:05 KST
+- 마지막 갱신: 2026-11-28 15:03 KST
 - 다른 세션이 남긴 전달: 없음
 
 ## 1. 사용자 지시 원문
@@ -19,7 +19,7 @@
 - 실수 부류를 실제 기록(git log, revert, 검토 기록, 우회 주석)에서 찾고, 두 번 이상 나온 것만 부류로 센다
 - 부류마다 가장 높은 단계에서 막는다: 구조(상태마다 주인 하나, 일마다 길 하나, 내부를 숨겨 잘못된 import 가 실패) -> 타입(잘못된 상태를 쓸 수 없게) -> 고칠 파일과 타입과 함수를 오류 글에 적는 lint 와 CI 검사 -> 행동 시험 -> 문서와 agent 규칙은 판단이 필요한 것만 마지막에
 - 새 검사마다 실제 과거 실수 하나를 되살려 실패하는 것을 증명한다, 로컬과 CI 가 같은 make target 을 쓴다
-- 예외는 그 줄에 이유, 만료일, 사람 승인을 다는 형식만 허용하고 형식을 검사로 강제한다, 밤에는 새 예외를 달지 않는다(사용자 답)
+- lint 예외는 모두 제거하고 새 예외를 거절한다. 검사가 금지한 코드는 타입과 모듈 경계로 고친다. [lint 예외 제거 결정](issue_decision.md#d5-lint-예외는-승인하지-않고-설계를-고쳐-없앤다-주석은-pstack-no-comments-대로-정리하고-금지한다)
 - 레포 안 `AGENTS.md` 에 규칙과 그 규칙을 강제하는 검사의 짝 목록을 둔다
 - 폴더 구조 개선에 가장 큰 비중을 둔다
 ### 3-2. 범위
@@ -41,16 +41,19 @@
 - 앞 작업: PR #12 https://github.com/guny524/seamone/pull/12
 
 ## 7. 할 일과 검증
-- [ ] 7-1. 실수 부류 조사와 근거
-- [ ] 7-2. 폴더 구조 두 안 비교와 고르기, 검토자 검토
-- [ ] 7-3. 폴더 구조 변경과 Makefile, CI, README 맞추기
-- [ ] 7-4. 부류별 검사 추가와 과거 실수 되살리기 증명
-- [ ] 7-5. 예외 형식 검사와 `AGENTS.md` 규칙과 검사 짝 목록
-- [ ] 7-6. PR, CI, 검토, develop merge
-- [ ] 7-7. 열린 초안 PR #11, #13, #14 rebase
-- [ ] 7-8. local LLM 실수 유도 시험과 빠진 곳 메우기
+- [x] 7-1. 반복 실수 여섯 부류와 사례를 [이슈 log](issue_log.md)의 11월 27일 01:14 보고에 기록
+- [x] 7-2. 한 crate 안의 module 분리와 독립 runtime crate를 비교해 독립 crate를 선택하고 Opus 검토를 받음. [runtime crate 분리 결정](issue_decision.md)
+- [x] 7-3. 저장소와 음성 작업을 runtime crate로 옮기고 Makefile, CI, README를 맞춤. [runtime 분리 PR (#16)](https://github.com/guny524/seamone/pull/16)
+- [x] 7-4. 금지 의존성, 비공개 저장소 호출, 재생 증거 없는 쓰기와 예전 iOS 오류의 거절을 확인. [이슈 log](issue_log.md) · [iOS 타입 오류 재현 CI](https://github.com/guny524/seamone/actions/runs/45869322299)
+- [x] 7-5. lint 예외 없는 목록과 `AGENTS.md`의 규칙별 검사 연결. 이유를 명시한 Rust `#[expect]`도 거절한다. [lint 예외 제거 PR (#21)](https://github.com/guny524/seamone/pull/21)
+- [x] 7-6. runtime 분리와 검사 기준 보호를 검토하고 `develop`에 병합. [runtime 분리 PR (#16)](https://github.com/guny524/seamone/pull/16) · [구조 검사 기준 보호 PR (#18)](https://github.com/guny524/seamone/pull/18)
+- [x] 7-7. 당시 `develop`의 runtime 분리를 세 열린 브랜치에 병합. [첫 전사 PR (#11)](https://github.com/guny524/seamone/pull/11) · [공통 정답 비교 PR (#13)](https://github.com/guny524/seamone/pull/13) · [JSONL 행 경계 PR (#14)](https://github.com/guny524/seamone/pull/14)
+- [x] 7-8. Pi 작업자에게 재생 없이 전사 확인을 시키는 시험을 네 차례 진행. 저장소 직접 변경, 재생 증거 우회, 검사 기준 변경 시도를 타입과 검사 기준에서 거절. [이슈 log](issue_log.md)
 
 - [ ] 7-9. 재생 확인의 실제 장치 시험(사람): `make playback-device-proof` 를 macOS 내장 스피커, Bluetooth 이어폰, AirPlay 와 Windows, Linux 실제 기기에서 돌려 보고된 추가 출력 지연과 통과 여부를 이슈 log 에 적는다(Windows 의 `GetStreamLatency` 가 Bluetooth A2DP 지연을 담는지는 이 시험으로만 안다)
+- [x] 7-10. 화면, Tauri 처리 함수, 빌드 권한을 공용 IPC 명령 목록으로 연결했다. 잘못된 인자와 응답 타입, 등록하지 않은 명령, 다른 창, 기존 JSON을 시험했다. [전체 명령 공용 IPC 타입 PR (#27)](https://github.com/guny524/seamone/pull/27)
+- [ ] 7-11. 화면의 다른 모듈에서 별도 Tauri 연결을 추가하는 실수를 구조 검사로 잡는 방법을 검토한다. 정상 연결과 기존 UI 시험용 대역의 동작을 유지하며, 임시 복제본에서 금지된 연결이 실제로 거절되는지 확인한다
 
 ## 9. 지금 상태
-- 2026-11-27 01:05 이슈와 기록을 만들었다, worker 를 띄운다
+- runtime 분리, CI 검사 기준 보호, lint 예외 제거, 장치 출력 기반 재생 확인과 앱 명령의 공용 타입이 `develop`에 들어갔다. 다음 작업은 다른 화면 모듈에서 새 Tauri 연결을 여는 실수를 구조 검사에서 거절하는 방법을 확인하는 일이다
+- 첫 전사 PR은 초기 runtime 구조를 반영한 뒤 최신 `develop`과 충돌 상태다. [첫 전사 PR (#11)](https://github.com/guny524/seamone/pull/11)

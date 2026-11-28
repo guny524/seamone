@@ -400,3 +400,24 @@
 - Orca 시험 신호를 14:20:34 KST에 실제로 받았다. 전송 로그에 남은 수락 요청을 수신 기록과 대조해 대기를 해제했다
 - Windows 패키지 재실행까지 통과했다. 검수 저장 변경 `25c088f`의 필수 GitHub 검사와 Opus 5.5 xhigh 검토를 확인하고 `fbd64cb`로 병합했다. [검수 저장 공용 IPC 타입 PR (#25)](https://github.com/guny524/seamone/pull/25)
 - 재생 명령 다섯 개에 요청·응답 타입을 배정하고 공용 목록 밖에서는 새 명령 타입을 구현할 수 없도록 했다. 구조 검사와 도메인 컴파일은 통과했다. macOS와 iOS Clippy가 본문 디코더의 불필요한 값 전달을 감지해 `36b3021`에서 본문 참조만 받도록 고쳤다. GitHub 검증과 Opus 검토는 진행 중이다. [재생 명령 공용 IPC 타입 초안 PR (#26)](https://github.com/guny524/seamone/pull/26)
+
+## 2026-11-28 14:32 재생 명령 회귀 시험
+- `36b3021`의 GitHub CI에서 재생 명령 다섯 개의 JSON 왕복, 틀린 인자·응답 타입의 compile-fail, Tauri의 검수 저장·재생 및 Chrome 회귀 시험을 확인했다. [재생 명령 CI](https://github.com/guny524/seamone/actions/runs/46112126433)
+- 문서 커밋 `772edae`를 `develop`에 직접 올릴 때 GitHub가 필수 검사에 대한 관리자 권한 통과를 표시했다. 검수 저장 제품 코드는 필수 검사를 거친 PR로 병합했다. 이후 기록은 검사 조건이 적용되는 PR로 올린다. [문서 커밋 CI](https://github.com/guny524/seamone/actions/runs/46112389201)
+
+## 2026-11-28 14:43 재생 회귀 시험 수정과 전체 IPC 타입 연결
+- 재생 시험이 `Play` 수락 직후 `Playing`을 요구해 실패했다. 가짜 장치는 시험 시계를 진행한 뒤에만 상태를 내보낸다. `fe1d3d4`에서는 응답의 세션 ID와 콜백 이후의 재생 증거를 각각 검사한다. WAV 응답 검사도 Clippy 예외 없이 형식으로 확인하도록 고쳤다. [재생 명령 공용 IPC 타입 초안 PR (#26)](https://github.com/guny524/seamone/pull/26)
+- 별도 브랜치 `guny524/typed-all-ipc`의 `10a8b0b`에서 기존 22개 명령의 이름과 데스크톱 전용 두 명령의 범위를 대조했다. 화면의 일반 JSON 호출 경로를 제거하고 Tauri의 반환 타입과 권한 등록을 공용 명령 목록에 연결했다. 구조 검사와 도메인 컴파일을 확인했고, 전체 CI와 Opus 5.5 xhigh 검토를 시작했다. [전체 명령 타입 변경 CI](https://github.com/guny524/seamone/actions/runs/46113297624)
+
+## 2026-11-28 14:47 재생 명령 타입 병합
+- `fe1d3d4`의 GitHub 회귀와 패키지 여섯 작업을 모두 확인하고 `6bf4fc1`로 병합했다. [재생 명령 공용 IPC 타입 PR (#26)](https://github.com/guny524/seamone/pull/26)
+- 전체 명령 타입 변경 `10a8b0b`의 작업 브랜치 CI와 구조 검사가 통과했다. 별도 초안 PR에서 기준 브랜치와 함께 시험하고 Opus 결과 및 패키지 빌드를 확인한다. [전체 명령 공용 IPC 타입 초안 PR (#27)](https://github.com/guny524/seamone/pull/27)
+
+## 2026-11-28 14:51 전체 명령의 정상 경로와 구조 위반 확인
+- 기존 명령 22개와 데스크톱 전용 명령 두 개를 기존 `develop`과 대조했다. 호스트의 반환 타입은 명령별 공용 타입과 일치하며 화면의 Tauri 직접 연결은 `api.rs` 한 곳에 있다
+- 전체 명령 PR의 원격 CI에서 기존 JSON, 창·플랫폼 권한, 미등록 명령과 잘못된 인자·응답 타입의 컴파일 거절, Chrome 시나리오 23건을 확인했다. [전체 명령 CI](https://github.com/guny524/seamone/actions/runs/46113651395)
+- 임시 복제본에서 정상 의존성과 예외 없는 코드가 두 구조 검사를 통과했다. 화면의 Cargo 설정에 iOS 전용 별칭으로 `seamone-asr` 의존성을 추가하면 `check-imports`가 거절했고, 이유를 적은 Rust `#[expect]`는 `check-lint-exceptions`가 거절했다
+
+## 2026-11-28 15:03 앱 명령 22개의 공용 타입 병합
+- Opus 5.5 xhigh 검토가 빠진 잘못된 요청 사례 아홉 개를 찾았다. `dd14dda`부터 인자를 받는 명령 14개가 모두 잘못된 JSON을 거절하는지 확인하며, 다른 창 시험은 공용 명령 목록 22개와 사례 이름을 대조한다. 재검토 세션 `59deca49-bbae-4881-a128-b2683d4faa9a`에서 차단 결함은 없었다
+- `dd14dda`의 CI에서 기존 JSON, 창·플랫폼 권한, 미등록 명령과 잘못된 타입의 컴파일 거절, Chrome 23건이 통과했다. 필수 패키지 여섯 작업을 확인한 뒤 `2fa33f5`로 병합했다. [전체 명령 공용 IPC 타입 PR (#27)](https://github.com/guny524/seamone/pull/27) · [CI](https://github.com/guny524/seamone/actions/runs/46114213476) · [패키지 빌드](https://github.com/guny524/seamone/actions/runs/46114213428)
