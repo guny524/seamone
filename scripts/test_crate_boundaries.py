@@ -275,7 +275,12 @@ engine = {package="seamone-asr", path="../asr-layer", optional=true}
             self.assertIn(f'src/lib.rs: {line}: UI source cannot override a module path', result.stderr)
         for line in (3, 4, 5):
             self.assertIn(f'src/lib.rs: {line}: UI macro variables cannot choose', result.stderr)
-        source.write_text('macro_rules! label { ($text:expr) => { $text }; }', encoding='utf-8')
+        source.write_text(
+            'macro_rules! label { ($text:expr) => { $text }; }\n'
+            'macro_rules! different { ($a:expr, $b:expr) => { $a != $b }; }\n'
+            'fn different(include: u8, other: u8) -> bool { include != other }\n',
+            encoding='utf-8',
+        )
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
 

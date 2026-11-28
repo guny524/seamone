@@ -100,6 +100,14 @@ def ui_output_errors(source):
             yield 'UI media markup or JavaScript is forbidden; use runtime output'
 
 
+def macro_invocation_at(code, index):
+    return (
+        index + 1 < len(code)
+        and code[index].text == '!'
+        and code[index + 1].text in {'(', '[', '{'}
+    )
+
+
 def ui_ipc_errors(path, source):
     if path == UI_IPC_BRIDGE:
         if sha256(source.encode('utf-8')).hexdigest() != UI_IPC_BRIDGE_SHA256:
@@ -109,13 +117,13 @@ def ui_ipc_errors(path, source):
     for index, token in enumerate(code):
         following = code[index + 1].text if index + 1 < len(code) else None
         include_alias = following == 'as' and index > 0 and code[index - 1].text in {':', '{', ','}
-        if token.text == 'include' and (following == '!' or include_alias):
+        if token.text == 'include' and (include_alias or macro_invocation_at(code, index + 1)):
             error = 'UI source cannot use include!; declare a module under src'
         elif token.text == 'path' and following == '=' and module_path_attribute(code, index):
             error = 'UI source cannot override a module path; declare a module under src'
         elif token.text == '$' and (
             enclosing_attribute(code, index) is not None
-            or (index + 2 < len(code) and code[index + 2].text == '!')
+            or macro_invocation_at(code, index + 2)
         ):
             error = 'UI macro variables cannot choose a Rust attribute or invoke a macro; declare a module under src'
         else:
