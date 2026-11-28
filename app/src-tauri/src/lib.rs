@@ -9,7 +9,7 @@ const _: () = assert!(seamone_runtime::CAPTURE_SUPPORTED == cfg!(native_capture)
 fn register_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     macro_rules! handlers {
         (shared { $($_variant:ident => $handler:ident,)* }
-         typed { $($_typed:ident => $typed_handler:ident,)* }
+         typed { $($_typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
          desktop_capture { $($_capture_variant:ident => $capture_handler:ident,)* }) => {
             tauri::generate_handler![
                 $(commands::$handler,)*
@@ -117,7 +117,7 @@ mod tests {
 
         macro_rules! check_grants {
             (shared { $($_variant:ident => $shared:ident,)* }
-             typed { $($_typed:ident => $typed_handler:ident,)* }
+             typed { $($_typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
              desktop_capture { $($_capture_variant:ident => $capture:ident,)* }) => {{
                 check(include_str!("../capabilities/default.json"), "default", &[$(stringify!($shared),)* $(stringify!($typed_handler),)*], None);
                 check(
@@ -197,17 +197,24 @@ mod tests {
         assert!(seamone_runtime::LibraryService::inference_available());
     }
 
+    fn typed_reply<C: seamone_core::ipc::TypedCommand>(
+        window: &tauri::WebviewWindow<tauri::test::MockRuntime>,
+        args: serde_json::Value,
+    ) -> C::Reply {
+        serde_json::from_value(invoke(window, C::NAME, args).unwrap()).unwrap()
+    }
+
     fn complete_playback(window: &tauri::WebviewWindow<tauri::test::MockRuntime>, session: &str) {
-        invoke(
+        use seamone_core::ipc::command;
+        let accepted = typed_reply::<command::ControlPlayback>(
             window,
-            "control_playback",
             serde_json::json!({"session":session,"action":{"kind":"play"}}),
-        )
-        .unwrap();
+        );
+        assert_eq!(accepted.session.as_deref(), Some(session));
         let state = window.state::<seamone_runtime::LibraryService>();
         seamone_runtime::test_support::advance_playback(&state, 60_000).unwrap();
-        let status = invoke(window, "get_playback_status", serde_json::json!({})).unwrap();
-        assert_eq!(status["heard"], true);
+        let status = typed_reply::<command::GetPlaybackStatus>(window, serde_json::json!({}));
+        assert!(status.heard);
     }
 
     fn app_fixture() -> (tempfile::TempDir, tauri::App<tauri::test::MockRuntime>) {
@@ -235,6 +242,50 @@ mod tests {
             .build(mock_context(noop_assets()))
             .unwrap();
         (folder, app, segment)
+    }
+
+    #[test]
+    fn registered_playback_commands_reject_malformed_arguments() {
+        use seamone_core::{
+            ipc::{TypedCommand, command},
+            playback::State,
+        };
+        use serde_json::json;
+
+        let (_fixture, app) = app_fixture();
+        let window = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .unwrap();
+        for (name, malformed) in [
+            (
+                command::GetPlayback::NAME,
+                json!({"segment_id":"segment","revision":1}),
+            ),
+            (
+                command::GetRecordingPlayback::NAME,
+                json!({"recordingId":"recording","revision":1}),
+            ),
+            (
+                command::PlayRecording::NAME,
+                json!(["recording",1,{"start":0,"end":16}]),
+            ),
+            (
+                command::ControlPlayback::NAME,
+                json!({"session":"session","action":"play"}),
+            ),
+        ] {
+            let error = invoke(&window, name, malformed).unwrap_err();
+            let prefix = format!("invalid args for command `{name}`:");
+            assert!(
+                error
+                    .as_str()
+                    .is_some_and(|message| message.starts_with(&prefix))
+            );
+        }
+        for ignored in [json!({}), json!({"extra":1}), json!([])] {
+            let status = typed_reply::<command::GetPlaybackStatus>(&window, ignored);
+            assert_eq!(status.state, State::Idle);
+        }
     }
 
     #[test]
@@ -639,7 +690,8 @@ mod tests {
     fn registered_error_mark_and_preview_require_separate_full_playback_for_correction() {
         use seamone_core::{
             error_marks::{ErrorMark, ErrorMarkPage},
-            review::{Action, PlaybackReply, Request, SampleRange, Segment},
+            ipc::command,
+            review::{Action, Request, SampleRange, Segment},
         };
         use serde_json::json;
 
@@ -663,19 +715,14 @@ mod tests {
             "recordingId":mark.recording_id,"revision":mark.recording_revision,"range":mark.range
         });
         assert!(invoke(&other, "get_recording_playback", preview_args.clone()).is_err());
-        let preview = invoke(&window, "get_recording_playback", preview_args.clone()).unwrap();
-        assert!(preview.as_str().is_some_and(|wav| !wav.is_empty()));
+        let preview = typed_reply::<command::GetRecordingPlayback>(&window, preview_args);
+        assert!(preview.starts_with("UklGR"));
         let removed = invoke(&window, "playback_ended", json!({"token":preview})).unwrap_err();
         assert_eq!(removed.as_str(), Some("Command playback_ended not found"));
-        let old: PlaybackReply = serde_json::from_value(
-            invoke(
-                &window,
-                "get_playback",
-                json!({"segmentId":segment.id,"revision":segment.revision}),
-            )
-            .unwrap(),
-        )
-        .unwrap();
+        let old = typed_reply::<command::GetPlayback>(
+            &window,
+            json!({"segmentId":segment.id,"revision":segment.revision}),
+        );
         complete_playback(&window, &old.session);
         assert!(invoke(&other, "save_error_mark", json!({"mark":mark})).is_err());
         invoke(&window, "save_error_mark", json!({"mark":mark})).unwrap();
@@ -706,15 +753,10 @@ mod tests {
             )
             .is_err()
         );
-        let full: PlaybackReply = serde_json::from_value(
-            invoke(
-                &window,
-                "get_playback",
-                json!({"segmentId":segment.id,"revision":req.expected_revision}),
-            )
-            .unwrap(),
-        )
-        .unwrap();
+        let full = typed_reply::<command::GetPlayback>(
+            &window,
+            json!({"segmentId":segment.id,"revision":req.expected_revision}),
+        );
         let correction = json!({"request":req,"proof":full.session});
         assert!(invoke(&window, "save_review", correction.clone()).is_err());
         complete_playback(&window, &full.session);
@@ -739,15 +781,19 @@ mod tests {
 
     #[test]
     fn preview_output_cannot_authorize_a_review_and_stale_controls_fail() {
-        use seamone_core::review::{Action, Request, Verdict};
+        use seamone_core::{
+            ipc::command,
+            playback::State,
+            review::{Action, Request, Verdict},
+        };
         use serde_json::json;
         let (_fixture, app, segment) = review_app_fixture();
         let window = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
             .build()
             .unwrap();
         let args = json!({"recordingId":segment.recording_id,"revision":segment.recording_revision,"range":segment.range});
-        let playing = invoke(&window, "play_recording", args.clone()).unwrap();
-        let session = playing["session"].as_str().unwrap();
+        let playing = typed_reply::<command::PlayRecording>(&window, args.clone());
+        let session = playing.session.as_deref().unwrap();
         complete_playback(&window, session);
         let request = Request {
             event_id: "preview-is-not-review".into(),
@@ -765,8 +811,8 @@ mod tests {
             )
             .is_err()
         );
-        let next = invoke(&window, "play_recording", args).unwrap();
-        assert_ne!(next["session"], session);
+        let next = typed_reply::<command::PlayRecording>(&window, args);
+        assert_ne!(next.session.as_deref(), Some(session));
         assert!(
             invoke(
                 &window,
@@ -777,8 +823,8 @@ mod tests {
         );
         window.state::<seamone_runtime::LibraryService>().close();
         assert_eq!(
-            invoke(&window, "get_playback_status", json!({})).unwrap()["state"],
-            "idle"
+            typed_reply::<command::GetPlaybackStatus>(&window, json!({})).state,
+            State::Idle
         );
     }
 

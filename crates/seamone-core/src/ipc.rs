@@ -1,8 +1,11 @@
 //! Command names shared by the UI, native handler and Tauri permission generator.
 
-use crate::review::{Request, Segment};
+use crate::{
+    playback::{Action, Status},
+    review::{PlaybackReply, Request, SampleRange, Segment},
+};
 use alloc::string::String;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// The existing top-level argument object for saving a review.
 ///
@@ -23,7 +26,70 @@ pub struct SaveReview {
     pub proof: Option<String>,
 }
 
-pub type SaveReviewReply = Segment;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SegmentPlaybackArgs {
+    pub segment_id: String,
+    pub revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingPlaybackArgs {
+    pub recording_id: String,
+    pub revision: u64,
+    pub range: SampleRange,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ControlPlaybackArgs {
+    pub session: String,
+    pub action: Action,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct EmptyArgs {}
+
+mod private {
+    pub trait Sealed {}
+}
+
+/// A registered command whose request and response types are chosen by the catalog.
+///
+/// ```compile_fail,E0308
+/// use seamone_core::ipc::{TypedCommand, command::PlayRecording, SegmentPlaybackArgs};
+/// fn call<C: TypedCommand>(_: C::Args) {}
+/// fn wrong_args(args: SegmentPlaybackArgs) {
+///     call::<PlayRecording>(args);
+/// }
+/// ```
+///
+/// ```compile_fail,E0308
+/// use seamone_core::{ipc::{TypedCommand, command::PlayRecording}, review::PlaybackReply};
+/// fn wrong_reply(reply: <PlayRecording as TypedCommand>::Reply) -> PlaybackReply {
+///     reply
+/// }
+/// ```
+///
+/// ```compile_fail,E0277
+/// use seamone_core::ipc::{EmptyArgs, TypedCommand};
+/// struct UnregisteredCommand;
+/// impl TypedCommand for UnregisteredCommand {
+///     const NAME: &'static str = "unregistered_command";
+///     type Args = EmptyArgs;
+///     type Reply = ();
+/// }
+/// ```
+///
+/// ```compile_fail,E0599
+/// use seamone_core::ipc::Command;
+/// let command = Command::PlayRecording;
+/// ```
+pub trait TypedCommand: private::Sealed {
+    const NAME: &'static str;
+    type Args: Serialize + DeserializeOwned;
+    type Reply: Serialize + DeserializeOwned;
+}
 
 /// Supplies command variants and their native function identifiers to a consumer macro.
 #[macro_export]
@@ -38,21 +104,21 @@ macro_rules! with_ipc_commands {
                 GetCaptureStatus => get_capture_status,
                 TranscribeRecording => transcribe_recording,
                 SelectModel => select_model,
-                GetPlayback => get_playback,
-                GetRecordingPlayback => get_recording_playback,
                 GetErrorMarks => get_error_marks,
                 SaveErrorMark => save_error_mark,
                 SaveErrorMarks => save_error_marks,
-                ControlPlayback => control_playback,
-                GetPlaybackStatus => get_playback_status,
-                PlayRecording => play_recording,
                 DismissInfo => dismiss_info,
                 ExportText => export_text,
                 CopySavedText => copy_saved_text,
                 SaveTextFile => save_text_file,
             }
             typed {
-                SaveReview => save_review,
+                SaveReview => save_review: SaveReview, Segment;
+                GetPlayback => get_playback: SegmentPlaybackArgs, PlaybackReply;
+                GetRecordingPlayback => get_recording_playback: RecordingPlaybackArgs, String;
+                ControlPlayback => control_playback: ControlPlaybackArgs, Status;
+                GetPlaybackStatus => get_playback_status: EmptyArgs, Status;
+                PlayRecording => play_recording: RecordingPlaybackArgs, Status;
             }
             desktop_capture {
                 StartRecording => start_recording,
@@ -64,7 +130,7 @@ macro_rules! with_ipc_commands {
 
 macro_rules! define_commands {
     (shared { $($shared:ident => $handler:ident,)* }
-     typed { $($typed:ident => $typed_handler:ident,)* }
+     typed { $($typed:ident => $typed_handler:ident: $args:ty, $reply:ty;)* }
      desktop_capture { $($capture:ident => $capture_handler:ident,)* }) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum Command {
@@ -75,7 +141,7 @@ macro_rules! define_commands {
         impl Command {
             pub const NAMES: &[&str] = &[
                 $(Self::$shared.name(),)*
-                $($typed::NAME,)*
+                $(<command::$typed as TypedCommand>::NAME,)*
                 $(Self::$capture.name(),)*
             ];
 
@@ -88,8 +154,15 @@ macro_rules! define_commands {
             }
         }
 
-        $(impl $typed {
-            pub const NAME: &'static str = stringify!($typed_handler);
+        pub mod command {
+            $(pub enum $typed {})*
+        }
+
+        $(impl private::Sealed for command::$typed {}
+        impl TypedCommand for command::$typed {
+            const NAME: &'static str = stringify!($typed_handler);
+            type Args = $args;
+            type Reply = $reply;
         })*
     };
 }
@@ -98,7 +171,11 @@ with_ipc_commands!(define_commands);
 
 #[cfg(test)]
 mod tests {
-    use super::SaveReview;
+    use super::{
+        ControlPlaybackArgs, EmptyArgs, RecordingPlaybackArgs, SaveReview, SegmentPlaybackArgs,
+        TypedCommand, command,
+    };
+    use crate::{playback::Action, review::SampleRange};
     use serde_json::{from_value, json, to_value};
 
     #[test]
@@ -116,5 +193,42 @@ mod tests {
         }
         let omitted: SaveReview = from_value(json!({"request":request})).unwrap();
         assert!(omitted.proof.is_none());
+    }
+
+    fn assert_arguments<C: TypedCommand>(args: C::Args, expected: serde_json::Value) {
+        assert_eq!(to_value(&args).unwrap(), expected);
+        let decoded: C::Args = from_value(expected).unwrap();
+        assert_eq!(to_value(decoded).unwrap(), to_value(args).unwrap());
+    }
+
+    #[test]
+    fn playback_contracts_use_the_existing_json_keys_and_actions() {
+        assert_arguments::<command::GetPlayback>(
+            SegmentPlaybackArgs {
+                segment_id: "segment".into(),
+                revision: 3,
+            },
+            json!({"segmentId":"segment","revision":3}),
+        );
+        let recording = RecordingPlaybackArgs {
+            recording_id: "recording".into(),
+            revision: 3,
+            range: SampleRange { start: 8, end: 16 },
+        };
+        let recording_json =
+            json!({"recordingId":"recording","revision":3,"range":{"start":8,"end":16}});
+        assert_arguments::<command::GetRecordingPlayback>(
+            recording.clone(),
+            recording_json.clone(),
+        );
+        assert_arguments::<command::PlayRecording>(recording, recording_json);
+        assert_arguments::<command::ControlPlayback>(
+            ControlPlaybackArgs {
+                session: "playback".into(),
+                action: Action::Seek { at: 10 },
+            },
+            json!({"session":"playback","action":{"kind":"seek","at":10}}),
+        );
+        assert_arguments::<command::GetPlaybackStatus>(EmptyArgs {}, json!({}));
     }
 }

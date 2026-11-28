@@ -74,7 +74,7 @@ graph LR
 - 기존 단일 범위 저장 명령 `save_error_mark`와 페이지 조회 명령 `get_error_marks`도 쓸 수 있다. 오류 범위를 저장할 때 조각의 원본 시간, 자동 전사문, 편집한 글, 기존 Yes/No 판정을 보존한다
 - 조각 목록은 한 응답에 최대 32개, 각 글은 최대 32KB, 녹음 전체의 편집 글은 최대 2MB다
 - 검증 요청은 event ID, 조각 ID, 정확한 revision, 동작을 담는다, 같은 event의 재전송은 같은 결과를 돌려주며 다른 내용이나 오래된 revision은 오류다
-- 화면의 `save_review` 호출은 공용 `SaveReview` 요청과 `SaveReviewReply` 응답 타입을 사용한다. JSON 최상위의 `request`와 선택 필드 `proof`를 받아 `Segment`를 반환한다
+- 화면과 Tauri는 `save_review`의 요청·응답 타입을 공용 명령 목록에서 가져온다. JSON 최상위의 `request`와 선택 필드 `proof`를 받아 `Segment`를 반환한다
 - 변경은 짧은 SQLite transaction에서 revision을 비교한 뒤 저장한다, 정답 snapshot과 대기열도 함께 저장해 일부만 남지 않는다
 - 자동 글을 그대로 맞다고 한 정답과 수정 후 확인한 정답은 출처를 구분한다, 편집이나 검증 취소는 그 수정본의 정답과 대기열을 무효화한다
 - 학습 시작과 결과 공개 직전에 현재 수정본, 녹음 revision, 원본 존재와 SHA-256을 다시 검사한다, 원본 읽기 실패는 복구 뒤 재시도하며 바뀐 수정본은 제외한다
@@ -89,6 +89,7 @@ graph LR
 - 데스크톱의 `start_recording({})`은 세션을 만들고 현재 상태를 반환한다. `finish_recording({ sessionId, save })`는 해당 세션을 마무리한다. `save: true`면 `RecordingInfo`, `save: false`면 `null`을 반환한다. 동시에 하나만 녹음할 수 있고 이전 세션의 종료 요청은 거절한다. 저장에 실패해도 완성된 음성을 같은 세션에서 다시 저장하거나 취소할 수 있다
 
 ### 2-3. 음성 출력 IPC
+- 조각과 녹음의 재생 준비, 재생 제어, 상태 조회에 쓰는 다섯 명령은 공용 명령 목록에서 요청과 응답 타입을 정한다. 화면의 공개 호출 함수는 이 명령에 공용 타입만 받는다
 - 아래 명령은 `main` 로컬 창에서만 쓴다, 모든 위치는 녹음 원본의 16kHz sample 절대 위치이고 범위는 시작 포함, 끝 제외다
 - `get_playback({ segmentId, revision })`은 현재 조각 전체의 WAV와 `session`, `segment_id`, `revision`을 반환한다, 아직 재생하지 않으며 이전 session과 증거를 버린다
 - `play_recording({ recordingId, revision, range })`은 검수 증거를 만들지 않는 미리 듣기를 시작하고 Status를 반환한다, 이전 session은 닫는다, 빠른 검수의 30초 연속 재생과 절반 듣기가 이 명령을 쓴다

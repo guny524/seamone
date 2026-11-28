@@ -529,8 +529,8 @@ fn RuntimePlayback(
     on_position: Callback<(Ticket, u64)>,
 ) -> impl IntoView {
     use seamone_core::{
-        ipc::Command,
-        playback::{Action as Transport, State, Status},
+        ipc::{EmptyArgs, command},
+        playback::{Action as Transport, State},
     };
     use std::sync::{
         Arc,
@@ -555,8 +555,7 @@ fn RuntimePlayback(
         let active = Arc::clone(&active);
         let playback = polling.clone();
         spawn_local(async move {
-            let result =
-                crate::api::call::<Status>(Command::GetPlaybackStatus, serde_json::json!({})).await;
+            let result = crate::api::call_typed::<command::GetPlaybackStatus>(EmptyArgs {}).await;
             pending.store(false, Ordering::Relaxed);
             if !active.load(Ordering::Relaxed) {
                 return;

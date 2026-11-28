@@ -2,7 +2,7 @@ use crate::{api, timeline::ReviewTimeline};
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkBatch, Half, MIN_PREVIEW_SAMPLES, Narrowing, candidate},
-    ipc::Command,
+    ipc::{Command, ControlPlaybackArgs, EmptyArgs, RecordingPlaybackArgs, command},
     playback::{Action as PlaybackAction, State as PlaybackState, Status as PlaybackStatus},
     review::{RecordingInfo, SAMPLE_RATE, SampleRange, Segment},
 };
@@ -166,16 +166,20 @@ impl QuickReview {
         };
         self.preparing.set(true);
         spawn_local(async move {
-            let result = api::call::<PlaybackStatus>(Command::PlayRecording,
-                json!({"recordingId":recording.id,"revision":recording.revision,"range":clip.range})).await;
+            let result = api::call_typed::<command::PlayRecording>(RecordingPlaybackArgs {
+                recording_id: recording.id.clone(),
+                revision: recording.revision,
+                range: clip.range,
+            })
+            .await;
             if !self.is_current(clip.id) {
                 if let Ok(status) = result
                     && let Some(session) = status.session
                 {
-                    let _ = api::call::<PlaybackStatus>(
-                        Command::ControlPlayback,
-                        json!({"session":session,"action":{"kind":"stop"}}),
-                    )
+                    let _ = api::call_typed::<command::ControlPlayback>(ControlPlaybackArgs {
+                        session,
+                        action: PlaybackAction::Stop,
+                    })
                     .await;
                 }
                 self.preparing.set(false);
@@ -209,10 +213,11 @@ impl QuickReview {
 
     fn load_scan_wav(self, id: u64, recording: RecordingInfo, range: SampleRange) {
         spawn_local(async move {
-            let result = api::call::<String>(
-                Command::GetRecordingPlayback,
-                json!({"recordingId":recording.id,"revision":recording.revision,"range":range}),
-            )
+            let result = api::call_typed::<command::GetRecordingPlayback>(RecordingPlaybackArgs {
+                recording_id: recording.id,
+                revision: recording.revision,
+                range,
+            })
             .await;
             if self.is_current(id) {
                 match result {
@@ -257,10 +262,10 @@ impl QuickReview {
         };
         self.flagging.set_value(true);
         spawn_local(async move {
-            let result = api::call::<PlaybackStatus>(
-                Command::ControlPlayback,
-                json!({"session":session,"action":PlaybackAction::Pause}),
-            )
+            let result = api::call_typed::<command::ControlPlayback>(ControlPlaybackArgs {
+                session,
+                action: PlaybackAction::Pause,
+            })
             .await;
             self.flagging.set_value(false);
             if !self.is_current(clip.id) {
@@ -300,11 +305,12 @@ impl QuickReview {
             .with_untracked(|clip| clip.as_ref()?.session.clone())
         {
             spawn_local(async move {
-                if let Err(error) = api::call::<PlaybackStatus>(
-                    Command::ControlPlayback,
-                    json!({"session":session,"action":PlaybackAction::Play}),
-                )
-                .await
+                if let Err(error) =
+                    api::call_typed::<command::ControlPlayback>(ControlPlaybackArgs {
+                        session,
+                        action: PlaybackAction::Play,
+                    })
+                    .await
                 {
                     self.error.set(error);
                 }
@@ -321,10 +327,11 @@ impl QuickReview {
 
         self.analysis_request.set_value(guard);
         spawn_local(async move {
-            let wav = api::call::<String>(
-                Command::GetRecordingPlayback,
-                json!({"recordingId":recording.id,"revision":recording.revision,"range":range}),
-            )
+            let wav = api::call_typed::<command::GetRecordingPlayback>(RecordingPlaybackArgs {
+                recording_id: recording.id,
+                revision: recording.revision,
+                range,
+            })
             .await;
             if self.analysis_request.get_value() == guard
                 && self.narrowing.with_untracked(Option::is_some)
@@ -801,7 +808,7 @@ fn QuickOutput(quick: QuickReview) -> impl IntoView {
         let pending = Arc::clone(&pending);
         let active = Arc::clone(&active);
         spawn_local(async move {
-            let status = api::call::<PlaybackStatus>(Command::GetPlaybackStatus, json!({})).await;
+            let status = api::call_typed::<command::GetPlaybackStatus>(EmptyArgs {}).await;
             pending.store(false, Ordering::Relaxed);
             if !active.load(Ordering::Relaxed) {
                 return;
