@@ -1,4 +1,4 @@
-use seamone_core::ipc::Command;
+use seamone_core::ipc::{Command, SaveReview, SaveReviewReply};
 use serde::{Serialize, de::DeserializeOwned};
 use wasm_bindgen::prelude::*;
 
@@ -18,10 +18,18 @@ pub async fn call<T: DeserializeOwned>(
     command: Command,
     args: impl Serialize,
 ) -> Result<T, String> {
+    invoke_json(command.name(), args).await
+}
+
+pub async fn save_review(args: SaveReview) -> Result<SaveReviewReply, String> {
+    invoke_json(SaveReview::NAME, args).await
+}
+
+async fn invoke_json<T: DeserializeOwned>(name: &str, args: impl Serialize) -> Result<T, String> {
     let args = args
         .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
         .map_err(|e| e.to_string())?;
-    let value = invoke(command.name(), args)
+    let value = invoke(name, args)
         .await
         .map_err(|e| e.as_string().unwrap_or_else(|| format!("{e:?}")))?;
     serde_wasm_bindgen::from_value(value).map_err(|e| e.to_string())

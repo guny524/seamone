@@ -2,7 +2,7 @@ use crate::{api, quick_review::QuickReview};
 use leptos::{prelude::*, task::spawn_local};
 use seamone_core::{
     error_marks::{ErrorMark, ErrorMarkPage},
-    ipc::Command,
+    ipc::{Command, SaveReview},
     review::{Action, LibraryPage, PlaybackReply, RecordingInfo, Request, Segment},
     review_flow::{ReviewFlow, ReviewMode, Ticket},
 };
@@ -471,11 +471,7 @@ impl Workspace {
         };
         let proof = self.proof.get_untracked();
         spawn_local(async move {
-            let result = api::call::<Segment>(
-                Command::SaveReview,
-                json!({"request":request,"proof":proof}),
-            )
-            .await;
+            let result = api::save_review(SaveReview { request, proof }).await;
             match result {
                 Ok(saved) => {
                     let mut active = false;

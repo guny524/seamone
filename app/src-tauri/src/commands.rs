@@ -2,10 +2,12 @@ use seamone_core::{
     AppInfo,
     capture::Status,
     error_marks::{ErrorMark, ErrorMarkBatch, ErrorMarkPage},
-    review::{LibraryPage, PlaybackReply, RecordingInfo, Request, SampleRange, Segment},
+    ipc::{SaveReview, SaveReviewReply},
+    review::{LibraryPage, PlaybackReply, RecordingInfo, SampleRange, Segment},
 };
 use seamone_runtime::LibraryService;
-use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow};
+use serde::Deserialize;
+use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow, ipc};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::{DialogExt, FileAccessMode, FilePath, PickerMode};
 
@@ -295,11 +297,18 @@ pub async fn play_recording<R: Runtime>(
 pub async fn save_review<R: Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, LibraryService>,
-    request: Request,
-    proof: Option<String>,
-) -> Result<Segment, String> {
+    message: ipc::Request<'_>,
+) -> Result<SaveReviewReply, String> {
+    let ipc::InvokeBody::Json(body @ serde_json::Value::Object(_)) = message.body() else {
+        return Err(format!(
+            "invalid args for command `{}`: expected a JSON object",
+            SaveReview::NAME
+        ));
+    };
+    let args = SaveReview::deserialize(body)
+        .map_err(|error| format!("invalid args for command `{}`: {error}", SaveReview::NAME))?;
     trusted(&window)?;
-    state.review(&request, proof.as_deref())
+    state.review(&args.request, args.proof.as_deref())
 }
 
 #[tauri::command]

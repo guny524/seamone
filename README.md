@@ -74,6 +74,7 @@ graph LR
 - 기존 단일 범위 저장 명령 `save_error_mark`와 페이지 조회 명령 `get_error_marks`도 쓸 수 있다. 오류 범위를 저장할 때 조각의 원본 시간, 자동 전사문, 편집한 글, 기존 Yes/No 판정을 보존한다
 - 조각 목록은 한 응답에 최대 32개, 각 글은 최대 32KB, 녹음 전체의 편집 글은 최대 2MB다
 - 검증 요청은 event ID, 조각 ID, 정확한 revision, 동작을 담는다, 같은 event의 재전송은 같은 결과를 돌려주며 다른 내용이나 오래된 revision은 오류다
+- 화면의 `save_review` 호출은 공용 `SaveReview` 요청과 `SaveReviewReply` 응답 타입을 사용한다. JSON 최상위의 `request`와 선택 필드 `proof`를 받아 `Segment`를 반환한다
 - 변경은 짧은 SQLite transaction에서 revision을 비교한 뒤 저장한다, 정답 snapshot과 대기열도 함께 저장해 일부만 남지 않는다
 - 자동 글을 그대로 맞다고 한 정답과 수정 후 확인한 정답은 출처를 구분한다, 편집이나 검증 취소는 그 수정본의 정답과 대기열을 무효화한다
 - 학습 시작과 결과 공개 직전에 현재 수정본, 녹음 revision, 원본 존재와 SHA-256을 다시 검사한다, 원본 읽기 실패는 복구 뒤 재시도하며 바뀐 수정본은 제외한다
