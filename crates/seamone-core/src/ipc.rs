@@ -70,6 +70,21 @@ mod private {
 ///     reply
 /// }
 /// ```
+///
+/// ```compile_fail,E0277
+/// use seamone_core::ipc::{EmptyArgs, TypedCommand};
+/// struct UnregisteredCommand;
+/// impl TypedCommand for UnregisteredCommand {
+///     const NAME: &'static str = "unregistered_command";
+///     type Args = EmptyArgs;
+///     type Reply = ();
+/// }
+/// ```
+///
+/// ```compile_fail,E0599
+/// use seamone_core::ipc::Command;
+/// let command = Command::PlayRecording;
+/// ```
 pub trait TypedCommand: private::Sealed {
     const NAME: &'static str;
     type Args: Serialize + DeserializeOwned;

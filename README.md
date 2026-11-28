@@ -89,8 +89,7 @@ graph LR
 - 데스크톱의 `start_recording({})`은 세션을 만들고 현재 상태를 반환한다. `finish_recording({ sessionId, save })`는 해당 세션을 마무리한다. `save: true`면 `RecordingInfo`, `save: false`면 `null`을 반환한다. 동시에 하나만 녹음할 수 있고 이전 세션의 종료 요청은 거절한다. 저장에 실패해도 완성된 음성을 같은 세션에서 다시 저장하거나 취소할 수 있다
 
 ### 2-3. 음성 출력 IPC
-
-- 조각과 녹음의 재생 준비, 재생 제어, 상태 조회에 쓰는 다섯 명령은 공용 명령 목록에서 요청과 응답 타입을 정한다. 화면은 이 다섯 명령에 JSON을 직접 조립해 보낼 수 없다
+- 조각과 녹음의 재생 준비, 재생 제어, 상태 조회에 쓰는 다섯 명령은 공용 명령 목록에서 요청과 응답 타입을 정한다. 화면의 공개 호출 함수는 이 명령에 공용 타입만 받는다
 - 아래 명령은 `main` 로컬 창에서만 쓴다, 모든 위치는 녹음 원본의 16kHz sample 절대 위치이고 범위는 시작 포함, 끝 제외다
 - `get_playback({ segmentId, revision })`은 현재 조각 전체의 WAV와 `session`, `segment_id`, `revision`을 반환한다, 아직 재생하지 않으며 이전 session과 증거를 버린다
 - `play_recording({ recordingId, revision, range })`은 검수 증거를 만들지 않는 미리 듣기를 시작하고 Status를 반환한다, 이전 session은 닫는다, 빠른 검수의 30초 연속 재생과 절반 듣기가 이 명령을 쓴다
