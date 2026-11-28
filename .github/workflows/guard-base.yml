@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.merged == true) && github.sha || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
@@ -49,8 +49,22 @@ jobs:
                   return None
           event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
           head = git('rev-parse', 'HEAD')
+          pr = event.get('pull_request')
+          merged_develop = (
+              os.environ.get('GITHUB_EVENT_NAME') == 'pull_request'
+              and event.get('action') == 'closed'
+              and pr['merged'] is True
+              and pr['base']['ref'] == 'develop'
+          )
           approved_develop = False
-          if 'pull_request' in event:
+          if merged_develop:
+              if head != os.environ.get('GITHUB_SHA'):
+                  raise SystemExit('Expected the integrated develop commit')
+              base = resolve(head + '^1')
+              if base is None:
+                  raise SystemExit('Cannot read the integrated develop first parent')
+              approved_develop = True
+          elif pr is not None:
               base = resolve(event['pull_request']['base']['sha'])
               if base is None:
                   raise SystemExit('Cannot read the pull request base commit')
@@ -68,7 +82,7 @@ jobs:
           if 'pull_request' in event and base == head:
               raise SystemExit('guard base must differ from HEAD for a pull request')
           policy = head if approved_develop else base
-          allow_self = 'true' if 'pull_request' not in event and policy == head else 'false'
+          allow_self = 'true' if (approved_develop or pr is None) and policy == head else 'false'
           with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
               output.write('commit=' + base + '\n')
               output.write('policy-commit=' + policy + '\n')

@@ -20,7 +20,7 @@
 - test-support와 Whisper 없이도 runtime 제품 라이브러리에 죽은 코드가 없어야 한다, `make lint-runtime-minimal`을 `make lint`와 Linux, macOS CI에서 실행한다
 - 목록 대조가 실패해도 컴파일 진단을 확인한다, lint 진입점은 정책 검사와 컴파일 target을 `make -k`로 각각 실행하며 minimal, native workspace, WASM 컴파일도 `make -k`로 나눠 실행하고 CI는 정책과 native, iOS, WASM, domain 컴파일을 다른 step으로 실행한다, 컴파일 step의 `!cancelled()`와 `make test-architecture`의 실행 시험이 정책 실패 뒤에도 Clippy를 실행하는지 확인한다
 - research 삭제는 cache.remove_inside, .part 파일 공개는 cache.publish_partial 한 입구로 모은다, HF cache 삭제, rename과 위치 인자 하나인 replace, Make recipe의 rm과 eval/exec/compile을 검사한다, 문자열 replace는 허용한다, subprocess와 os 실행 허용 범위는 README의 미결정 정책을 따른다, 시험 코드에 직접 삭제 예외는 없다
-- CI의 기준 선택은 guard-base reusable workflow 한 벌로 한다, PR base와 develop push의 첫 parent를 비교 기준으로 쓰며 develop의 정책은 승인된 HEAD에서 읽는다, 다른 브랜치는 develop merge-base를 쓰고 변경 없는 push의 자기 대조도 허용한다, tag push는 제외한다, base 검사에는 PR merge ref를 넣고 보호 파일 차이는 merge-base부터 head까지 본다, 필수 check는 별도 pull_request_target workflow의 guard-rules-review-trusted이며 head 코드를 실행하지 않는다
+- CI의 기준 선택은 guard-base reusable workflow 한 벌로 한다, 머지 전에는 보호 파일의 별도 검토만 자동 실행한다, CI와 동결 검사 및 자동 개발 패키지는 develop으로 실제 머지된 PR에서 통합 커밋을 검사한다, 첫 parent를 비교 기준으로 쓰고 통합 커밋에서 승인된 정책을 읽는다, main push와 수동 패키징은 별도다, base 검사에는 통합 커밋을 넣고 보호 파일 차이는 merge-base부터 head까지 본다, 필수 check는 별도 pull_request_target workflow의 guard-rules-review-trusted이며 head 코드를 실행하지 않는다
 
 # 출처
 

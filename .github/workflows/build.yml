@@ -4,6 +4,8 @@ name: build
 # uses 는 이동할 수 있는 태그가 아니라 commit SHA 로 고정하고 태그를 주석으로 적는다.
 on:
   pull_request:
+    branches: [develop]
+    types: [closed]
   push:
     branches: [main]
   workflow_dispatch:
@@ -17,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -25,6 +27,7 @@ env:
 
 jobs:
   desktop:
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     name: desktop (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -122,6 +125,7 @@ jobs:
           retention-days: 7
 
   android:
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -203,6 +207,7 @@ jobs:
           retention-days: 3
 
   ios:
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
